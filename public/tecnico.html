@@ -51,6 +51,33 @@
         [data-filter="avaria"].active ~ .toggle-slider { transform: translateX(calc(100% + 4px)); }
         [data-filter="servico"].active ~ .toggle-slider { transform: translateX(calc(200% + 8px)); }
 
+        .timer-badge {
+            background: #fefce8;
+            color: #ca8a04;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid #fef08a;
+            margin-top: 8px;
+            width: fit-content;
+        }
+        .timer-pulse {
+            width: 8px;
+            height: 8px;
+            background: #eab308;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(234, 179, 8, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+        }
+
         @media (max-width: 480px) {
             .dashboard-toggle-container { width: 100%; }
             .dashboard-toggle { width: 100%; }
@@ -83,6 +110,7 @@
             </div>
             <nav class="sidebar-nav">
                 <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
+                <button class="nav-btn" data-target="agendamentos">Agendamentos</button>
                 <button class="nav-btn" data-target="historico">Histórico de Serviços</button>
                 <button class="nav-btn" data-target="perfil">Perfil</button>
             </nav>
@@ -103,6 +131,7 @@
                         <div>
                             <h1 id="tech-name-display">Olá!</h1>
                             <p id="tech-stats">A carregar as suas tarefas...</p>
+                            <p id="refresh-status" style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; display: flex; align-items: center; gap: 6px;"></p>
                         </div>
                         
                         <!-- Toggle Slide -->
@@ -118,6 +147,19 @@
                 </header>
 
                 <div class="repairs-list" id="repairs-container">
+                    <!-- JS popula aqui -->
+                </div>
+            </section>
+
+            <!-- Agendamentos View -->
+            <section id="view-agendamentos" class="view hidden">
+                <header class="view-header">
+                    <div>
+                        <h1>Meus Agendamentos</h1>
+                        <p>Lista de serviços e reparações agendados para o futuro.</p>
+                    </div>
+                </header>
+                <div class="repairs-list" id="agendamentos-container">
                     <!-- JS popula aqui -->
                 </div>
             </section>
@@ -283,7 +325,7 @@
                         </button>
                     </h3>
                     <div class="a4-editable-area">
-                        <input type="file" id="relatorio-fotos" multiple accept="image/*" style="display:none;">
+                        <input type="file" id="relatorio-fotos" multiple accept="image/png, image/jpeg, image/jpg, image/*" style="display:none;">
                         <div id="fotos-preview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:5px;">
                             <!-- Fotos serão carregadas aqui -->
                         </div>

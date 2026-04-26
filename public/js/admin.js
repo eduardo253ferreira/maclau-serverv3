@@ -6,6 +6,7 @@ let currentActiveView = 'dashboard';
 let currentMainDashboard = 'avarias'; // 'avarias' ou 'servicos'
 let refreshIntervalId = null;
 let lastRefreshTime = new Date();
+let calendar = null;
 
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
@@ -141,6 +142,13 @@ async function apiFetch(endpoint, options = {}) {
     return res.json();
 }
 
+// Fechar modal de detalhes
+document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btn-fechar-detalhe') {
+        closeModal('modal-detalhe-agendamento');
+    }
+});
+
 // --- Navegação ---
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -172,6 +180,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'clientes') loadClientes();
         if (target === 'maquinas') loadMaquinas();
         if (target === 'tecnicos') loadTecnicos();
+        if (target === 'agendamentos') initCalendar();
     });
 });
 
@@ -199,6 +208,135 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+// --- Agendamentos (Calendário) ---
+function initCalendar() {
+    const calendarEl = document.getElementById('calendar');
+    if (!calendarEl) return;
+
+    if (calendar) {
+        calendar.render();
+        loadAgendamentos();
+        return;
+    }
+
+    calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'pt',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,listWeek'
+        },
+        buttonText: {
+            today: 'Hoje',
+            month: 'Mês',
+            week: 'Semana',
+            list: 'Lista'
+        },
+        eventClick: function(info) {
+            const ev = info.event.extendedProps;
+            const title = info.event.title;
+            const dateStr = info.event.start.toLocaleString('pt-PT', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            // Preencher modal
+            console.log("Detalhes do evento carregado:", ev);
+            document.getElementById('detalhe-title').textContent = ev.rawTitle || 'Sem Título';
+            document.getElementById('detalhe-cliente').textContent = ev.cliente_nome || 'Sem Cliente';
+            document.getElementById('detalhe-tecnico').textContent = ev.tecnico_nome || 'Não atribuído';
+            document.getElementById('detalhe-data').textContent = dateStr;
+            document.getElementById('detalhe-estado').textContent = ev.estado || 'pendente';
+            
+            const notasBox = document.getElementById('detalhe-notas');
+            if (ev.notas && ev.notas.trim() !== "") {
+                notasBox.textContent = ev.notas;
+                notasBox.style.color = "var(--text-main)";
+                notasBox.style.fontStyle = "normal";
+            } else {
+                notasBox.textContent = "Nenhuma nota adicional registada.";
+                notasBox.style.color = "var(--text-secondary)";
+                notasBox.style.fontStyle = "italic";
+            }
+
+            const badge = document.getElementById('detalhe-badge');
+            badge.textContent = ev.type === 'avaria' ? 'Avaria' : 'Serviço';
+            badge.style.background = ev.type === 'avaria' ? '#fee2e2' : '#dbeafe';
+            badge.style.color = ev.type === 'avaria' ? '#ef4444' : '#3b82f6';
+
+            openModal('modal-detalhe-agendamento');
+        },
+        dateClick: function(info) {
+            const selectedDate = new Date(info.dateStr + "T09:00");
+            const now = new Date();
+            
+            // Restrição: Não permitir agendamentos no passado
+            if (selectedDate < now && info.dateStr !== now.toISOString().split('T')[0]) {
+                showNotification('Não pode agendar intervenções para datas passadas.', true);
+                return;
+            }
+
+            // Abrir modal de escolha
+            document.getElementById('escolha-data-label').textContent = `Data Selecionada: ${info.dateStr}`;
+            const choiceAvaria = document.getElementById('choice-avaria');
+            const choiceServico = document.getElementById('choice-servico');
+            
+            choiceAvaria.onclick = () => {
+                document.getElementById('report-avaria-agendada').value = info.dateStr + "T09:00";
+                closeModal('modal-escolha-agendamento');
+                openModal('modal-report-avaria');
+            };
+            
+            choiceServico.onclick = () => {
+                document.getElementById('report-servico-agendada').value = info.dateStr + "T09:00";
+                closeModal('modal-escolha-agendamento');
+                openModal('modal-report-servico');
+            };
+
+            openModal('modal-escolha-agendamento');
+        }
+    });
+
+    calendar.render();
+    loadAgendamentos();
+}
+
+async function loadAgendamentos() {
+    try {
+        const agendamentos = await apiFetch('/agendamentos');
+        const events = agendamentos.map(a => {
+            const date = new Date(a.data_agendada);
+            const hourStr = date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+            const prefix = a.type === 'avaria' ? 'A' : 'S';
+            
+            return {
+                id: `${a.type}-${a.id}`,
+                title: `${prefix} ${hourStr} - ${a.cliente_nome || 'Sem Cliente'}`,
+                start: a.data_agendada,
+                backgroundColor: a.type === 'avaria' ? '#ef4444' : '#3b82f6',
+                borderColor: a.type === 'avaria' ? '#b91c1c' : '#1d4ed8',
+                extendedProps: {
+                    type: a.type,
+                    rawTitle: a.title,
+                    cliente_nome: a.cliente_nome,
+                    tecnico_nome: a.tecnico_nome,
+                    estado: a.estado,
+                    notas: a.notas
+                }
+            };
+        });
+        calendar.removeAllEvents();
+        calendar.addEventSource(events);
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
 
 // --- Modals ---
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
@@ -361,6 +499,8 @@ async function loadClientes() {
             tr.innerHTML = `
                 <td class="col-id"></td>
                 <td class="col-nome"></td>
+                <td class="col-morada"></td>
+                <td class="col-nif"></td>
                 <td class="col-tel"></td>
                 <td class="col-email"></td>
                 <td>
@@ -379,6 +519,8 @@ async function loadClientes() {
             `;
             tr.querySelector('.col-id').textContent = c.id;
             tr.querySelector('.col-nome').textContent = c.nome;
+            tr.querySelector('.col-morada').textContent = c.morada || '-';
+            tr.querySelector('.col-nif').textContent = c.NIF || '-';
             tr.querySelector('.col-tel').textContent = c.telefone || '-';
             tr.querySelector('.col-email').textContent = c.email || '-';
 
@@ -391,7 +533,7 @@ async function loadClientes() {
                     loadMaquinas();
                 }
             };
-            tr.querySelector('.btn-edit').onclick = () => openEditClientModal(c.id, c.nome, c.telefone, c.email);
+            tr.querySelector('.btn-edit').onclick = () => openEditClientModal(c.id, c.nome, c.telefone, c.email, c.morada, c.NIF);
             tr.querySelector('.btn-delete').onclick = () => deleteCliente(c.id);
 
             tbody.appendChild(tr);
@@ -423,11 +565,13 @@ async function loadClientes() {
     }
 }
 
-function openEditClientModal(id, nome, telefone, email) {
+function openEditClientModal(id, nome, telefone, email, morada, nif) {
     document.getElementById('edit-client-id').value = id;
     document.getElementById('edit-client-nome').value = nome;
     document.getElementById('edit-client-telefone').value = telefone || '';
     document.getElementById('edit-client-email').value = email || '';
+    document.getElementById('edit-client-morada').value = morada || '';
+    document.getElementById('edit-client-nif').value = nif || '';
     openModal('modal-edit-client');
 }
 
@@ -437,12 +581,14 @@ document.getElementById('form-edit-client').addEventListener('submit', async (e)
     const nome = document.getElementById('edit-client-nome').value;
     const telefone = document.getElementById('edit-client-telefone').value;
     const email = document.getElementById('edit-client-email').value;
+    const morada = document.getElementById('edit-client-morada').value;
+    const NIF = document.getElementById('edit-client-nif').value;
 
     try {
         await apiFetch(`/clientes/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome, telefone, email })
+            body: JSON.stringify({ nome, telefone, email, morada, NIF })
         });
         showNotification('Cliente atualizado com sucesso!');
         closeModal('modal-edit-client');
@@ -458,12 +604,14 @@ document.getElementById('form-add-client').addEventListener('submit', async (e) 
     const nome = document.getElementById('client-nome').value;
     const telefone = document.getElementById('client-telefone').value;
     const email = document.getElementById('client-email').value;
+    const morada = document.getElementById('client-morada').value;
+    const NIF = document.getElementById('client-nif').value;
 
     try {
         await apiFetch('/clientes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome, telefone, email })
+            body: JSON.stringify({ nome, telefone, email, morada, NIF })
         });
         showNotification('Cliente adicionado com sucesso!');
         closeModal('modal-add-client');
@@ -1308,48 +1456,26 @@ window.onload = async () => {
     const addTechBtn = document.getElementById('btn-open-add-tecnico');
     if (addTechBtn) addTechBtn.addEventListener('click', () => openModal('modal-add-tecnico'));
 
-    // NOVO: Abrir Manual Report
+    // O listener do form-report-avaria e servico agora está fora do window.onload
+    // para suportar chamadas externas se necessário e evitar duplicação
+    // No entanto, vou garantir que os campos de data são limpos ao abrir o modal
     const openReportBtn = document.getElementById('btn-open-report-avaria');
     if (openReportBtn) {
         openReportBtn.addEventListener('click', () => {
+            document.getElementById('report-avaria-agendada').value = '';
             loadClientes();
             loadTecnicos();
             openModal('modal-report-avaria');
         });
     }
 
-    // NOVO: Filtrar máquinas no modal de reporte
-    const reportClientSelect = document.getElementById('report-avaria-cliente');
-    if (reportClientSelect) reportClientSelect.addEventListener('change', loadMachinesForReport);
-
-    // NOVO: Submissão Form Reporte Admin
-    const reportForm = document.getElementById('form-report-avaria');
-    if (reportForm) {
-        reportForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = {
-                maquina_id: document.getElementById('report-avaria-maquina').value,
-                tipo_avaria: parseInt(document.getElementById('report-avaria-tipo').value),
-                tecnico_id: document.getElementById('report-avaria-tecnico').value || null,
-                notas: document.getElementById('report-avaria-notas').value
-            };
-
-            if (!data.maquina_id) return showNotification("Selecione uma máquina válida", true);
-
-            try {
-                await apiFetch('/avarias', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                showNotification('Avaria reportada com sucesso!');
-                closeModal('modal-report-avaria');
-                reportForm.reset();
-                document.getElementById('report-avaria-maquina').disabled = true;
-                loadAvarias();
-            } catch (e) {
-                showNotification(e.message, true);
-            }
+    const openReportSrvBtn = document.getElementById('btn-open-report-servico');
+    if (openReportSrvBtn) {
+        openReportSrvBtn.addEventListener('click', () => {
+            document.getElementById('report-servico-agendada').value = '';
+            loadClientes();
+            loadTecnicos();
+            openModal('modal-report-servico');
         });
     }
 
@@ -1398,9 +1524,90 @@ window.onload = async () => {
     });
 };
 
-// Fechar modals em background click
 window.onclick = function (event) {
     if (event.target.classList.contains('modal')) {
         event.target.classList.add('hidden');
     }
 }
+// Reportar Avaria (Manual Admin)
+document.getElementById('form-report-avaria').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+        maquina_id: document.getElementById('report-avaria-maquina').value,
+        tipo_avaria: parseInt(document.getElementById('report-avaria-tipo').value),
+        tecnico_id: document.getElementById('report-avaria-tecnico').value || null,
+        notas: document.getElementById('report-avaria-notas').value,
+        data_agendada: document.getElementById('report-avaria-agendada').value || null
+    };
+
+    try {
+        await apiFetch('/avarias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        showNotification('Avaria reportada com sucesso!');
+        closeModal('modal-report-avaria');
+        document.getElementById('form-report-avaria').reset();
+        loadAvarias();
+        if (currentActiveView === 'agendamentos') loadAgendamentos();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+});
+
+// Reportar Serviço (Manual Admin)
+document.getElementById('form-report-servico').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+        cliente_id: document.getElementById('report-servico-cliente').value,
+        tipo_servico: document.getElementById('report-servico-tipo').value,
+        tipo_camiao: document.getElementById('report-servico-camiao').value,
+        tecnico_id: document.getElementById('report-servico-tecnico').value || null,
+        notas: document.getElementById('report-servico-notas').value,
+        data_agendada: document.getElementById('report-servico-agendada').value || null
+    };
+
+    try {
+        await apiFetch('/servicos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        showNotification('Serviço reportado com sucesso!');
+        closeModal('modal-report-servico');
+        document.getElementById('form-report-servico').reset();
+        loadServicos();
+        if (currentActiveView === 'agendamentos') loadAgendamentos();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+});
+
+// Filtros de cascata para modal de reporte
+document.getElementById('report-avaria-cliente').addEventListener('change', async (e) => {
+    const clienteId = e.target.value;
+    const selectMaquina = document.getElementById('report-avaria-maquina');
+    
+    if (!clienteId) {
+        selectMaquina.innerHTML = '<option value="">Selecione o Cliente primeiro</option>';
+        selectMaquina.disabled = true;
+        return;
+    }
+
+    try {
+        const maquinas = await apiFetch('/maquinas');
+        const filtradas = maquinas.filter(m => m.cliente_id == clienteId);
+        
+        selectMaquina.innerHTML = '<option value="">Selecione a Máquina</option>';
+        filtradas.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.uuid;
+            opt.textContent = `${m.marca} - ${m.modelo} (${m.numero_serie || 'S/N'})`;
+            selectMaquina.appendChild(opt);
+        });
+        selectMaquina.disabled = false;
+    } catch (e) {
+        showNotification('Erro ao carregar máquinas', true);
+    }
+});

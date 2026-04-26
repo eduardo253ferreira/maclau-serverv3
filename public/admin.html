@@ -10,6 +10,88 @@
     <link rel="icon" type="image/png" href="img/logo.png">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FullCalendar -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+    <style>
+        #calendar {
+            max-height: 600px;
+            font-size: 0.85rem;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+        }
+        .fc .fc-toolbar {
+            margin-bottom: 15px !important;
+        }
+        .fc .fc-toolbar-title {
+            font-size: 1.1rem !important;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .fc .fc-button {
+            padding: 4px 8px !important;
+            font-size: 0.8rem !important;
+            text-transform: capitalize;
+        }
+        .fc .fc-button-primary {
+            background-color: var(--accent) !important;
+            border-color: var(--accent) !important;
+        }
+        .fc .fc-button-primary:hover {
+            background-color: var(--accent-hover) !important;
+            border-color: var(--accent-hover) !important;
+        }
+        .fc .fc-daygrid-event {
+            border-radius: 4px;
+            padding: 1px 4px;
+            font-weight: 600;
+            margin-top: 1px;
+        }
+        .fc .fc-daygrid-day-number {
+            padding: 4px !important;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .fc .fc-col-header-cell-cushion {
+            font-weight: 700;
+            color: var(--text-main);
+            padding: 8px 0 !important;
+        }
+        .choice-modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .choice-card {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .choice-card:hover {
+            border-color: var(--accent);
+            background: var(--accent-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .choice-card i {
+            font-size: 2.5rem;
+            color: var(--accent);
+        }
+        .choice-card span {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-main);
+        }
+    </style>
     <style>
         /* Dashboard Toggle Slide */
         .dashboard-toggle-container {
@@ -89,6 +171,9 @@
                 </button>
                 <button class="nav-btn" data-target="historico">
                     <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
+                </button>
+                <button class="nav-btn" data-target="agendamentos">
+                    <i class="ph ph-calendar-blank"></i> Agendamentos
                 </button>
                 <button class="nav-btn" data-target="estatisticas">
                     <i class="ph ph-chart-line-up"></i> Estatísticas
@@ -236,6 +321,20 @@
                 </div>
             </section>
 
+            <!-- Agendamentos View -->
+            <section id="view-agendamentos" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Agendamentos</h1>
+                        <p>Planeie intervenções futuras e visualize a ocupação da equipa.</p>
+                    </div>
+                </header>
+                
+                <div style="background:var(--surface-color); padding:20px; border-radius:12px; box-shadow:var(--shadow-sm);">
+                    <div id="calendar"></div>
+                </div>
+            </section>
+
             <!-- Estatísticas View -->
             <section id="view-estatisticas" class="view hidden">
                 <header class="view-header flex-header">
@@ -357,6 +456,8 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Nome</th>
+                                <th>Morada</th>
+                                <th>NIF</th>
                                 <th>Telefone</th>
                                 <th>Email</th>
                                 <th>Ações</th>
@@ -452,6 +553,15 @@
                     <label>Email (opcional)</label>
                     <input type="email" id="client-email" placeholder="Ex: email@exemplo.pt">
                 </div>
+                <div class="form-group">
+                    <label>Morada (opcional)</label>
+                    <input type="text" id="client-morada" placeholder="Ex: Rua das Flores, 123">
+                </div>
+                <div class="form-group">
+                    <label>NIF (opcional)</label>
+                    <input type="text" id="client-nif" pattern="[0-9]{9}"
+                        title="O NIF deve ter exatamente 9 dígitos numéricos" placeholder="Ex: 123456789">
+                </div>
                 <button type="submit" class="btn-primary w-100">Guardar</button>
             </form>
         </div>
@@ -517,6 +627,15 @@
                 <div class="form-group">
                     <label>Email</label>
                     <input type="email" id="edit-client-email">
+                </div>
+                <div class="form-group">
+                    <label>Morada</label>
+                    <input type="text" id="edit-client-morada">
+                </div>
+                <div class="form-group">
+                    <label>NIF</label>
+                    <input type="text" id="edit-client-nif" pattern="[0-9]{9}"
+                        title="O NIF deve ter exatamente 9 dígitos numéricos">
                 </div>
                 <button type="submit" class="btn-primary w-100">Atualizar</button>
             </form>
@@ -773,6 +892,10 @@
                         <!-- Populated by JS -->
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Data/Hora Agendada (Opcional)</label>
+                    <input type="datetime-local" id="report-avaria-agendada">
+                </div>
                 <button type="submit" class="btn-primary w-100">Criar Reporte</button>
             </form>
         </div>
@@ -795,8 +918,8 @@
                 <div class="form-group">
                     <label>Tipo de Serviço *</label>
                     <select id="report-servico-tipo" required>
-                        <option value="Instalação">Instalação</option>
                         <option value="Transporte">Transporte</option>
+                        <option value="Instalação">Instalação</option>
                         <option value="Transporte/Instalação">Transporte/Instalação</option>
                     </select>
                 </div>
@@ -820,6 +943,10 @@
                         <!-- Populated by JS -->
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Data/Hora Agendada (Opcional)</label>
+                    <input type="datetime-local" id="report-servico-agendada">
+                </div>
                 <button type="submit" class="btn-primary w-100">Criar Serviço</button>
             </form>
         </div>
@@ -832,6 +959,66 @@
             <h2>Nota Completa</h2>
             <div id="full-note-content" style="margin-top: 20px; white-space: pre-wrap; font-size: 15px; line-height: 1.6; color: var(--text-primary); background: var(--bg-main); padding: 15px; border-radius: 10px; border-left: 4px solid var(--accent);">
                 <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Escolha Agendamento -->
+    <div id="modal-escolha-agendamento" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-escolha-agendamento">&times;</span>
+            <h2>Agendar Intervenção</h2>
+            <p id="escolha-data-label" style="font-weight: 600; color: var(--accent);"></p>
+            <p>Selecione o tipo de intervenção que deseja agendar:</p>
+            
+            <div class="choice-modal-grid">
+                <div class="choice-card" id="choice-avaria">
+                    <i class="ph ph-wrench"></i>
+                    <span>Nova Avaria</span>
+                </div>
+                <div class="choice-card" id="choice-servico">
+                    <i class="ph ph-truck"></i>
+                    <span>Novo Serviço</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalhes Agendamento -->
+    <div id="modal-detalhe-agendamento" class="modal hidden">
+        <div class="modal-content" style="max-width: 550px;">
+            <span class="close-btn" data-modal="modal-detalhe-agendamento">&times;</span>
+            <div id="detalhe-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                <span id="detalhe-badge" style="padding: 4px 12px; border-radius: 6px; font-weight: 700; font-size: 13px; text-transform: uppercase;"></span>
+                <h2 id="detalhe-title" style="margin: 0;"></h2>
+            </div>
+            
+            <div class="detalhe-info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="info-item">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Cliente</label>
+                    <div id="detalhe-cliente" style="font-weight: 600;"></div>
+                </div>
+                <div class="info-item">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Técnico Atribuído</label>
+                    <div id="detalhe-tecnico" style="font-weight: 600;"></div>
+                </div>
+                <div class="info-item">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Data e Hora</label>
+                    <div id="detalhe-data" style="font-weight: 600;"></div>
+                </div>
+                <div class="info-item">
+                    <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Estado</label>
+                    <div id="detalhe-estado" style="font-weight: 600; text-transform: capitalize;"></div>
+                </div>
+            </div>
+            
+            <div class="info-item" style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Notas Adicionais</label>
+                <div id="detalhe-notas" style="background: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 14px; min-height: 50px; white-space: pre-wrap;"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-fechar-detalhe" class="btn-primary w-100">Fechar</button>
             </div>
         </div>
     </div>

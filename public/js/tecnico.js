@@ -13,6 +13,91 @@ if (urlParams.get('name')) localStorage.setItem('maclau_tech_name', currentTechN
 
 let jwtToken = localStorage.getItem('maclau_token');
 let currentDashboardFilter = 'all';
+let timerInterval = null;
+let refreshIntervalId = null;
+
+function updateRefreshStatus() {
+    const statusEl = document.getElementById('refresh-status');
+    if (!statusEl) return;
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    statusEl.innerHTML = `
+        <span style="width: 6px; height: 6px; background: #10b981; border-radius: 50%;"></span>
+        Sincronizado às ${timeStr}
+    `;
+}
+
+function startAutoRefresh() {
+    if (refreshIntervalId) clearInterval(refreshIntervalId);
+    refreshIntervalId = setInterval(() => {
+        // Não atualizar se houver modais abertos ou se não estiver no dashboard
+        const openModals = document.querySelectorAll('.modal:not(.hidden)');
+        if (openModals.length > 0) return;
+
+        const dashboardView = document.getElementById('view-dashboard');
+        if (dashboardView && !dashboardView.classList.contains('hidden')) {
+            loadMyTasks();
+        }
+    }, 30000); // 30 segundos
+}
+
+// --- Gestão de Cronómetro ---
+function getTimerState() {
+    const state = localStorage.getItem('maclau_timer');
+    return state ? JSON.parse(state) : { taskId: null, taskType: null, startTime: null, accumulatedMs: 0 };
+}
+
+function saveTimerState(state) {
+    localStorage.setItem('maclau_timer', JSON.stringify(state));
+}
+
+function startTimer(id, type) {
+    let state = getTimerState();
+    // Se for uma tarefa diferente, limpa o anterior (proteção)
+    if (state.taskId && state.taskId != id) {
+        state = { taskId: id, taskType: type, startTime: Date.now(), accumulatedMs: 0 };
+    } else {
+        state.taskId = id;
+        state.taskType = type;
+        state.startTime = Date.now();
+    }
+    saveTimerState(state);
+    initGlobalTimer();
+}
+
+function pauseTimer() {
+    const state = getTimerState();
+    if (state.startTime) {
+        state.accumulatedMs += (Date.now() - state.startTime);
+        state.startTime = null;
+        saveTimerState(state);
+    }
+}
+
+function stopTimer() {
+    localStorage.removeItem('maclau_timer');
+}
+
+function formatDuration(ms) {
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / (1000 * 60)) % 60);
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function initGlobalTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        const state = getTimerState();
+        if (!state.taskId || !state.startTime) return;
+        
+        const el = document.getElementById(`timer-${state.taskType}-${state.taskId}`);
+        if (el) {
+            const currentMs = state.accumulatedMs + (Date.now() - state.startTime);
+            el.textContent = formatDuration(currentMs);
+        }
+    }, 1000);
+}
 
 function showNotification(msg, isError = false) {
     const notif = document.getElementById('notification');
@@ -69,12 +154,13 @@ async function authFetch(url, options = {}) {
 async function loadMyTasks() {
     try {
         const [resAvarias, resServicos] = await Promise.all([
-            authFetch(`${API_BASE}/tecnico/avarias`),
-            authFetch(`${API_BASE}/tecnico/servicos`)
+            authFetch(`${API_BASE}/tecnico/avarias?_=${Date.now()}`),
+            authFetch(`${API_BASE}/tecnico/servicos?_=${Date.now()}`)
         ]);
 
         const avarias = await resAvarias.json();
         const servicos = await resServicos.json();
+        updateRefreshStatus();
 
         // Marcar o tipo para cada item
         const tasks = [
@@ -148,6 +234,13 @@ async function loadMyTasks() {
                 <div style="font-size:12px; color:var(--text-secondary); margin-top:10px;">Reportado em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
                 ${task.notas ? `<div style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent);"><strong style="color:var(--text-main);">Notas do Admin:</strong><br>${escapeHTML(task.notas)}</div>` : ''}
                 
+                ${task.estado === 'em resolução' ? `
+                <div class="timer-badge">
+                    <div class="timer-pulse"></div>
+                    <span id="timer-${task._type}-${task.id}">00:00:00</span>
+                </div>
+                ` : ''}
+
                 <div class="repair-actions" style="gap:10px; margin-top:15px;">
                 </div>
             `;
@@ -194,9 +287,11 @@ async function updateStatus(id, newStatus, currentText = '', type = 'avaria') {
 
         if (res.ok) {
             if (newStatus === 'resolvida') {
+                pauseTimer();
                 openRelatorioModal(id, true, currentText, false, '', '', '', type);
             } else {
-                showNotification("Tarefa iniciada!");
+                if (newStatus === 'em resolução') startTimer(id, type);
+                showNotification(newStatus === 'pausada' ? "Tarefa pausada." : "Tarefa iniciada!");
                 loadMyTasks();
             }
         } else {
@@ -384,7 +479,20 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         // Populate Editable Fields
         textarea.value = currentText || data.relatorio || '';
         pecasArea.value = currentPecas || data.pecas_substituidas || '';
-        horasInput.value = currentHoras || data.horas_trabalho || '';
+        
+        let hoursVal = currentHoras || data.horas_trabalho || '';
+        // Se estivermos a concluir agora e o campo estiver vazio, usa o cronómetro
+        if (!hoursVal && isStatusChange) {
+            const state = getTimerState();
+            if (state.taskId == id && state.taskType == type) {
+                const totalMs = state.accumulatedMs + (state.startTime ? (Date.now() - state.startTime) : 0);
+                const totalHours = totalMs / (1000 * 60 * 60);
+                if (totalHours > 0.01) { // Apenas se tiver pelo menos ~30 segundos
+                    hoursVal = totalHours.toFixed(2);
+                }
+            }
+        }
+        horasInput.value = hoursVal;
 
         // Handle Signatures
         clearSignature();
@@ -498,6 +606,7 @@ async function submitRelatorio() {
         });
 
         if (res.ok) {
+            stopTimer(); // Limpa cronómetro após submeter com sucesso
             showNotification("Relatório submetido com sucesso!");
             document.getElementById('modal-relatorio').classList.add('hidden');
             if (isStatusChange) loadMyTasks();
@@ -665,6 +774,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (view) view.classList.remove('hidden');
 
         if (target === 'dashboard') loadMyTasks();
+        if (target === 'agendamentos') loadAgendamentos();
         if (target === 'historico') loadHistorico();
     });
 });
@@ -704,6 +814,8 @@ if (pwdForm) {
 window.onload = () => {
     showView();
     initSignaturePad();
+    initGlobalTimer();
+    startAutoRefresh();
 
     const inputFotos = document.getElementById('relatorio-fotos');
     if (inputFotos) {
@@ -778,6 +890,7 @@ window.onload = () => {
         });
     }
 
+    const formPausar = document.getElementById('form-pausar');
     if (formPausar) {
         formPausar.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -794,6 +907,7 @@ window.onload = () => {
                 });
 
                 if (res.ok) {
+                    pauseTimer(); // Para o cronómetro ao pausar
                     showNotification("Tarefa pausada.");
                     document.getElementById('modal-pausar').classList.add('hidden');
                     loadMyTasks();
@@ -952,3 +1066,49 @@ function isCanvasBlank(canvas) {
 window.viewPDF = function (id, type = 'avaria') {
     window.open(`/relatorio.html?id=${id}&type=${type}`, '_blank');
 };
+async function loadAgendamentos() {
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/agendamentos`);
+        const agendamentos = await res.json();
+        const container = document.getElementById('agendamentos-container');
+        container.innerHTML = '';
+
+        if (agendamentos.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:var(--text-secondary); margin-top:20px;">Não tem intervenções agendadas para o futuro.</p>';
+            return;
+        }
+
+        agendamentos.forEach(a => {
+            const div = document.createElement('div');
+            div.className = 'repair-item';
+            div.style.borderLeft = `5px solid ${a.type === 'avaria' ? '#ef4444' : '#3b82f6'}`;
+
+            const dateStr = new Date(a.data_agendada).toLocaleString('pt-PT', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
+                    <span style="font-size:11px; font-weight:700; background:var(--accent-light); color:var(--accent); padding:3px 8px; border-radius:4px;">
+                        ${a.type === 'avaria' ? 'AVARIA' : 'SERVIÇO'}
+                    </span>
+                    <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">${a.estado.toUpperCase()}</span>
+                </div>
+                <h3 style="margin-bottom:5px;">${escapeHTML(a.title)}</h3>
+                <p style="font-size:14px; color:var(--text-secondary);">${escapeHTML(a.cliente_nome)}</p>
+                <div style="margin-top:10px; font-weight:600; color:var(--accent); display:flex; align-items:center; gap:5px;">
+                    <i class="ph ph-calendar-blank"></i> ${dateStr}
+                </div>
+                ${a.notas ? `<div style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px;"><strong style="color:var(--text-main);">Notas:</strong><br>${escapeHTML(a.notas)}</div>` : ''}
+            `;
+            container.appendChild(div);
+        });
+    } catch (e) {
+        showNotification("Erro ao carregar agendamentos.", true);
+    }
+}
