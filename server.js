@@ -301,6 +301,17 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 password TEXT NOT NULL
             )`);
 
+            // Novo: Utilizadores de Clientes
+            db.run(`CREATE TABLE IF NOT EXISTS utilizadores_cliente (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id INTEGER NOT NULL,
+                nome TEXT NOT NULL,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                email TEXT,
+                FOREIGN KEY (cliente_id) REFERENCES clientes (id)
+            )`);
+
             // Migrações movidas para o final do bloco de inicialização para garantir que as tabelas existem
 
 
@@ -362,6 +373,16 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 name TEXT NOT NULL UNIQUE
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS frota (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                marca TEXT NOT NULL,
+                modelo TEXT NOT NULL,
+                ano INTEGER,
+                data_proxima_inspecao DATE,
+                proxima_revisao_kms INTEGER,
+                data_ultima_revisao DATE
+            )`);
+
             // --- MIGRATIONS (Adicionar colunas a tabelas existentes) ---
             const migrations = [
                 { table: 'avarias', column: 'data_hora_inicio', type: 'DATETIME' },
@@ -380,7 +401,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 { table: 'servicos', column: 'data_agendada', type: 'DATETIME' },
                 { table: 'administradores', column: 'email', type: 'TEXT' },
                 { table: 'clientes', column: 'morada', type: 'TEXT' },
-                { table: 'clientes', column: 'NIF', type: 'TEXT' }
+                { table: 'clientes', column: 'NIF', type: 'TEXT' },
+                { table: 'utilizadores_cliente', column: 'password_plain', type: 'TEXT' }
             ];
 
             migrations.forEach(m => {
@@ -506,6 +528,104 @@ async function sendAdminNotificationEmail(adminEmails, machineNome, clientNome, 
     }
 }
 
+// Helper para alertas de frota (inspeções)
+async function sendFrotaAlertEmail(adminEmails, vehicle, isToday = false) {
+    if (!process.env.SMTP_HOST || !adminEmails || adminEmails.length === 0) return;
+
+    const subject = isToday 
+        ? `ALERTA: Inspeção de Veículo HOJE - ${vehicle.marca} ${vehicle.modelo}`
+        : `Lembrete: Inspeção de Veículo em 1 Semana - ${vehicle.marca} ${vehicle.modelo}`;
+
+    const mailOptions = {
+        from: process.env.EMAIL_FROM || 'Maclau <noreply@maclau.pt>',
+        to: adminEmails.join(','),
+        subject: subject,
+        html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 30px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <img src="cid:logo" alt="Maclau Logo" style="max-width: 150px; height: auto;">
+                </div>
+                <h1 style="color: #2D5A27; font-size: 24px; margin-bottom: 20px;">Alerta de Frota</h1>
+                <p style="font-size: 16px; color: #64748B; margin-bottom: 24px;">
+                    Este é um lembrete automático sobre a próxima inspeção do veículo:
+                </p>
+                
+                <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 24px; border-top: 4px solid #2D5A27;">
+                    <p style="margin: 0 0 10px 0;"><strong>Veículo:</strong> ${vehicle.marca} ${vehicle.modelo} (${vehicle.ano || 'N/A'})</p>
+                    <p style="margin: 0;"><strong>Data da Inspeção:</strong> ${vehicle.data_proxima_inspecao ? vehicle.data_proxima_inspecao.split('-').reverse().join('/') : 'N/A'}</p>
+                </div>
+
+                <p style="font-size: 16px; color: #1E293B;">
+                    ${isToday ? '⚠️ A inspeção deve ser realizada <strong>HOJE</strong>.' : 'ℹ️ A inspeção está agendada para daqui a <strong>7 dias</strong>.'}
+                </p>
+                
+                <div style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; color: #94a3b8;">
+                    Este é um e-mail automático enviado pelo sistema Maclau.
+                </div>
+            </div>
+        `,
+        attachments: [{
+            filename: 'logo.png',
+            path: path.join(__dirname, 'public', 'img', 'logo.png'),
+            cid: 'logo'
+        }]
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL] Alerta de frota enviado para: ${adminEmails.join(', ')}`);
+    } catch (error) {
+        console.error('[EMAIL ERROR FROTA]', error);
+    }
+}
+
+// Função para verificar inspeções
+function checkVehicleInspections() {
+    console.log('[FROTA] A verificar inspeções agendadas...');
+    
+    db.all(`SELECT email FROM administradores WHERE email IS NOT NULL AND email != ''`, [], (err, admins) => {
+        if (err || !admins || admins.length === 0) return;
+        const adminEmails = admins.map(a => a.email);
+
+        const today = new Date().toISOString().split('T')[0];
+        const nextWeekDate = new Date();
+        nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+        const nextWeek = nextWeekDate.toISOString().split('T')[0];
+
+        // Hoje
+        db.all(`SELECT * FROM frota WHERE data_proxima_inspecao = ?`, [today], (err, vehiclesToday) => {
+            if (!err && vehiclesToday) {
+                vehiclesToday.forEach(v => sendFrotaAlertEmail(adminEmails, v, true));
+            }
+        });
+
+        // 7 dias
+        db.all(`SELECT * FROM frota WHERE data_proxima_inspecao = ?`, [nextWeek], (err, vehiclesNextWeek) => {
+            if (!err && vehiclesNextWeek) {
+                vehiclesNextWeek.forEach(v => sendFrotaAlertEmail(adminEmails, v, false));
+            }
+        });
+    });
+}
+
+function scheduleDailyCheck() {
+    const now = new Date();
+    const nextCheck = new Date();
+    nextCheck.setHours(8, 0, 0, 0);
+    
+    if (nextCheck <= now) {
+        nextCheck.setDate(nextCheck.getDate() + 1);
+    }
+    
+    const delay = nextCheck - now;
+    console.log(`[SCHEDULE] Próxima verificação de frota em ${(delay / 1000 / 60 / 60).toFixed(2)} horas.`);
+    
+    setTimeout(() => {
+        checkVehicleInspections();
+        setInterval(checkVehicleInspections, 24 * 60 * 60 * 1000);
+    }, delay);
+}
+
 // 🔒 SEGURANÇA: Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('SIGTERM signal received: closing DB');
@@ -528,8 +648,14 @@ process.on('SIGINT', () => {
 // Middleware for JWT verification
 const authenticateJWT = (req, res, next) => {
     const authHeader = req.headers.authorization;
-    if (authHeader) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.split(' ')[1];
+        
+        // Proteção contra 'null' ou 'undefined' passados como string pelo frontend
+        if (!token || token === 'null' || token === 'undefined') {
+            return res.sendStatus(401);
+        }
+
         jwt.verify(token, SECRET_KEY, (err, user) => {
             if (err) {
                 securityLog('JWT_VERIFICATION_FAILED', { error: err.message, ip: req.ip });
@@ -570,7 +696,7 @@ const isAdminOrTecnico = (req, res, next) => {
 
 // API: Autenticação
 app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, redirect } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({ error: "Email e password são obrigatórios" });
@@ -586,25 +712,24 @@ app.post('/api/auth/login', (req, res) => {
                 const accessToken = jwt.sign(
                     { id: row.id, username: row.username, role: 'admin' },
                     SECRET_KEY,
-                    { expiresIn: '8h', algorithm: 'HS256' } // 🔒 JWT com expiração
+                    { expiresIn: '8h', algorithm: 'HS256' }
                 );
 
                 res.cookie('maclau_token', accessToken, {
                     httpOnly: true,
-                    // 🔒 Permite desativar 'secure' para testes em produção via HTTP se necessário
                     secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
                     sameSite: 'strict',
-                    maxAge: 8 * 60 * 60 * 1000 // 8 horas
+                    maxAge: 8 * 60 * 60 * 1000
                 });
 
                 securityLog('LOGIN_SUCCESS', { user: row.username, role: 'admin', ip: req.ip });
-                return res.json({ accessToken, role: 'admin', redirectUrl: 'admin.html' });
+                return res.json({ accessToken, role: 'admin', redirectUrl: redirect || 'admin.html' });
             } else {
                 securityLog('LOGIN_FAILED', { user: email, role: 'admin', reason: 'wrong_password', ip: req.ip });
             }
         }
 
-        // 2. Tentar login como Técnico se não for Admin
+        // 2. Tentar login como Técnico
         db.get(`SELECT id, nome, password FROM tecnicos WHERE email = ?`, [email], (err, row) => {
             if (err) return handleDBError(res, err);
 
@@ -614,7 +739,7 @@ app.post('/api/auth/login', (req, res) => {
                     const accessToken = jwt.sign(
                         { id: row.id, role: 'tecnico' },
                         SECRET_KEY,
-                        { expiresIn: '8h', algorithm: 'HS256' } // 🔒 JWT com expiração
+                        { expiresIn: '8h', algorithm: 'HS256' }
                     );
 
                     res.cookie('maclau_token', accessToken, {
@@ -628,16 +753,50 @@ app.post('/api/auth/login', (req, res) => {
                     return res.json({
                         accessToken,
                         role: 'tecnico',
-                        redirectUrl: `tecnico.html?id=${row.id}&name=${encodeURIComponent(row.nome)}`
+                        redirectUrl: redirect || `tecnico.html?id=${row.id}&name=${encodeURIComponent(row.nome)}`
                     });
                 } else {
                     securityLog('LOGIN_FAILED', { user: email, role: 'tecnico', reason: 'wrong_password', ip: req.ip });
                 }
-            } else {
-                securityLog('LOGIN_FAILED', { user: email, reason: 'user_not_found', ip: req.ip });
             }
 
-            return res.status(401).json({ error: 'Credenciais inválidas' });
+            // 3. Tentar login como Utilizador de Cliente
+            db.get(`SELECT id, cliente_id, nome, password FROM utilizadores_cliente WHERE username = ?`, [email], (err, row) => {
+                if (err) return handleDBError(res, err);
+
+                if (row) {
+                    const match = bcrypt.compareSync(password, row.password);
+                    if (match) {
+                        const accessToken = jwt.sign(
+                            { id: row.id, cliente_id: row.cliente_id, role: 'cliente' },
+                            SECRET_KEY,
+                            { expiresIn: '24h', algorithm: 'HS256' }
+                        );
+
+                        res.cookie('maclau_token', accessToken, {
+                            httpOnly: true,
+                            secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
+                            sameSite: 'strict',
+                            maxAge: 24 * 60 * 60 * 1000
+                        });
+
+                        securityLog('LOGIN_SUCCESS_CLIENTE', { user: email, cliente_id: row.cliente_id, ip: req.ip });
+                        
+                        // Se houver um redirect (ex: página de report), vamos para lá. Caso contrário, placeholder.
+                        return res.json({
+                            accessToken,
+                            role: 'cliente',
+                            redirectUrl: redirect || 'dashboard_cliente_placeholder'
+                        });
+                    } else {
+                        securityLog('LOGIN_FAILED_CLIENTE', { user: email, reason: 'wrong_password', ip: req.ip });
+                    }
+                } else {
+                    securityLog('LOGIN_FAILED', { user: email, reason: 'user_not_found', ip: req.ip });
+                }
+
+                return res.status(401).json({ error: 'Credenciais inválidas' });
+            });
         });
     });
 });
@@ -709,6 +868,75 @@ app.delete('/api/clientes/:id', authenticateJWT, isAdmin, (req, res) => {
     db.run(`DELETE FROM clientes WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ message: "Cliente removido com sucesso", id });
+    });
+});
+
+// --- CLIENT USERS MANAGEMENT (Admin only) ---
+
+app.get('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.all(`SELECT id, nome, username, email, password_plain FROM utilizadores_cliente WHERE cliente_id = ?`, [id], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { nome, username, email, password } = req.body;
+
+    nome = sanitizeString(nome);
+    username = sanitizeString(username);
+    email = sanitizeString(email);
+
+    if (!nome || !username || !password) {
+        return res.status(400).json({ error: "Nome, Username e Password são obrigatórios" });
+    }
+
+    const hashedPwd = bcrypt.hashSync(password, 10);
+
+    db.run(`INSERT INTO utilizadores_cliente (cliente_id, nome, username, password, password_plain, email) VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, nome, username, hashedPwd, password, email],
+        function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE')) return res.status(400).json({ error: "Username já existe" });
+                return handleDBError(res, err);
+            }
+            res.status(201).json({ id: this.lastID, message: "Utilizador criado com sucesso" });
+        });
+});
+
+app.put('/api/clientes-users/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { nome, username, email, password } = req.body;
+
+    nome = sanitizeString(nome);
+    username = sanitizeString(username);
+    email = sanitizeString(email);
+
+    if (password) {
+        const hashedPwd = bcrypt.hashSync(password, 10);
+        db.run(`UPDATE utilizadores_cliente SET nome = ?, username = ?, email = ?, password = ?, password_plain = ? WHERE id = ?`,
+            [nome, username, email, hashedPwd, password, id],
+            function (err) {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Utilizador atualizado" });
+            });
+    } else {
+        db.run(`UPDATE utilizadores_cliente SET nome = ?, username = ?, email = ? WHERE id = ?`,
+            [nome, username, email, id],
+            function (err) {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Utilizador atualizado" });
+            });
+    }
+});
+
+app.delete('/api/clientes-users/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM utilizadores_cliente WHERE id = ?`, [id], function (err) {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Utilizador removido" });
     });
 });
 
@@ -1679,7 +1907,9 @@ app.put('/api/tecnico/password', authenticateJWT, isTecnico, (req, res) => {
 
 // --- PUBLIC ROUTES (Client mobile) --- //
 
-app.get('/api/public/maquinas/:uuid', (req, res) => {
+// --- PUBLIC ROUTES (Client mobile) --- //
+
+app.get('/api/public/maquinas/:uuid', authenticateJWT, (req, res) => {
     const { uuid } = req.params;
 
     // 🔒 SEGURANÇA: Validar UUID
@@ -1687,14 +1917,25 @@ app.get('/api/public/maquinas/:uuid', (req, res) => {
         return res.status(400).json({ error: "UUID inválido" });
     }
 
-    db.get(`SELECT (marca || ' - ' || modelo) as nome FROM maquinas WHERE uuid = ?`, [uuid], (err, row) => {
+    // Se for um cliente, só pode ver se a máquina pertencer a ele
+    let query = `SELECT m.id, (m.marca || ' - ' || m.modelo) as nome, m.cliente_id FROM maquinas m WHERE m.uuid = ?`;
+    
+    db.get(query, [uuid], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Máquina não encontrada" });
-        res.json(row);
+
+        if (req.user.role === 'cliente') {
+            if (row.cliente_id !== req.user.cliente_id) {
+                securityLog('UNAUTHORIZED_MACHINE_ACCESS', { user: req.user.id, machine_uuid: uuid, machine_owner: row.cliente_id, user_owner: req.user.cliente_id });
+                return res.status(403).json({ error: "Acesso negado: Esta máquina não pertence à sua lavandaria." });
+            }
+        }
+
+        res.json({ nome: row.nome });
     });
 });
 
-app.post('/api/public/avarias', (req, res) => {
+app.post('/api/public/avarias', authenticateJWT, (req, res) => {
     const { maquina_id, tipo_avaria } = req.body;
 
     if (!maquina_id || !tipo_avaria) {
@@ -1711,30 +1952,94 @@ app.post('/api/public/avarias', (req, res) => {
         return res.status(400).json({ error: "Tipo de avaria inválido" });
     }
 
-    db.run(`INSERT INTO avarias (maquina_id, tipo_avaria) VALUES (?, ?)`,
-        [maquina_id, tipo_avaria],
+    // Verificar propriedade da máquina se for cliente
+    db.get(`SELECT cliente_id, (marca || ' - ' || modelo) as nome FROM maquinas WHERE uuid = ?`, [maquina_id], (err, machine) => {
+        if (err) return handleDBError(res, err);
+        if (!machine) return res.status(404).json({ error: "Máquina não encontrada" });
+
+        if (req.user.role === 'cliente') {
+            if (machine.cliente_id !== req.user.cliente_id) {
+                securityLog('UNAUTHORIZED_REPORT_ATTEMPT', { user: req.user.id, machine_uuid: maquina_id });
+                return res.status(403).json({ error: "Acesso negado: Não pode reportar avarias para máquinas de outros clientes." });
+            }
+        }
+
+        db.run(`INSERT INTO avarias (maquina_id, tipo_avaria) VALUES (?, ?)`,
+            [maquina_id, tipo_avaria],
+            function (err) {
+                if (err) return handleDBError(res, err);
+                const avariaId = this.lastID;
+                securityLog('AVARIA_REPORTED', { id: avariaId, maquina_id, tipo_avaria, user: req.user.id });
+
+                // Notificar Administradores
+                db.get(`SELECT nome FROM clientes WHERE id = ?`, [machine.cliente_id], (err, clientInfo) => {
+                    if (!err && clientInfo) {
+                        db.all(`SELECT email FROM administradores WHERE email IS NOT NULL`, [], (err, admins) => {
+                            if (!err && admins.length > 0) {
+                                const adminEmails = admins.map(a => a.email);
+                                sendAdminNotificationEmail(adminEmails, machine.nome, clientInfo.nome, tipo_avaria);
+                            }
+                        });
+                    }
+                });
+
+                res.status(201).json({ id: avariaId, message: "Avaria reportada" });
+            });
+    });
+});
+
+// --- GESTÃO DE FROTA ROUTES ---
+
+app.get('/api/frota', authenticateJWT, isAdmin, (req, res) => {
+    db.all(`SELECT * FROM frota ORDER BY id DESC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/frota', authenticateJWT, isAdmin, (req, res) => {
+    let { marca, modelo, ano, data_proxima_inspecao, proxima_revisao_kms, data_ultima_revisao } = req.body;
+
+    marca = sanitizeString(marca);
+    modelo = sanitizeString(modelo);
+    ano = parseInt(ano) || null;
+    proxima_revisao_kms = parseInt(proxima_revisao_kms) || null;
+
+    if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
+
+    db.run(`INSERT INTO frota (marca, modelo, ano, data_proxima_inspecao, proxima_revisao_kms, data_ultima_revisao) VALUES (?, ?, ?, ?, ?, ?)`,
+        [marca, modelo, ano, data_proxima_inspecao, proxima_revisao_kms, data_ultima_revisao],
         function (err) {
             if (err) return handleDBError(res, err);
-            const avariaId = this.lastID;
-            securityLog('AVARIA_REPORTED', { id: avariaId, maquina_id, tipo_avaria });
-
-            // Notificar Administradores (apenas se for via QR Code público)
-            db.get(`SELECT m.marca, m.modelo, c.nome as cliente_nome 
-                   FROM maquinas m JOIN clientes c ON m.cliente_id = c.id 
-                   WHERE m.uuid = ?`, [maquina_id], (err, machineInfo) => {
-                if (!err && machineInfo) {
-                    db.all(`SELECT email FROM administradores WHERE email IS NOT NULL`, [], (err, admins) => {
-                        if (!err && admins.length > 0) {
-                            const adminEmails = admins.map(a => a.email);
-                            const machineLabel = `${machineInfo.marca} ${machineInfo.modelo}`;
-                            sendAdminNotificationEmail(adminEmails, machineLabel, machineInfo.cliente_nome, tipo_avaria);
-                        }
-                    });
-                }
-            });
-
-            res.status(201).json({ id: avariaId, message: "Avaria reportada" });
+            res.status(201).json({ id: this.lastID, marca, modelo, ano });
         });
+});
+
+app.put('/api/frota/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { marca, modelo, ano, data_proxima_inspecao, proxima_revisao_kms, data_ultima_revisao } = req.body;
+
+    marca = sanitizeString(marca);
+    modelo = sanitizeString(modelo);
+    ano = parseInt(ano) || null;
+    proxima_revisao_kms = parseInt(proxima_revisao_kms) || null;
+
+    if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
+
+    db.run(`UPDATE frota SET marca = ?, modelo = ?, ano = ?, data_proxima_inspecao = ?, proxima_revisao_kms = ?, data_ultima_revisao = ? WHERE id = ?`,
+        [marca, modelo, ano, data_proxima_inspecao, proxima_revisao_kms, data_ultima_revisao, id],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Veículo atualizado com sucesso", id, marca, modelo });
+        });
+});
+
+app.delete('/api/frota/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM frota WHERE id = ?`, [id], function (err) {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Veículo removido com sucesso", id });
+    });
 });
 
 // Error Handler Global (Ocultar Stack Traces)
@@ -1748,4 +2053,8 @@ app.listen(PORT, () => {
     console.log(`🚀 Maclau SERVER v2.2 SECURE is running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔐 Security: CORS, Helmet, Rate Limiting, JWT Expiration ENABLED`);
+    
+    // Iniciar verificação de frota
+    checkVehicleInspections(); // Corre uma vez no arranque
+    scheduleDailyCheck(); // Agenda para correr todos os dias às 08:00
 });

@@ -7,6 +7,8 @@ let currentMainDashboard = 'avarias'; // 'avarias' ou 'servicos'
 let refreshIntervalId = null;
 let lastRefreshTime = new Date();
 let calendar = null;
+let histCurrentPage = 1;
+const histItemsPerPage = 10;
 
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
@@ -15,6 +17,13 @@ function showNotification(msg, isError = false) {
     notif.className = `notification ${isError ? 'error' : ''}`;
     notif.classList.remove('hidden');
     setTimeout(() => notif.classList.add('hidden'), 3000);
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
 function escapeHTML(str) {
@@ -180,6 +189,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'clientes') loadClientes();
         if (target === 'maquinas') loadMaquinas();
         if (target === 'tecnicos') loadTecnicos();
+        if (target === 'frota') loadFrota();
         if (target === 'agendamentos') initCalendar();
     });
 });
@@ -216,23 +226,55 @@ function initCalendar() {
 
     if (calendar) {
         calendar.render();
+        calendar.updateSize();
         loadAgendamentos();
         return;
     }
 
     calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
+        initialView: window.innerWidth < 768 ? 'listWeek' : 'dayGridMonth',
         locale: 'pt',
-        headerToolbar: {
+        headerToolbar: window.innerWidth < 768 ? {
+            left: 'prev,next',
+            center: 'title',
+            right: 'dayGridMonth,listWeek'
+        } : {
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,timeGridWeek,listWeek'
+            right: 'dayGridMonth,listWeek'
         },
         buttonText: {
             today: 'Hoje',
             month: 'Mês',
-            week: 'Semana',
             list: 'Lista'
+        },
+        eventMouseEnter: function(info) {
+            const ev = info.event.extendedProps;
+            const tooltip = document.getElementById('calendar-tooltip');
+            if (!tooltip) return;
+
+            const content = `
+                <strong>${ev.rawTitle || info.event.title}</strong>
+                <span>Cliente: ${ev.cliente_nome || 'N/A'}</span><br>
+                <span>Técnico: ${ev.tecnico_nome || 'N/A'}</span><br>
+                <span>Estado: ${ev.estado || 'pendente'}</span>
+            `;
+            
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (info.jsEvent.pageX + 10) + 'px';
+            tooltip.style.top = (info.jsEvent.pageY + 10) + 'px';
+        },
+        eventMouseLeave: function() {
+            const tooltip = document.getElementById('calendar-tooltip');
+            if (tooltip) tooltip.style.display = 'none';
+        },
+        eventMouseMove: function(info) {
+            const tooltip = document.getElementById('calendar-tooltip');
+            if (tooltip && tooltip.style.display === 'block') {
+                tooltip.style.left = (info.jsEvent.pageX + 10) + 'px';
+                tooltip.style.top = (info.jsEvent.pageY + 10) + 'px';
+            }
         },
         eventClick: function(info) {
             const ev = info.event.extendedProps;
@@ -499,14 +541,17 @@ async function loadClientes() {
             tr.innerHTML = `
                 <td class="col-id"></td>
                 <td class="col-nome"></td>
-                <td class="col-morada"></td>
-                <td class="col-nif"></td>
-                <td class="col-tel"></td>
-                <td class="col-email"></td>
+                <td class="col-contactos"></td>
                 <td>
                     <div style="display:flex; gap:8px;">
+                        <button class="btn-icon btn-info-cliente" title="Ver Info Completa">
+                            <i class="ph ph-info"></i>
+                        </button>
                         <button class="btn-icon btn-view-maquinas" title="Ver Máquinas do Cliente">
                             <i class="ph ph-washing-machine"></i>
+                        </button>
+                        <button class="btn-icon btn-client-users" title="Gestão de Logins do Cliente" style="color: var(--accent);">
+                            <i class="ph ph-key"></i>
                         </button>
                         <button class="btn-icon btn-edit" title="Editar">
                             <i class="ph ph-pencil-simple"></i>
@@ -519,10 +564,13 @@ async function loadClientes() {
             `;
             tr.querySelector('.col-id').textContent = c.id;
             tr.querySelector('.col-nome').textContent = c.nome;
-            tr.querySelector('.col-morada').textContent = c.morada || '-';
-            tr.querySelector('.col-nif').textContent = c.NIF || '-';
-            tr.querySelector('.col-tel').textContent = c.telefone || '-';
-            tr.querySelector('.col-email').textContent = c.email || '-';
+            tr.querySelector('.col-contactos').innerHTML = `
+                <div style="font-size:12px; color:var(--text-secondary); font-weight:500;">${c.telefone || '-'}</div>
+                <div style="font-size:11px; color:var(--accent);">${c.email || '-'}</div>
+            `;
+
+            tr.querySelector('.btn-info-cliente').onclick = () => openViewClienteModal(c);
+
 
             tr.querySelector('.btn-view-maquinas').onclick = () => {
                 const maquinasTabBtn = document.querySelector('.nav-btn[data-target="maquinas"]');
@@ -533,6 +581,7 @@ async function loadClientes() {
                     loadMaquinas();
                 }
             };
+            tr.querySelector('.btn-client-users').onclick = () => showClientUsersView(c.id, c.nome);
             tr.querySelector('.btn-edit').onclick = () => openEditClientModal(c.id, c.nome, c.telefone, c.email, c.morada, c.NIF);
             tr.querySelector('.btn-delete').onclick = () => deleteCliente(c.id);
 
@@ -684,6 +733,15 @@ function openViewMaquinaModal(m) {
     document.getElementById('view-maquina-iniciogarantia').textContent = m.data_inicio_garantia || 'N/A';
     document.getElementById('view-maquina-fimgarantia').textContent = m.data_fim_garantia || 'N/A';
     openModal('modal-view-maquina');
+}
+
+function openViewClienteModal(c) {
+    document.getElementById('view-cliente-nome').textContent = c.nome || 'N/A';
+    document.getElementById('view-cliente-morada').textContent = c.morada || 'N/A';
+    document.getElementById('view-cliente-nif').textContent = c.NIF || 'N/A';
+    document.getElementById('view-cliente-telefone').textContent = c.telefone || 'N/A';
+    document.getElementById('view-cliente-email').textContent = c.email || 'N/A';
+    openModal('modal-view-cliente');
 }
 
 function openEditMaquinaModal(m) {
@@ -950,7 +1008,13 @@ async function loadServicos() {
         colResolucao.innerHTML = '';
         colResolvida.innerHTML = '';
 
+        const dateStart = document.getElementById('filter-srv-date-start').value;
+        const dateEnd = document.getElementById('filter-srv-date-end').value;
+        const techFilter = document.getElementById('filter-tech-dashboard').value;
+
         servicos.forEach(s => {
+            if (techFilter && s.tecnico_id != techFilter) return;
+
             const card = document.createElement('div');
             card.className = 'avaria-card';
 
@@ -1008,7 +1072,13 @@ async function loadServicos() {
 
             if (s.estado === 'pendente' || s.estado === 'pausada') colPendente.appendChild(card);
             else if (s.estado === 'em resolução') colResolucao.appendChild(card);
-            else colResolvida.appendChild(card);
+            else {
+                let addCard = true;
+                const dateRef = new Date(s.data_hora_fim || s.data_hora).toISOString().split('T')[0];
+                if (dateStart && dateRef < dateStart) addCard = false;
+                if (dateEnd && dateRef > dateEnd) addCard = false;
+                if (addCard) colResolvida.appendChild(card);
+            }
         });
     } catch (e) {
         showNotification(e.message, true);
@@ -1168,28 +1238,84 @@ async function loadHistoricoMaquinas() {
 
 async function loadHistorico() {
     try {
-        const data = await apiFetch('/historico/avarias');
+        let data = await apiFetch('/historico/avarias');
+        if (!Array.isArray(data)) {
+            console.error("Erro: Dados do histórico não são um array", data);
+            data = [];
+        }
+        
         const tbody = document.getElementById('table-historico-body');
+        if (!tbody) return;
 
-        const filtroCliente = document.getElementById('hist-cliente').value;
-        const filtroMaquina = document.getElementById('hist-maquina').value;
-        const filtroTecnico = document.getElementById('hist-tecnico').value;
-        const filtroFaturacao = document.getElementById('hist-faturacao').value;
+        const filtroCliente = document.getElementById('hist-cliente')?.value || '';
+        const filtroMaquina = document.getElementById('hist-maquina')?.value || '';
+        const filtroTecnico = document.getElementById('hist-tecnico')?.value || '';
+        const filtroFaturacao = document.getElementById('hist-faturacao')?.value || '';
+        const filtroDataInicio = document.getElementById('hist-date-start')?.value || '';
+        const filtroDataFim = document.getElementById('hist-date-end')?.value || '';
 
         tbody.innerHTML = '';
 
-        data.forEach(a => {
-            if (filtroCliente && a.cliente_id != filtroCliente) return;
-            if (filtroMaquina && a.maquina_uuid != filtroMaquina) return;
-            if (filtroTecnico && a.tecnico_id != filtroTecnico) return;
-            if (filtroFaturacao && a.estado_faturacao !== filtroFaturacao) return;
+        // Filtragem e Ordenação
+        const filteredData = data.filter(a => {
+            if (filtroCliente && a.cliente_id != filtroCliente) return false;
+            if (filtroMaquina && a.maquina_uuid != filtroMaquina) return false;
+            if (filtroTecnico && a.tecnico_id != filtroTecnico) return false;
+            if (filtroFaturacao && a.estado_faturacao !== filtroFaturacao) return false;
 
-            const dataFimExibicao = a.data_hora_fim ? new Date(a.data_hora_fim).toLocaleString('pt-PT') : new Date(a.data_hora).toLocaleString('pt-PT');
+            const dateObj = a.data_hora_fim ? new Date(a.data_hora_fim) : new Date(a.data_hora);
+            if (filtroDataInicio || filtroDataFim) {
+                const itemDateOnly = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+                if (filtroDataInicio) {
+                    const start = new Date(filtroDataInicio);
+                    if (itemDateOnly < start) return false;
+                }
+                if (filtroDataFim) {
+                    const end = new Date(filtroDataFim);
+                    if (itemDateOnly > end) return false;
+                }
+            }
+            return true;
+        });
+
+        // Ordenação Decrescente (Mais recentes primeiro)
+        filteredData.sort((a, b) => {
+            const dateA = a.data_hora_fim ? new Date(a.data_hora_fim) : new Date(a.data_hora);
+            const dateB = b.data_hora_fim ? new Date(b.data_hora_fim) : new Date(b.data_hora);
+            return dateB - dateA;
+        });
+
+        // Paginação
+        const totalItems = filteredData.length;
+        const totalPages = Math.ceil(totalItems / histItemsPerPage);
+        if (histCurrentPage > totalPages && totalPages > 0) histCurrentPage = totalPages;
+        if (histCurrentPage < 1) histCurrentPage = 1;
+
+        const startIndex = (histCurrentPage - 1) * histItemsPerPage;
+        const pageItems = filteredData.slice(startIndex, startIndex + histItemsPerPage);
+
+        // Atualizar Controles UI
+        const pageInfo = document.getElementById('hist-page-info');
+        if (pageInfo) pageInfo.textContent = `Página ${histCurrentPage} de ${totalPages || 1}`;
+
+        const btnPrev = document.getElementById('btn-prev-page');
+        const btnNext = document.getElementById('btn-next-page');
+        if (btnPrev) btnPrev.disabled = histCurrentPage === 1;
+        if (btnNext) btnNext.disabled = histCurrentPage === totalPages || totalPages === 0;
+
+        pageItems.forEach(a => {
+            const dateObj = a.data_hora_fim ? new Date(a.data_hora_fim) : new Date(a.data_hora);
+            const datePart = dateObj.toLocaleDateString('pt-PT');
+            const timePart = dateObj.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+            
             const reportBtnHtml = a.relatorio ? `` : `<span style="font-size:11px; color:var(--text-secondary);">Sem Relatório</span>`;
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${dataFimExibicao}</td>
+                <td style="white-space: nowrap;">
+                    <div style="font-weight: 600; font-size: 13px;">${datePart}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">${timePart}</div>
+                </td>
                 <td class="col-tech"></td>
                 <td class="col-client"></td>
                 <td class="col-machine"></td>
@@ -1353,11 +1479,23 @@ window.onload = async () => {
     const filterTech = document.getElementById('filter-tech-dashboard');
     if (filterTech) filterTech.addEventListener('change', loadAvarias);
 
-    const filterStart = document.getElementById('filter-date-start');
-    if (filterStart) filterStart.addEventListener('change', loadAvarias);
-
     const filterEnd = document.getElementById('filter-date-end');
     if (filterEnd) filterEnd.addEventListener('change', loadAvarias);
+
+    const filterSrvStart = document.getElementById('filter-srv-date-start');
+    if (filterSrvStart) filterSrvStart.addEventListener('change', loadServicos);
+
+    const filterSrvEnd = document.getElementById('filter-srv-date-end');
+    if (filterSrvEnd) filterSrvEnd.addEventListener('change', loadServicos);
+
+    // O filtro de técnico já chama loadAvarias, mas precisamos que ele saiba qual dashboard carregar
+    if (filterTech) {
+        filterTech.removeEventListener('change', loadAvarias);
+        filterTech.addEventListener('change', () => {
+            if (currentMainDashboard === 'avarias') loadAvarias();
+            else loadServicos();
+        });
+    }
 
     // Toggle Colunas
     document.querySelectorAll('.btn-toggle-col').forEach(btn => {
@@ -1377,6 +1515,7 @@ window.onload = async () => {
     // Histórico
     const histClient = document.getElementById('hist-cliente');
     if (histClient) histClient.addEventListener('change', () => {
+        histCurrentPage = 1;
         loadHistoricoMaquinas();
         updateFilterBadge();
         loadHistorico();
@@ -1384,19 +1523,51 @@ window.onload = async () => {
 
     const histMaq = document.getElementById('hist-maquina');
     if (histMaq) histMaq.addEventListener('change', () => {
+        histCurrentPage = 1;
         updateFilterBadge();
         loadHistorico();
     });
 
     const histTechF = document.getElementById('hist-tecnico');
     if (histTechF) histTechF.addEventListener('change', () => {
+        histCurrentPage = 1;
         updateFilterBadge();
         loadHistorico();
     });
 
     const histFatF = document.getElementById('hist-faturacao');
     if (histFatF) histFatF.addEventListener('change', () => {
+        histCurrentPage = 1;
         updateFilterBadge();
+        loadHistorico();
+    });
+
+    const histDateStart = document.getElementById('hist-date-start');
+    if (histDateStart) histDateStart.addEventListener('change', () => {
+        histCurrentPage = 1;
+        updateFilterBadge();
+        loadHistorico();
+    });
+
+    const histDateEnd = document.getElementById('hist-date-end');
+    if (histDateEnd) histDateEnd.addEventListener('change', () => {
+        histCurrentPage = 1;
+        updateFilterBadge();
+        loadHistorico();
+    });
+
+    // Paginação Histórico
+    const btnPrevPage = document.getElementById('btn-prev-page');
+    if (btnPrevPage) btnPrevPage.addEventListener('click', () => {
+        if (histCurrentPage > 1) {
+            histCurrentPage--;
+            loadHistorico();
+        }
+    });
+
+    const btnNextPage = document.getElementById('btn-next-page');
+    if (btnNextPage) btnNextPage.addEventListener('click', () => {
+        histCurrentPage++;
         loadHistorico();
     });
 
@@ -1417,25 +1588,49 @@ window.onload = async () => {
         });
     }
 
+    const btnClearHistFilters = document.getElementById('btn-clear-hist-filters');
+    if (btnClearHistFilters) {
+        btnClearHistFilters.addEventListener('click', (e) => {
+            e.stopPropagation();
+            histCurrentPage = 1;
+            document.getElementById('hist-cliente').value = '';
+            document.getElementById('hist-maquina').value = '';
+            document.getElementById('hist-tecnico').value = '';
+            document.getElementById('hist-faturacao').value = '';
+            document.getElementById('hist-date-start').value = '';
+            document.getElementById('hist-date-end').value = '';
+            loadHistoricoMaquinas();
+            updateFilterBadge();
+            loadHistorico();
+        });
+    }
+
     function updateFilterBadge() {
         const c = document.getElementById('hist-cliente').value;
         const m = document.getElementById('hist-maquina').value;
         const t = document.getElementById('hist-tecnico').value;
         const f = document.getElementById('hist-faturacao').value;
+        const ds = document.getElementById('hist-date-start').value;
+        const de = document.getElementById('hist-date-end').value;
 
         let count = 0;
         if (c) count++;
         if (m) count++;
         if (t) count++;
         if (f) count++;
+        if (ds || de) count++;
 
         const badge = document.getElementById('active-filters-count');
+        const clearBtn = document.getElementById('btn-clear-hist-filters');
+
         if (badge) {
             if (count > 0) {
                 badge.textContent = count;
                 badge.style.display = 'flex';
+                if (clearBtn) clearBtn.style.display = 'flex';
             } else {
                 badge.style.display = 'none';
+                if (clearBtn) clearBtn.style.display = 'none';
             }
         }
     }
@@ -1611,3 +1806,312 @@ document.getElementById('report-avaria-cliente').addEventListener('change', asyn
         showNotification('Erro ao carregar máquinas', true);
     }
 });
+
+// --- Gestão de Frota ---
+async function loadFrota() {
+    try {
+        const frota = await apiFetch('/frota');
+        const tbody = document.getElementById('table-frota-body');
+        tbody.innerHTML = '';
+
+        frota.forEach(v => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${v.id}</td>
+                <td>${v.marca}</td>
+                <td>${v.modelo}</td>
+                <td>${v.ano || '-'}</td>
+                <td>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-icon btn-info" title="Ver Detalhes">
+                            <i class="ph ph-info"></i>
+                        </button>
+                        <button class="btn-icon btn-edit" title="Editar">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button class="btn-icon delete btn-delete" title="Apagar">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            
+            tr.querySelector('.btn-info').addEventListener('click', () => openViewFrotaModal(v));
+            tr.querySelector('.btn-edit').addEventListener('click', () => openEditFrotaModal(v));
+            tr.querySelector('.btn-delete').addEventListener('click', () => deleteFrota(v.id));
+            
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function openViewFrotaModal(v) {
+    document.getElementById('view-frota-marca').textContent = v.marca;
+    document.getElementById('view-frota-modelo').textContent = v.modelo;
+    document.getElementById('view-frota-ano').textContent = v.ano || 'N/A';
+    document.getElementById('view-frota-data-proxima-inspecao').textContent = formatDate(v.data_proxima_inspecao);
+    document.getElementById('view-frota-proxima-revisao-kms').textContent = v.proxima_revisao_kms || 'N/A';
+    document.getElementById('view-frota-data-ultima-revisao').textContent = formatDate(v.data_ultima_revisao);
+    openModal('modal-view-frota');
+}
+
+const btnCloseViewFrota = document.getElementById('btn-close-view-frota');
+if (btnCloseViewFrota) {
+    btnCloseViewFrota.addEventListener('click', () => closeModal('modal-view-frota'));
+}
+
+function openEditFrotaModal(v) {
+    document.getElementById('edit-frota-id').value = v.id;
+    document.getElementById('edit-frota-marca').value = v.marca;
+    document.getElementById('edit-frota-modelo').value = v.modelo;
+    document.getElementById('edit-frota-ano').value = v.ano || '';
+    document.getElementById('edit-frota-data-proxima-inspecao').value = v.data_proxima_inspecao || '';
+    document.getElementById('edit-frota-proxima-revisao-kms').value = v.proxima_revisao_kms || '';
+    document.getElementById('edit-frota-data-ultima-revisao').value = v.data_ultima_revisao || '';
+    openModal('modal-edit-frota');
+}
+
+async function deleteFrota(id) {
+    if (!confirm('Tem a certeza que deseja remover este veículo?')) return;
+    try {
+        await apiFetch(`/frota/${id}`, { method: 'DELETE' });
+        showNotification('Veículo removido.');
+        loadFrota();
+    } catch (e) { showNotification(e.message, true); }
+}
+
+const btnOpenAddFrota = document.getElementById('btn-open-add-frota');
+if (btnOpenAddFrota) {
+    btnOpenAddFrota.addEventListener('click', () => openModal('modal-add-frota'));
+}
+
+document.getElementById('form-add-frota').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+        marca: document.getElementById('frota-marca').value,
+        modelo: document.getElementById('frota-modelo').value,
+        ano: document.getElementById('frota-ano').value,
+        data_proxima_inspecao: document.getElementById('frota-data-proxima-inspecao').value,
+        proxima_revisao_kms: document.getElementById('frota-proxima-revisao-kms').value,
+        data_ultima_revisao: document.getElementById('frota-data-ultima-revisao').value
+    };
+
+    try {
+        await apiFetch('/frota', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        showNotification('Veículo adicionado com sucesso!');
+        closeModal('modal-add-frota');
+        document.getElementById('form-add-frota').reset();
+        loadFrota();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+});
+
+document.getElementById('form-edit-frota').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('edit-frota-id').value;
+    const payload = {
+        marca: document.getElementById('edit-frota-marca').value,
+        modelo: document.getElementById('edit-frota-modelo').value,
+        ano: document.getElementById('edit-frota-ano').value,
+        data_proxima_inspecao: document.getElementById('edit-frota-data-proxima-inspecao').value,
+        proxima_revisao_kms: document.getElementById('edit-frota-proxima-revisao-kms').value,
+        data_ultima_revisao: document.getElementById('edit-frota-data-ultima-revisao').value
+    };
+
+    try {
+        await apiFetch(`/frota/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        showNotification('Veículo atualizado com sucesso!');
+        closeModal('modal-edit-frota');
+        loadFrota();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+});
+
+// --- Gestão de Utilizadores de Cliente ---
+let currentViewingClientId = null;
+
+async function showClientUsersView(clientId, clientName) {
+    currentViewingClientId = clientId;
+    currentActiveView = 'client-users';
+    
+    // Hide all views, show client-users
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById('view-client-users').classList.remove('hidden');
+    
+    document.getElementById('client-users-title').textContent = `Logins do Cliente: ${clientName}`;
+    loadClientUsers(clientId);
+}
+
+async function loadClientUsers(clientId) {
+    try {
+        const users = await apiFetch(`/clientes/${clientId}/users`);
+        const tbody = document.getElementById('table-client-users-body');
+        tbody.innerHTML = '';
+
+        users.forEach(u => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escapeHTML(u.nome)}</td>
+                <td><code>${escapeHTML(u.username)}</code></td>
+                <td>${escapeHTML(u.email || '-')}</td>
+                <td><code style="color: var(--accent); background: var(--accent-light); padding: 2px 6px; border-radius: 4px;">${escapeHTML(u.password_plain || '(não disponível)')}</code></td>
+                <td>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-icon btn-edit-user" title="Editar Login">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button class="btn-icon delete btn-delete-user" title="Remover Acesso">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            
+            tr.querySelector('.btn-edit-user').onclick = () => openEditClientUserModal(u);
+            tr.querySelector('.btn-delete-user').onclick = () => deleteClientUser(u.id);
+            
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function openEditClientUserModal(u) {
+    document.getElementById('edit-client-user-id').value = u.id;
+    document.getElementById('edit-client-user-nome').value = u.nome;
+    document.getElementById('edit-client-user-username').value = u.username;
+    document.getElementById('edit-client-user-email').value = u.email || '';
+    document.getElementById('edit-client-user-password').value = u.password_plain || ''; // Mostrar password real
+    openModal('modal-edit-client-user');
+}
+
+// Lógica de Toggle de Password
+document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+    btn.onclick = (e) => {
+        const targetId = e.currentTarget.getAttribute('data-target');
+        const input = document.getElementById(targetId);
+        const icon = e.currentTarget.querySelector('i');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('ph-eye');
+            icon.classList.add('ph-eye-closed');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('ph-eye-closed');
+            icon.classList.add('ph-eye');
+        }
+    };
+});
+
+async function deleteClientUser(userId) {
+    if (!confirm('Deseja remover este acesso? O técnico deixará de conseguir reportar avarias.')) return;
+    try {
+        await apiFetch(`/clientes-users/${userId}`, { method: 'DELETE' });
+        showNotification('Acesso removido.');
+        loadClientUsers(currentViewingClientId);
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+// Listeners para Botões e Forms de Client Users
+const btnBackToClients = document.getElementById('btn-back-to-clients');
+if (btnBackToClients) {
+    btnBackToClients.onclick = () => {
+        // Forçar fechar a vista atual
+        document.getElementById('view-client-users').classList.add('hidden');
+        // Procurar o botão de Clientes na barra lateral e clicar
+        const clientsBtn = document.querySelector('.nav-btn[data-target="clientes"]');
+        if (clientsBtn) {
+            clientsBtn.click();
+        } else {
+            // Fallback se o botão não for encontrado
+            document.getElementById('view-clientes').classList.remove('hidden');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            const b = document.querySelector('.nav-btn[data-target="clientes"]');
+            if (b) b.classList.add('active');
+        }
+    };
+}
+
+const btnOpenAddClientUser = document.getElementById('btn-open-add-client-user');
+if (btnOpenAddClientUser) {
+    btnOpenAddClientUser.onclick = () => {
+        document.getElementById('add-client-user-client-id').value = currentViewingClientId;
+        document.getElementById('form-add-client-user').reset();
+        openModal('modal-add-client-user');
+    };
+}
+
+const formAddClientUser = document.getElementById('form-add-client-user');
+if (formAddClientUser) {
+    formAddClientUser.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const clientId = document.getElementById('add-client-user-client-id').value;
+        const data = {
+            nome: document.getElementById('client-user-nome').value,
+            username: document.getElementById('client-user-username').value,
+            email: document.getElementById('client-user-email').value,
+            password: document.getElementById('client-user-password').value
+        };
+
+        try {
+            await apiFetch(`/clientes/${clientId}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            showNotification('Login criado com sucesso!');
+            closeModal('modal-add-client-user');
+            loadClientUsers(clientId);
+        } catch (e) {
+            showNotification(e.message, true);
+        }
+    });
+}
+
+const formEditClientUser = document.getElementById('form-edit-client-user');
+if (formEditClientUser) {
+    formEditClientUser.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId = document.getElementById('edit-client-user-id').value;
+        const data = {
+            nome: document.getElementById('edit-client-user-nome').value,
+            username: document.getElementById('edit-client-user-username').value,
+            email: document.getElementById('edit-client-user-email').value,
+            password: document.getElementById('edit-client-user-password').value
+        };
+
+        // Se a senha estiver vazia, não a enviamos para não alterar
+        if (!data.password) {
+            delete data.password;
+        }
+
+        try {
+            await apiFetch(`/clientes-users/${userId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            showNotification('Login atualizado!');
+            closeModal('modal-edit-client-user');
+            loadClientUsers(currentViewingClientId);
+        } catch (e) {
+            showNotification(e.message, true);
+        }
+    });
+}

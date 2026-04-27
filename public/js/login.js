@@ -20,13 +20,14 @@ function initLogin() {
             
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            const redirect = urlParams.get('redirect');
 
             try {
                 console.log("[MACLAU] Sending login request to /api/auth/login...");
                 const res = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email, password, redirect })
                 });
 
                 console.log("[MACLAU] Server response status:", res.status);

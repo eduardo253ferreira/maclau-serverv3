@@ -89,6 +89,12 @@
             border-color: var(--primary-color);
         }
 
+        /* Forçar pontos (•) no campo de password em vez de asteriscos */
+        input[type="password"] {
+            -webkit-text-security: disc;
+            font-family: 'Inter', sans-serif;
+        }
+
         .btn-primary {
             width: 100%;
             padding: 12px;

@@ -19,7 +19,7 @@
         <div id="loader" class="text-center">A carregar informações da máquina...</div>
         
         <!-- Conteúdo principal, escondido por defeito -->
-        <div id="report-view" class="hidden">
+        <div id="report-view" class="hidden" style="display: none !important;">
             <div class="machine-card">
                 <h3>Máquina Identificada:</h3>
                 <h2 id="machine-name">---</h2>
@@ -57,8 +57,18 @@
             <h2>Erro na Leitura</h2>
             <p id="error-message">O código da máquina é inválido ou já não existe.</p>
         </div>
+
+        <!-- Tela de Login Necessário -->
+        <div id="login-required-view" class="hidden text-center">
+            <span class="icon-big">🔒</span>
+            <h2>Acesso Restrito</h2>
+            <p>Para reportar uma avaria nesta máquina, por favor identifique-se.</p>
+            <button id="btn-go-to-login" class="btn-avaria primary" style="margin-top: 20px; width: 100%;">
+                Iniciar Sessão
+            </button>
+        </div>
     </main>
 
-    <script src="js/report.js"></script>
+    <script src="js/report_v2.js"></script>
 </body>
 </html>
