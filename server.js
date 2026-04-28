@@ -1053,7 +1053,7 @@ app.get('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_pausa) as data_hora_pausa, 
-               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_agendada) as data_agendada,
+               a.data_agendada,
                a.tecnico_id, a.notas,
                a.relatorio, a.relatorio_submetido, a.pecas_substituidas, a.horas_trabalho,
                a.assinatura_cliente,
@@ -1141,6 +1141,17 @@ app.put('/api/avarias/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
     db.run(`UPDATE avarias SET arquivada = 1 WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ message: "Avaria arquivada (removida do dashboard)", id });
+    });
+});
+
+app.put('/api/avarias/:id/agendamento', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { data_agendada, notas, tecnico_id } = req.body;
+    db.run(`UPDATE avarias SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`, 
+        [data_agendada || null, notas, tecnico_id || null, id], function(err) {
+        if (err) return handleDBError(res, err);
+        securityLog('AVARIA_AGENDAMENTO_EDITED', { avaria_id: id, tecnico_id: tecnico_id || null });
+        res.json({ message: "Agendamento da avaria atualizado com sucesso" });
     });
 });
 
@@ -1378,7 +1389,7 @@ app.get('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
                COALESCE(t.nome, 'Não Atribuído') as tecnico_nome,
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim,
-               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_agendada) as data_agendada
+               s.data_agendada
         FROM servicos s
         LEFT JOIN clientes c ON s.cliente_id = c.id
         LEFT JOIN tecnicos t ON s.tecnico_id = t.id
@@ -1481,6 +1492,17 @@ app.put('/api/servicos/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
     db.run(`UPDATE servicos SET arquivada = 1 WHERE id = ?`, [id], (err) => {
         if (err) return handleDBError(res, err);
         res.json({ message: "Serviço arquivado" });
+    });
+});
+
+app.put('/api/servicos/:id/agendamento', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { data_agendada, notas, tecnico_id } = req.body;
+    db.run(`UPDATE servicos SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`, 
+        [data_agendada || null, notas, tecnico_id || null, id], function(err) {
+        if (err) return handleDBError(res, err);
+        securityLog('SERVICO_AGENDAMENTO_EDITED', { servico_id: id, tecnico_id: tecnico_id || null });
+        res.json({ message: "Agendamento do serviço atualizado com sucesso" });
     });
 });
 
@@ -1654,8 +1676,8 @@ app.get('/api/historico/servicos', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/agendamentos', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT 'avaria' as type, a.id, a.maquina_id, a.tipo_avaria, a.estado, a.notas,
-               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_agendada) as data_agendada,
+        SELECT 'avaria' as type, a.id, a.maquina_id, a.tipo_avaria, a.estado, a.notas, a.tecnico_id,
+               a.data_agendada,
                COALESCE(m.marca || ' - ' || m.modelo, 'Máquina Removida') as title,
                c.nome as cliente_nome, t.nome as tecnico_nome
         FROM avarias a
@@ -1666,8 +1688,8 @@ app.get('/api/agendamentos', authenticateJWT, isAdmin, (req, res) => {
         
         UNION ALL
         
-        SELECT 'servico' as type, s.id, NULL as maquina_id, s.tipo_servico as tipo_avaria, s.estado, s.notas,
-               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_agendada) as data_agendada,
+        SELECT 'servico' as type, s.id, NULL as maquina_id, s.tipo_servico as tipo_avaria, s.estado, s.notas, s.tecnico_id,
+               s.data_agendada,
                s.tipo_servico || ' (' || s.tipo_camiao || ')' as title,
                c.nome as cliente_nome, t.nome as tecnico_nome
         FROM servicos s
@@ -1685,7 +1707,7 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
     const query = `
         SELECT 'avaria' as type, a.id, a.maquina_id, a.tipo_avaria, a.estado,
-               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_agendada) as data_agendada,
+               a.data_agendada,
                COALESCE(m.marca || ' - ' || m.modelo, 'Máquina Removida') as title,
                c.nome as cliente_nome, a.notas
         FROM avarias a
@@ -1696,7 +1718,7 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
         UNION ALL
         
         SELECT 'servico' as type, s.id, NULL as maquina_id, s.tipo_servico as tipo_avaria, s.estado,
-               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_agendada) as data_agendada,
+               s.data_agendada,
                s.tipo_servico || ' (' || s.tipo_camiao || ')' as title,
                c.nome as cliente_nome, s.notas
         FROM servicos s
@@ -1815,7 +1837,7 @@ app.get('/api/tecnico/avarias', authenticateJWT, isTecnico, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const techId = req.user.id;
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, 
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.data_agendada,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_pausa) as data_hora_pausa, 
                a.notas,

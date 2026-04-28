@@ -312,6 +312,18 @@ function initCalendar() {
             badge.style.background = ev.type === 'avaria' ? '#fee2e2' : '#dbeafe';
             badge.style.color = ev.type === 'avaria' ? '#ef4444' : '#3b82f6';
 
+            // Armazenar dados no botão Editar
+            const btnEdit = document.getElementById('btn-edit-agendamento');
+            if (btnEdit) {
+                // info.event.id vem como 'avaria-12' ou 'servico-34'
+                const idNum = info.event.id.split('-')[1];
+                btnEdit.dataset.id = idNum;
+                btnEdit.dataset.type = ev.type;
+                btnEdit.dataset.date = info.event.startStr ? info.event.startStr.slice(0, 16) : ''; 
+                btnEdit.dataset.notas = ev.notas || '';
+                btnEdit.dataset.tecnico_id = ev.tecnico_id || '';
+            }
+
             openModal('modal-detalhe-agendamento');
         },
         dateClick: function(info) {
@@ -368,6 +380,7 @@ async function loadAgendamentos() {
                     rawTitle: a.title,
                     cliente_nome: a.cliente_nome,
                     tecnico_nome: a.tecnico_nome,
+                    tecnico_id: a.tecnico_id,
                     estado: a.estado,
                     notas: a.notas
                 }
@@ -387,6 +400,64 @@ function openFullNoteModal(note) {
     document.getElementById('full-note-content').textContent = note;
     openModal('modal-view-note');
 }
+
+// Editar Agendamento Listeners
+document.addEventListener('DOMContentLoaded', () => {
+    const btnEditAgendamento = document.getElementById('btn-edit-agendamento');
+    if (btnEditAgendamento) {
+        btnEditAgendamento.addEventListener('click', () => {
+            const id = btnEditAgendamento.dataset.id;
+            const type = btnEditAgendamento.dataset.type;
+            const dateStr = btnEditAgendamento.dataset.date;
+            const notas = btnEditAgendamento.dataset.notas;
+            const tecnicoId = btnEditAgendamento.dataset.tecnico_id;
+
+            document.getElementById('edit-agendamento-id').value = id;
+            document.getElementById('edit-agendamento-type').value = type;
+            document.getElementById('edit-agendamento-data').value = dateStr;
+            document.getElementById('edit-agendamento-notas').value = notas;
+            document.getElementById('edit-agendamento-tecnico').value = tecnicoId;
+
+            closeModal('modal-detalhe-agendamento');
+            openModal('modal-edit-agendamento');
+        });
+    }
+
+    const formEditAgendamento = document.getElementById('form-edit-agendamento');
+    if (formEditAgendamento) {
+        formEditAgendamento.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit-agendamento-id').value;
+            const type = document.getElementById('edit-agendamento-type').value;
+            const data_agendada = document.getElementById('edit-agendamento-data').value;
+            const notas = document.getElementById('edit-agendamento-notas').value;
+            const tecnico_id = document.getElementById('edit-agendamento-tecnico').value;
+
+            try {
+                const endpoint = type === 'avaria' ? `/avarias/${id}/agendamento` : `/servicos/${id}/agendamento`;
+                await apiFetch(endpoint, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data_agendada, notas, tecnico_id })
+                });
+                
+                showNotification('Agendamento atualizado com sucesso!');
+                closeModal('modal-edit-agendamento');
+                
+                // Recarregar calendário
+                if (calendar) {
+                    loadAgendamentos();
+                }
+                // Refresh dashboards if needed
+                if (currentMainDashboard === 'avarias') loadAvarias();
+                else loadServicos();
+
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+});
 
 // --- Dashboard (Avarias) ---
 async function loadAvarias() {
@@ -873,22 +944,25 @@ async function loadTecnicos() {
         const histTech = document.getElementById('hist-tecnico');
         const reportTech = document.getElementById('report-avaria-tecnico');
         const reportServicoTech = document.getElementById('report-servico-tecnico');
+        const editAgendamentoTech = document.getElementById('edit-agendamento-tecnico');
 
-        selectAtribuir.innerHTML = '<option value="">-- Selecionar Técnico --</option>';
+        if (selectAtribuir) selectAtribuir.innerHTML = '<option value="">-- Selecionar Técnico --</option>';
         if (filterDash) filterDash.innerHTML = '<option value="">Todos</option>';
         if (statsTech) statsTech.innerHTML = '<option value="">Todos</option>';
         if (histTech) histTech.innerHTML = '<option value="">Todos</option>';
         if (reportTech) reportTech.innerHTML = '<option value="">-- Não Atribuir Agora --</option>';
         if (reportServicoTech) reportServicoTech.innerHTML = '<option value="">-- Não Atribuir Agora --</option>';
+        if (editAgendamentoTech) editAgendamentoTech.innerHTML = '<option value="">-- Não Atribuir / Remover --</option>';
 
         tecnicos.forEach(t => {
             const safeName = escapeHTML(t.nome);
-            selectAtribuir.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
+            if (selectAtribuir) selectAtribuir.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (filterDash) filterDash.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (statsTech) statsTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (histTech) histTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (reportTech) reportTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (reportServicoTech) reportServicoTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
+            if (editAgendamentoTech) editAgendamentoTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
         });
 
     } catch (e) {

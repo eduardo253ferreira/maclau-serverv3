@@ -1405,8 +1405,41 @@
             </div>
 
             <div style="display: flex; gap: 10px;">
+                <button id="btn-edit-agendamento" class="btn-secondary w-100" style="background-color: #f1f5f9; border: 1px solid #cbd5e1; color: #475569;"><i class="ph ph-pencil-simple"></i> Editar</button>
                 <button id="btn-fechar-detalhe" class="btn-primary w-100">Fechar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Agendamento -->
+    <div id="modal-edit-agendamento" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-edit-agendamento">&times;</span>
+            <h2>Editar Agendamento</h2>
+            <form id="form-edit-agendamento">
+                <input type="hidden" id="edit-agendamento-id">
+                <input type="hidden" id="edit-agendamento-type">
+                
+                <div class="form-group">
+                    <label>Data/Hora Agendada</label>
+                    <input type="datetime-local" id="edit-agendamento-data">
+                </div>
+                
+                <div class="form-group">
+                    <label>Técnico</label>
+                    <select id="edit-agendamento-tecnico">
+                        <option value="">-- Não Atribuir / Remover --</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Notas / Descrição</label>
+                    <textarea id="edit-agendamento-notas" rows="4" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                
+                <button type="submit" class="btn-primary w-100">Guardar Alterações</button>
+            </form>
         </div>
     </div>
 

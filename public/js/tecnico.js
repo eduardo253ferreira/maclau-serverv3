@@ -11,6 +11,11 @@ let currentTechName = urlParams.get('name') || localStorage.getItem('maclau_tech
 if (urlParams.get('id')) localStorage.setItem('maclau_tech_id', currentTechId);
 if (urlParams.get('name')) localStorage.setItem('maclau_tech_name', currentTechName);
 
+// Estilo para o aviso a piscar
+const blinkStyle = document.createElement('style');
+blinkStyle.innerHTML = `@keyframes blinker { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }`;
+document.head.appendChild(blinkStyle);
+
 let jwtToken = localStorage.getItem('maclau_token');
 let currentDashboardFilter = 'all';
 let timerInterval = null;
@@ -212,13 +217,33 @@ async function loadMyTasks() {
 
             let statusLabel = 'Em Resolução';
             let statusColor = 'var(--warning)';
+            let warningBlink = '';
+
             if (task.estado === 'pendente') {
                 statusLabel = 'Aguardando Início';
                 statusColor = 'var(--danger)';
+                
+                // Verificar Atraso
+                if (task.data_agendada) {
+                    const agendada = new Date(task.data_agendada);
+                    const agora = new Date();
+                    if (agora > agendada) {
+                        warningBlink = `<span style="background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; animation: blinker 1s linear infinite; display:flex; align-items:center; gap:4px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); letter-spacing: 0.5px;"><i class="ph-fill ph-warning-circle" style="font-size:14px;"></i> Atrasado</span>`;
+                    }
+                }
+
             } else if (task.estado === 'pausada') {
                 const pDate = task.data_hora_pausa ? new Date(task.data_hora_pausa) : new Date();
                 statusLabel = `Pausado às ${pDate.getHours().toString().padStart(2, '0')}:${pDate.getMinutes().toString().padStart(2, '0')}h ${pDate.toLocaleDateString('pt-PT')}`;
                 statusColor = '#ca8a04';
+            }
+
+            let agendadoHtml = '';
+            if (task.data_agendada) {
+                const dateA = new Date(task.data_agendada);
+                const hours = dateA.getHours().toString().padStart(2, '0');
+                const minutes = dateA.getMinutes().toString().padStart(2, '0');
+                agendadoHtml = `<div style="font-size:13px; color:var(--primary-color); font-weight:600; margin-top:10px; display:flex; align-items:center; gap:5px;"><i class="ph-bold ph-calendar-blank"></i> Agendado para: ${dateA.toLocaleDateString('pt-PT')} às ${hours}:${minutes}h</div>`;
             }
 
             div.innerHTML = `
@@ -227,12 +252,16 @@ async function loadMyTasks() {
                         <span style="font-size:11px; font-weight:700; background:var(--accent-light); color:${tagColor}; padding:3px 8px; border-radius:4px;">${tagStr}</span>
                         ${task._type === 'servico' ? `<span style="font-size:11px; font-weight:700; background:#f1f5f9; color:#475569; padding:3px 8px; border-radius:4px;">${task.tipo_camiao}</span>` : ''}
                     </div>
-                    <span style="font-size:12px; font-weight:700; color:${statusColor};">${statusLabel}</span>
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                        ${warningBlink}
+                        <span style="font-size:12px; font-weight:700; color:${statusColor};">${statusLabel}</span>
+                    </div>
                 </div>
                 <h3 class="task-machine-name" style="margin-bottom:5px;">${escapeHTML(titleStr)}</h3>
                 <p class="task-client-name" style="font-size:14px; color:var(--text-secondary);">${task._type === 'avaria' ? escapeHTML(task.cliente_nome) : 'Serviço Externo'}</p>
-                <div style="font-size:12px; color:var(--text-secondary); margin-top:10px;">Reportado em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
-                ${task.notas ? `<div style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent);"><strong style="color:var(--text-main);">Notas do Admin:</strong><br>${escapeHTML(task.notas)}</div>` : ''}
+                ${agendadoHtml}
+                <div style="font-size:12px; color:var(--text-secondary); margin-top:${task.data_agendada ? '4px' : '10px'};">Reportado em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
+                ${task.notas ? `<div onclick="openFullNoteModal('${encodeURIComponent(task.notas).replace(/'/g, "%27")}')" style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent); cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='var(--surface-color)'"><strong style="color:var(--text-main);">Notas do Admin:</strong><div style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:4px;">${escapeHTML(task.notas)}</div></div>` : ''}
                 
                 ${task.estado === 'em resolução' ? `
                 <div class="timer-badge">
@@ -945,6 +974,12 @@ window.openReportFromHistory = function (id) {
     const item = historicoData.find(a => a.id === id);
     if (!item) return;
     openRelatorioModal(item.id, false, item.relatorio, item.relatorio_submetido === 1, item.pecas_substituidas, item.horas_trabalho, item.assinatura_cliente, item._type);
+};
+
+window.openFullNoteModal = function(encodedNote) {
+    const note = decodeURIComponent(encodedNote);
+    document.getElementById('full-note-content').textContent = note;
+    document.getElementById('modal-view-note').classList.remove('hidden');
 };
 
 // --- Assinatura Digital ---

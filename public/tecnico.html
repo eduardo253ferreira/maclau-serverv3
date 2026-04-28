@@ -387,6 +387,20 @@
         </div>
     </div>
 
+    <!-- Modal View Note -->
+    <div id="modal-view-note" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-view-note" style="color:var(--text-main); font-size:24px;">&times;</span>
+            <h2 style="margin-bottom: 15px; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                <i class="ph-bold ph-note" style="color:var(--accent);"></i> Notas do Admin
+            </h2>
+            <div id="full-note-content" style="white-space: pre-wrap; font-size: 14px; color: var(--text-secondary); line-height: 1.6; background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); max-height: 60vh; overflow-y: auto;"></div>
+            <div style="display:flex; justify-content:flex-end; margin-top: 20px;">
+                <button type="button" class="btn-primary" onclick="document.getElementById('modal-view-note').classList.add('hidden')" style="width:auto; padding: 8px 20px;">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/tecnico.js?v=3.0"></script>
 </body>
 
