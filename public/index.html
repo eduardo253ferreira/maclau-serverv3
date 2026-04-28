@@ -89,6 +89,39 @@
             border-color: var(--primary-color);
         }
 
+        .password-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .password-wrapper input {
+            padding-right: 40px;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .toggle-password:hover {
+            color: var(--text-main);
+        }
+
+        .toggle-password svg {
+            width: 20px;
+            height: 20px;
+        }
+
         /* Forçar pontos (•) no campo de password em vez de asteriscos */
         input[type="password"] {
             -webkit-text-security: disc;
@@ -149,7 +182,19 @@
             </div>
             <div class="form-group">
                 <label for="password">Palavra-passe</label>
-                <input type="password" id="password" required placeholder="Insira a sua palavra-passe">
+                <div class="password-wrapper">
+                    <input type="password" id="password" required placeholder="Insira a sua palavra-passe">
+                    <button type="button" id="togglePassword" class="toggle-password" aria-label="Mostrar Palavra-passe" title="Mostrar Palavra-passe">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; margin-top: 10px;">
+                <input type="checkbox" id="remember-me" style="width: auto; margin-right: 8px;">
+                <label for="remember-me" style="margin-bottom: 0; font-weight: normal; font-size: 14px; cursor: pointer;">Manter-me ligado (30 dias)</label>
             </div>
             <button type="submit" class="btn-primary">Entrar</button>
         </form>

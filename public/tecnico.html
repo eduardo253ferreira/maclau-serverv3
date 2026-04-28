@@ -146,6 +146,19 @@
                     </div>
                 </header>
 
+                <!-- Filtros da Dashboard -->
+                <div class="dashboard-filters" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div class="filter-group">
+                        <select id="filter-dash-cliente" class="filter-select" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--surface-color);">
+                            <option value="">Todos os Clientes</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <input type="date" id="filter-dash-data" class="filter-select" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--surface-color);">
+                    </div>
+                    <button id="btn-clear-dash-filters" class="btn-secondary" style="padding: 8px 12px; font-size: 13px;">Limpar</button>
+                </div>
+
                 <div class="repairs-list" id="repairs-container">
                     <!-- JS popula aqui -->
                 </div>
@@ -396,7 +409,7 @@
             </h2>
             <div id="full-note-content" style="white-space: pre-wrap; font-size: 14px; color: var(--text-secondary); line-height: 1.6; background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); max-height: 60vh; overflow-y: auto;"></div>
             <div style="display:flex; justify-content:flex-end; margin-top: 20px;">
-                <button type="button" class="btn-primary" onclick="document.getElementById('modal-view-note').classList.add('hidden')" style="width:auto; padding: 8px 20px;">Fechar</button>
+                <button type="button" class="btn-primary" id="btn-close-note" style="width:auto; padding: 8px 20px;">Fechar</button>
             </div>
         </div>
     </div>

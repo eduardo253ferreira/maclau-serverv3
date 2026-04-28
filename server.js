@@ -117,6 +117,12 @@ app.use(cookieParser());
 // Middleware de Proteção para ficheiros HTML específicos
 const authorizeHTML = (requiredRole) => {
     return (req, res, next) => {
+        // Prevenir caching da página protegida (resolve o problema do botão Voltar do browser)
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
+
         const token = req.cookies.maclau_token;
         if (!token) {
             securityLog('HTML_ACCESS_DENIED', { path: req.path, reason: 'no_token' });
@@ -695,8 +701,14 @@ const isAdminOrTecnico = (req, res, next) => {
 };
 
 // API: Autenticação
+app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('maclau_token');
+    securityLog('LOGOUT_SUCCESS', { ip: req.ip });
+    res.json({ success: true });
+});
+
 app.post('/api/auth/login', (req, res) => {
-    const { email, password, redirect } = req.body;
+    const { email, password, remember, redirect } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({ error: "Email e password são obrigatórios" });
@@ -709,17 +721,20 @@ app.post('/api/auth/login', (req, res) => {
         if (row) {
             const match = bcrypt.compareSync(password, row.password);
             if (match) {
+                const expTime = remember ? '30d' : '8h';
+                const maxAgeMs = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
+
                 const accessToken = jwt.sign(
                     { id: row.id, username: row.username, role: 'admin' },
                     SECRET_KEY,
-                    { expiresIn: '8h', algorithm: 'HS256' }
+                    { expiresIn: expTime, algorithm: 'HS256' }
                 );
 
                 res.cookie('maclau_token', accessToken, {
                     httpOnly: true,
                     secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
                     sameSite: 'strict',
-                    maxAge: 8 * 60 * 60 * 1000
+                    maxAge: maxAgeMs
                 });
 
                 securityLog('LOGIN_SUCCESS', { user: row.username, role: 'admin', ip: req.ip });
@@ -736,17 +751,20 @@ app.post('/api/auth/login', (req, res) => {
             if (row) {
                 const match = bcrypt.compareSync(password, row.password);
                 if (match) {
+                    const expTime = remember ? '30d' : '8h';
+                    const maxAgeMs = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
+
                     const accessToken = jwt.sign(
                         { id: row.id, role: 'tecnico' },
                         SECRET_KEY,
-                        { expiresIn: '8h', algorithm: 'HS256' }
+                        { expiresIn: expTime, algorithm: 'HS256' }
                     );
 
                     res.cookie('maclau_token', accessToken, {
                         httpOnly: true,
                         secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
                         sameSite: 'strict',
-                        maxAge: 8 * 60 * 60 * 1000
+                        maxAge: maxAgeMs
                     });
 
                     securityLog('LOGIN_SUCCESS', { user: email, role: 'tecnico', ip: req.ip });
@@ -767,17 +785,20 @@ app.post('/api/auth/login', (req, res) => {
                 if (row) {
                     const match = bcrypt.compareSync(password, row.password);
                     if (match) {
+                        const expTime = remember ? '30d' : '24h';
+                        const maxAgeMs = remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+
                         const accessToken = jwt.sign(
                             { id: row.id, cliente_id: row.cliente_id, role: 'cliente' },
                             SECRET_KEY,
-                            { expiresIn: '24h', algorithm: 'HS256' }
+                            { expiresIn: expTime, algorithm: 'HS256' }
                         );
 
                         res.cookie('maclau_token', accessToken, {
                             httpOnly: true,
                             secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
                             sameSite: 'strict',
-                            maxAge: 24 * 60 * 60 * 1000
+                            maxAge: maxAgeMs
                         });
 
                         securityLog('LOGIN_SUCCESS_CLIENTE', { user: email, cliente_id: row.cliente_id, ip: req.ip });
