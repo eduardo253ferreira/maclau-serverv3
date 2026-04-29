@@ -13,6 +13,11 @@ const histItemsPerPage = 10;
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
     const notif = document.getElementById('notification');
+    if (!notif) {
+        console.error("Notification element not found:", msg);
+        if (isError) alert(msg);
+        return;
+    }
     notif.textContent = msg;
     notif.className = `notification ${isError ? 'error' : ''}`;
     notif.classList.remove('hidden');
@@ -890,9 +895,17 @@ async function generateQR(uuid, maquinaNome) {
     try {
         const res = await apiFetch(`/maquinas/${uuid}/qrcode`);
         const container = document.getElementById('qrcode-image-container');
-        document.getElementById('print-machine-name').textContent = maquinaNome || '';
-        container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">
-                               <p style="margin-top:10px; font-size:12px; word-break: break-all;">${res.url}</p>`;
+        const machineNameEl = document.getElementById('print-machine-name');
+        
+        if (machineNameEl) {
+            machineNameEl.textContent = maquinaNome || '';
+        }
+        
+        if (container) {
+            container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">
+                                   <p style="margin-top:10px; font-size:12px; word-break: break-all;">${res.url}</p>`;
+        }
+        
         openModal('modal-qrcode');
     } catch (e) {
         showNotification(e.message, true);
