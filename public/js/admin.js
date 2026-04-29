@@ -1171,35 +1171,7 @@ async function loadServicos() {
     }
 }
 
-document.getElementById('form-report-servico').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const data = {
-        cliente_id: document.getElementById('report-servico-cliente').value,
-        tipo_servico: document.getElementById('report-servico-tipo').value,
-        tipo_camiao: document.getElementById('report-servico-camiao').value,
-        notas: document.getElementById('report-servico-notas').value,
-        tecnico_id: document.getElementById('report-servico-tecnico').value
-    };
 
-    try {
-        await apiFetch('/servicos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        showNotification('Serviço reportado com sucesso!');
-        closeModal('modal-report-servico');
-        document.getElementById('form-report-servico').reset();
-        loadServicos();
-    } catch (err) {
-        showNotification(err.message, true);
-    }
-});
-
-const btnOpenReportServico = document.getElementById('btn-open-report-servico');
-if (btnOpenReportServico) {
-    btnOpenReportServico.onclick = () => openModal('modal-report-servico');
-}
 
 function toggleDashboardCol(colId) {
     const col = document.getElementById(colId);
@@ -1813,6 +1785,9 @@ window.onclick = function (event) {
 // Reportar Avaria (Manual Admin)
 document.getElementById('form-report-avaria').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+
     const payload = {
         maquina_id: document.getElementById('report-avaria-maquina').value,
         tipo_avaria: parseInt(document.getElementById('report-avaria-tipo').value),
@@ -1834,12 +1809,17 @@ document.getElementById('form-report-avaria').addEventListener('submit', async (
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
         showNotification(e.message, true);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 });
 
 // Reportar Serviço (Manual Admin)
 document.getElementById('form-report-servico').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+
     const payload = {
         cliente_id: document.getElementById('report-servico-cliente').value,
         tipo_servico: document.getElementById('report-servico-tipo').value,
@@ -1862,6 +1842,8 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
         showNotification(e.message, true);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 });
 
