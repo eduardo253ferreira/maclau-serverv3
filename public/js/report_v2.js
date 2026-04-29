@@ -67,7 +67,9 @@ async function loadMachineInfo() {
         
         // Hide loader & Show report view
         loader.classList.add('hidden');
-        machineNameEl.textContent = data.nome;
+        if (machineNameEl) {
+            machineNameEl.textContent = data.nome;
+        }
         reportView.classList.remove('hidden');
         reportView.style.display = ''; // Remover display: none inline
 

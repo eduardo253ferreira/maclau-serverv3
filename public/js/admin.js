@@ -13,6 +13,11 @@ const histItemsPerPage = 10;
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
     const notif = document.getElementById('notification');
+    if (!notif) {
+        console.error("Notification element not found:", msg);
+        if (isError) alert(msg);
+        return;
+    }
     notif.textContent = msg;
     notif.className = `notification ${isError ? 'error' : ''}`;
     notif.classList.remove('hidden');
@@ -248,7 +253,7 @@ function initCalendar() {
             month: 'Mês',
             list: 'Lista'
         },
-        eventMouseEnter: function(info) {
+        eventMouseEnter: function (info) {
             const ev = info.event.extendedProps;
             const tooltip = document.getElementById('calendar-tooltip');
             if (!tooltip) return;
@@ -259,24 +264,24 @@ function initCalendar() {
                 <span>Técnico: ${ev.tecnico_nome || 'N/A'}</span><br>
                 <span>Estado: ${ev.estado || 'pendente'}</span>
             `;
-            
+
             tooltip.innerHTML = content;
             tooltip.style.display = 'block';
             tooltip.style.left = (info.jsEvent.pageX + 10) + 'px';
             tooltip.style.top = (info.jsEvent.pageY + 10) + 'px';
         },
-        eventMouseLeave: function() {
+        eventMouseLeave: function () {
             const tooltip = document.getElementById('calendar-tooltip');
             if (tooltip) tooltip.style.display = 'none';
         },
-        eventMouseMove: function(info) {
+        eventMouseMove: function (info) {
             const tooltip = document.getElementById('calendar-tooltip');
             if (tooltip && tooltip.style.display === 'block') {
                 tooltip.style.left = (info.jsEvent.pageX + 10) + 'px';
                 tooltip.style.top = (info.jsEvent.pageY + 10) + 'px';
             }
         },
-        eventClick: function(info) {
+        eventClick: function (info) {
             const ev = info.event.extendedProps;
             const title = info.event.title;
             const dateStr = info.event.start.toLocaleString('pt-PT', {
@@ -295,7 +300,7 @@ function initCalendar() {
             document.getElementById('detalhe-tecnico').textContent = ev.tecnico_nome || 'Não atribuído';
             document.getElementById('detalhe-data').textContent = dateStr;
             document.getElementById('detalhe-estado').textContent = ev.estado || 'pendente';
-            
+
             const notasBox = document.getElementById('detalhe-notas');
             if (ev.notas && ev.notas.trim() !== "") {
                 notasBox.textContent = ev.notas;
@@ -319,17 +324,17 @@ function initCalendar() {
                 const idNum = info.event.id.split('-')[1];
                 btnEdit.dataset.id = idNum;
                 btnEdit.dataset.type = ev.type;
-                btnEdit.dataset.date = info.event.startStr ? info.event.startStr.slice(0, 16) : ''; 
+                btnEdit.dataset.date = info.event.startStr ? info.event.startStr.slice(0, 16) : '';
                 btnEdit.dataset.notas = ev.notas || '';
                 btnEdit.dataset.tecnico_id = ev.tecnico_id || '';
             }
 
             openModal('modal-detalhe-agendamento');
         },
-        dateClick: function(info) {
+        dateClick: function (info) {
             const selectedDate = new Date(info.dateStr + "T09:00");
             const now = new Date();
-            
+
             // Restrição: Não permitir agendamentos no passado
             if (selectedDate < now && info.dateStr !== now.toISOString().split('T')[0]) {
                 showNotification('Não pode agendar intervenções para datas passadas.', true);
@@ -340,13 +345,13 @@ function initCalendar() {
             document.getElementById('escolha-data-label').textContent = `Data Selecionada: ${info.dateStr}`;
             const choiceAvaria = document.getElementById('choice-avaria');
             const choiceServico = document.getElementById('choice-servico');
-            
+
             choiceAvaria.onclick = () => {
                 document.getElementById('report-avaria-agendada').value = info.dateStr + "T09:00";
                 closeModal('modal-escolha-agendamento');
                 openModal('modal-report-avaria');
             };
-            
+
             choiceServico.onclick = () => {
                 document.getElementById('report-servico-agendada').value = info.dateStr + "T09:00";
                 closeModal('modal-escolha-agendamento');
@@ -368,7 +373,7 @@ async function loadAgendamentos() {
             const date = new Date(a.data_agendada);
             const hourStr = date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
             const prefix = a.type === 'avaria' ? 'A' : 'S';
-            
+
             return {
                 id: `${a.type}-${a.id}`,
                 title: `${prefix} ${hourStr} - ${a.cliente_nome || 'Sem Cliente'}`,
@@ -440,10 +445,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ data_agendada, notas, tecnico_id })
                 });
-                
+
                 showNotification('Agendamento atualizado com sucesso!');
                 closeModal('modal-edit-agendamento');
-                
+
                 // Recarregar calendário
                 if (calendar) {
                     loadAgendamentos();
@@ -784,7 +789,7 @@ async function loadMaquinas() {
             tr.querySelector('.col-cliente').textContent = m.cliente_nome || '-';
 
             tr.querySelector('.btn-info').onclick = () => openViewMaquinaModal(m);
-            tr.querySelector('.btn-qr').onclick = () => generateQR(m.uuid, m.cliente_nome, maquinaNome);
+            tr.querySelector('.btn-qr').onclick = () => generateQR(m.uuid, m.modelo || '');
             tr.querySelector('.btn-edit').onclick = () => openEditMaquinaModal(m);
             tr.querySelector('.btn-delete').onclick = () => deleteMaquina(m.id);
 
@@ -886,14 +891,21 @@ document.getElementById('form-add-maquina').addEventListener('submit', async (e)
 });
 
 // QR Code
-async function generateQR(uuid, clienteNome, maquinaNome) {
+async function generateQR(uuid, maquinaNome) {
     try {
         const res = await apiFetch(`/maquinas/${uuid}/qrcode`);
         const container = document.getElementById('qrcode-image-container');
-        document.getElementById('print-client-name').textContent = clienteNome || '';
-        document.getElementById('print-machine-name').textContent = maquinaNome || '';
-        container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">
-                               <p style="margin-top:10px; font-size:12px; word-break: break-all;">${res.url}</p>`;
+        const machineNameEl = document.getElementById('print-machine-name');
+        
+        if (machineNameEl) {
+            machineNameEl.textContent = maquinaNome || '';
+        }
+        
+        if (container) {
+            container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">
+                                   <p style="margin-top:10px; font-size:12px; word-break: break-all;">${res.url}</p>`;
+        }
+        
         openModal('modal-qrcode');
     } catch (e) {
         showNotification(e.message, true);
@@ -1094,7 +1106,7 @@ async function loadServicos() {
 
             let tagHTML = `<div class="card-type" style="background:var(--accent); color:white;">${escapeHTML(s.tipo_servico)}</div>`;
             tagHTML += ` <div class="card-type" style="background:#e2e8f0; color:#475569; margin-left:5px;">${escapeHTML(s.tipo_camiao)}</div>`;
-            
+
             if (s.estado === 'pausada') {
                 tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
             }
@@ -1116,7 +1128,7 @@ async function loadServicos() {
                     openFullNoteModal(s.notas);
                 };
             }
-            
+
             card.querySelector('.card-machine-name').textContent = s.cliente_nome || 'Sem Cliente';
             card.querySelector('.card-tech-name').textContent = s.tecnico_nome || 'Não Atribuído';
 
@@ -1317,7 +1329,7 @@ async function loadHistorico() {
             console.error("Erro: Dados do histórico não são um array", data);
             data = [];
         }
-        
+
         const tbody = document.getElementById('table-historico-body');
         if (!tbody) return;
 
@@ -1381,7 +1393,7 @@ async function loadHistorico() {
             const dateObj = a.data_hora_fim ? new Date(a.data_hora_fim) : new Date(a.data_hora);
             const datePart = dateObj.toLocaleDateString('pt-PT');
             const timePart = dateObj.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
-            
+
             const reportBtnHtml = a.relatorio ? `` : `<span style="font-size:11px; color:var(--text-secondary);">Sem Relatório</span>`;
 
             const tr = document.createElement('tr');
@@ -1857,7 +1869,7 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
 document.getElementById('report-avaria-cliente').addEventListener('change', async (e) => {
     const clienteId = e.target.value;
     const selectMaquina = document.getElementById('report-avaria-maquina');
-    
+
     if (!clienteId) {
         selectMaquina.innerHTML = '<option value="">Selecione o Cliente primeiro</option>';
         selectMaquina.disabled = true;
@@ -1867,7 +1879,7 @@ document.getElementById('report-avaria-cliente').addEventListener('change', asyn
     try {
         const maquinas = await apiFetch('/maquinas');
         const filtradas = maquinas.filter(m => m.cliente_id == clienteId);
-        
+
         selectMaquina.innerHTML = '<option value="">Selecione a Máquina</option>';
         filtradas.forEach(m => {
             const opt = document.createElement('option');
@@ -1909,11 +1921,11 @@ async function loadFrota() {
                     </div>
                 </td>
             `;
-            
+
             tr.querySelector('.btn-info').addEventListener('click', () => openViewFrotaModal(v));
             tr.querySelector('.btn-edit').addEventListener('click', () => openEditFrotaModal(v));
             tr.querySelector('.btn-delete').addEventListener('click', () => deleteFrota(v.id));
-            
+
             tbody.appendChild(tr);
         });
     } catch (e) {
@@ -2019,11 +2031,11 @@ let currentViewingClientId = null;
 async function showClientUsersView(clientId, clientName) {
     currentViewingClientId = clientId;
     currentActiveView = 'client-users';
-    
+
     // Hide all views, show client-users
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
     document.getElementById('view-client-users').classList.remove('hidden');
-    
+
     document.getElementById('client-users-title').textContent = `Logins do Cliente: ${clientName}`;
     loadClientUsers(clientId);
 }
@@ -2052,10 +2064,10 @@ async function loadClientUsers(clientId) {
                     </div>
                 </td>
             `;
-            
+
             tr.querySelector('.btn-edit-user').onclick = () => openEditClientUserModal(u);
             tr.querySelector('.btn-delete-user').onclick = () => deleteClientUser(u.id);
-            
+
             tbody.appendChild(tr);
         });
     } catch (e) {
@@ -2078,7 +2090,7 @@ document.querySelectorAll('.btn-toggle-password').forEach(btn => {
         const targetId = e.currentTarget.getAttribute('data-target');
         const input = document.getElementById(targetId);
         const icon = e.currentTarget.querySelector('i');
-        
+
         if (input.type === 'password') {
             input.type = 'text';
             icon.classList.remove('ph-eye');

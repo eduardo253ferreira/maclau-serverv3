@@ -1020,7 +1020,6 @@
             <span class="close-btn" data-modal="modal-qrcode">&times;</span>
             <img src="img/logo.png" alt="Maclau Logo" id="print-maclau-logo"
                 style="display:none; max-width: 150px; margin: 0 auto 10px auto;">
-            <h3 id="print-client-name" class="print-only-text" style="display:none; margin: 0;"></h3>
             <h4 id="print-machine-name" class="print-only-text" style="display:none; margin: 2px 0 4px 0; color: #555;">
             </h4>
             <h2>QR Code da Máquina</h2>
@@ -1028,7 +1027,7 @@
             <div id="qrcode-image-container" style="margin: 4px 0;"></div>
             <p id="print-contact-info" class="print-only-text"
                 style="display:none; margin-top: 4px; font-size: 14px; font-weight: 600; color: #333;">Contacto Avarias:
-                (numero paulo)</p>
+                937538378 - assistencia@maclau.pt</p>
             <button id="btn-print-qr" class="btn-primary w-100">Imprimir</button>
         </div>
     </div>
@@ -1405,7 +1404,9 @@
             </div>
 
             <div style="display: flex; gap: 10px;">
-                <button id="btn-edit-agendamento" class="btn-secondary w-100" style="background-color: #f1f5f9; border: 1px solid #cbd5e1; color: #475569;"><i class="ph ph-pencil-simple"></i> Editar</button>
+                <button id="btn-edit-agendamento" class="btn-secondary w-100"
+                    style="background-color: #f1f5f9; border: 1px solid #cbd5e1; color: #475569;"><i
+                        class="ph ph-pencil-simple"></i> Editar</button>
                 <button id="btn-fechar-detalhe" class="btn-primary w-100">Fechar</button>
             </div>
         </div>
@@ -1419,12 +1420,12 @@
             <form id="form-edit-agendamento">
                 <input type="hidden" id="edit-agendamento-id">
                 <input type="hidden" id="edit-agendamento-type">
-                
+
                 <div class="form-group">
                     <label>Data/Hora Agendada</label>
                     <input type="datetime-local" id="edit-agendamento-data">
                 </div>
-                
+
                 <div class="form-group">
                     <label>Técnico</label>
                     <select id="edit-agendamento-tecnico">
@@ -1432,12 +1433,13 @@
                         <!-- Populated by JS -->
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Notas / Descrição</label>
-                    <textarea id="edit-agendamento-notas" rows="4" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                    <textarea id="edit-agendamento-notas" rows="4"
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
-                
+
                 <button type="submit" class="btn-primary w-100">Guardar Alterações</button>
             </form>
         </div>
@@ -1599,7 +1601,7 @@
         </div>
     </div>
 
-    <script src="/js/admin.js?v=3.0"></script>
+    <script src="/js/admin.js?v=3.1"></script>
 </body>
 
 </html>
