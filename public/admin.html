@@ -194,7 +194,7 @@
 
         .choice-modal-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 20px;
             margin-top: 20px;
         }
@@ -268,7 +268,7 @@
         .toggle-slider-main {
             position: absolute;
             height: 100%;
-            width: calc(50% - 2px);
+            width: calc(25% - 3px);
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -276,12 +276,17 @@
             z-index: 1;
         }
 
-        [data-main-filter="avarias"].active~.toggle-slider-main {
+        [data-main-filter="todas"].active~.toggle-slider-main {
             transform: translateX(0);
         }
-
-        [data-main-filter="servicos"].active~.toggle-slider-main {
+        [data-main-filter="avarias"].active~.toggle-slider-main {
             transform: translateX(calc(100% + 4px));
+        }
+        [data-main-filter="servicos"].active~.toggle-slider-main {
+            transform: translateX(calc(200% + 8px));
+        }
+        [data-main-filter="manutencoes"].active~.toggle-slider-main {
+            transform: translateX(calc(300% + 12px));
         }
 
         @media (max-width: 768px) {
@@ -293,14 +298,46 @@
 
             .dashboard-toggle-container {
                 width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 4px;
             }
 
             .dashboard-toggle {
-                width: 100%;
+                width: max-content;
+                min-width: 100%;
+                display: flex;
             }
 
             .toggle-btn-main {
                 flex: 1;
+                font-size: 13px;
+                padding: 10px 16px;
+                white-space: nowrap;
+            }
+
+            .column-header h3 {
+                font-size: 13px;
+                gap: 8px;
+            }
+
+            .btn-report-avaria {
+                width: 36px !important;
+                height: 36px !important;
+                padding: 0 !important;
+                min-width: 0 !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .btn-report-avaria span {
+                display: none;
+            }
+
+            .date-range-filter span {
+                display: none;
             }
         }
 
@@ -433,8 +470,10 @@
                         <p>Gestão centralizada de avarias e serviços técnicos.</p>
                         <div class="dashboard-toggle-container">
                             <div class="dashboard-toggle">
-                                <button class="toggle-btn-main active" data-main-filter="avarias">Avarias</button>
+                                <button class="toggle-btn-main active" data-main-filter="todas">Todas</button>
+                                <button class="toggle-btn-main" data-main-filter="avarias">Avarias</button>
                                 <button class="toggle-btn-main" data-main-filter="servicos">Serviços</button>
+                                <button class="toggle-btn-main" data-main-filter="manutencoes">Manutenções</button>
                                 <div class="toggle-slider-main"></div>
                             </div>
                         </div>
@@ -450,16 +489,16 @@
                     </div>
                 </header>
                 <!-- Board Avarias Wrapper -->
-                <div id="wrapper-board-avarias">
+                <div id="wrapper-board-avarias" class="hidden">
                     <div class="board-container">
                         <!-- Pendentes -->
                         <div class="board-column" id="col-pendente">
                             <div class="column-header">
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <button id="btn-open-report-avaria" class="btn-report-avaria"
-                                        style="padding: 6px 14px; font-size: 13px;">
-                                        <i class="ph ph-plus-circle"></i>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <button class="btn-report-avaria btn-open-report-avaria"
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px;" title="Nova Avaria">
+                                        <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Nova Avaria</span>
                                     </button>
                                     <button class="btn-toggle-col" data-col="col-pendente">
@@ -512,10 +551,10 @@
                         <div class="board-column" id="srv-col-pendente">
                             <div class="column-header">
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <button id="btn-open-report-servico" class="btn-report-avaria"
-                                        style="padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: 0 4px 12px rgba(45, 90, 39, 0.25);">
-                                        <i class="ph ph-plus-circle"></i>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <button class="btn-report-avaria btn-open-report-servico"
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;" title="Novo Serviço">
+                                        <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Novo Serviço</span>
                                     </button>
                                     <button class="btn-toggle-col" data-col="srv-col-pendente">
@@ -550,6 +589,123 @@
                                             title="Até">
                                     </div>
                                     <button class="btn-toggle-col" data-col="srv-col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Board Manutencoes Wrapper -->
+                <div id="wrapper-board-manutencoes" class="hidden">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="mnt-col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <button class="btn-report-avaria btn-open-report-manutencao"
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;" title="Nova Manutenção">
+                                        <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
+                                        <span>Nova Manutenção</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="mnt-col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="mnt-col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="mnt-col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Resolvidas -->
+                        <div class="board-column" id="mnt-col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidas</h3>
+                                <div class="col-header-actions">
+                                    <div class="date-range-filter">
+                                        <input type="date" id="filter-mnt-date-start"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="De">
+                                        <span style="font-size:12px;">Até</span>
+                                        <input type="date" id="filter-mnt-date-end"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="Até">
+                                    </div>
+                                    <button class="btn-toggle-col" data-col="mnt-col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Board Todas Wrapper -->
+                <div id="wrapper-board-todas">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="all-col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <button class="btn-report-avaria btn-open-report-avaria" title="Nova Avaria"
+                                        style="border-radius: 20px; padding: 4px 10px; font-size: 11px;">
+                                        <i class="ph ph-plus" style="font-size: 14px; animation: none;"></i>
+                                        <span>Avaria</span>
+                                    </button>
+                                    <button class="btn-report-avaria btn-open-report-servico" title="Novo Serviço"
+                                        style="border-radius: 20px; padding: 4px 10px; font-size: 11px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;">
+                                        <i class="ph ph-plus" style="font-size: 14px; animation: none;"></i>
+                                        <span>Serviço</span>
+                                    </button>
+                                    <button class="btn-report-avaria btn-open-report-manutencao" title="Nova Manutenção"
+                                        style="border-radius: 20px; padding: 4px 10px; font-size: 11px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;">
+                                        <i class="ph ph-plus" style="font-size: 14px; animation: none;"></i>
+                                        <span>Manut.</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="all-col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="all-col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="all-col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Resolvidas -->
+                        <div class="board-column" id="all-col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidas</h3>
+                                <div class="col-header-actions">
+                                    <div class="date-range-filter">
+                                        <input type="date" id="filter-all-date-start"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="De">
+                                        <span style="font-size:12px;">Até</span>
+                                        <input type="date" id="filter-all-date-end"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="Até">
+                                    </div>
+                                    <button class="btn-toggle-col" data-col="all-col-resolvida">
                                         <i class="ph ph-caret-up"></i>
                                     </button>
                                 </div>
@@ -617,7 +773,7 @@
             <section id="view-historico" class="view hidden">
                 <header class="view-header flex-header">
                     <div>
-                        <h1>Histórico de Avarias</h1>
+                        <h1>Histórico de Intervenções</h1>
                         <p>Registo de todas as intervenções concluídas.</p>
                     </div>
                 </header>
@@ -639,6 +795,15 @@
                             <label><i class="ph ph-buildings"></i> Lavandaria</label>
                             <select id="hist-cliente">
                                 <option value="">Todas as Lavandarias</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-tag"></i> Tipo</label>
+                            <select id="hist-tipo">
+                                <option value="">Todos os Tipos</option>
+                                <option value="avaria">Avarias</option>
+                                <option value="servico">Serviços</option>
+                                <option value="manutencao">Manutenções</option>
                             </select>
                         </div>
                         <div class="filter-menu-item">
@@ -690,7 +855,7 @@
                                 <th>Data Resolução</th>
                                 <th>Técnico</th>
                                 <th>Lavandaria</th>
-                                <th>Máquina</th>
+                                <th>Intervenção</th>
                                 <th>Horas Trabalho (M)</th>
                                 <th>Faturação</th>
                                 <th>Relatório</th>
@@ -1061,6 +1226,7 @@
             <p>Selecione o técnico responsável por esta avaria.</p>
             <form id="form-atribuir-tecnico">
                 <input type="hidden" id="atribuir-avaria-id">
+                <input type="hidden" id="atribuir-type" value="avaria">
                 <div class="form-group">
                     <label>Técnico</label>
                     <select id="atribuir-tecnico-select" required>
@@ -1325,6 +1491,41 @@
         </div>
     </div>
 
+    <!-- Modal Reportar Manutenção (Admin Manual) -->
+    <div id="modal-report-manutencao" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-report-manutencao">&times;</span>
+            <h2>Reportar Manutenção</h2>
+            <p>Registe uma nova manutenção geral para todas as máquinas do cliente.</p>
+            <form id="form-report-manutencao">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-manutencao-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas Adicionais</label>
+                    <textarea id="report-manutencao-notas" rows="3" placeholder="Detalhes sobre a manutenção..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico (Opcional)</label>
+                    <select id="report-manutencao-tecnico">
+                        <option value="">-- Não Atribuir Agora --</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Data/Hora Agendada (Opcional)</label>
+                    <input type="datetime-local" id="report-manutencao-agendada">
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Manutenção</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal Ver Nota Completa -->
     <div id="modal-view-note" class="modal hidden">
         <div class="modal-content">
@@ -1353,6 +1554,10 @@
                 <div class="choice-card" id="choice-servico">
                     <i class="ph ph-truck"></i>
                     <span>Novo Serviço</span>
+                </div>
+                <div class="choice-card" id="choice-manutencao">
+                    <i class="ph ph-shield-check"></i>
+                    <span>Nova Manutenção</span>
                 </div>
             </div>
         </div>

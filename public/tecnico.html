@@ -39,17 +39,18 @@
         .toggle-slider {
             position: absolute;
             height: 100%;
-            width: calc(33.33% - 4px);
+            width: calc(25% - 4px);
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 1;
         }
-        /* Positions for 3 buttons */
+        /* Positions for 4 buttons */
         [data-filter="all"].active ~ .toggle-slider { transform: translateX(0); }
         [data-filter="avaria"].active ~ .toggle-slider { transform: translateX(calc(100% + 4px)); }
         [data-filter="servico"].active ~ .toggle-slider { transform: translateX(calc(200% + 8px)); }
+        [data-filter="manutencao"].active ~ .toggle-slider { transform: translateX(calc(300% + 12px)); }
 
         .timer-badge {
             background: #fefce8;
@@ -111,7 +112,7 @@
             <nav class="sidebar-nav">
                 <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
                 <button class="nav-btn" data-target="agendamentos">Agendamentos</button>
-                <button class="nav-btn" data-target="historico">Histórico de Serviços</button>
+                <button class="nav-btn" data-target="historico">Histórico de Intervenções</button>
                 <button class="nav-btn" data-target="perfil">Perfil</button>
             </nav>
             <div style="padding: 24px; margin-top: auto;">
@@ -140,6 +141,7 @@
                                 <button class="toggle-btn active" data-filter="all">Todas</button>
                                 <button class="toggle-btn" data-filter="avaria">Avarias</button>
                                 <button class="toggle-btn" data-filter="servico">Serviços</button>
+                                <button class="toggle-btn" data-filter="manutencao">Manutenções</button>
                                 <div class="toggle-slider"></div>
                             </div>
                         </div>
@@ -181,8 +183,8 @@
             <section id="view-historico" class="view hidden">
                 <header class="view-header flex-header">
                     <div>
-                        <h1>Histórico de Serviços</h1>
-                        <p>Aqui encontra todas as avarias que já solucionou.</p>
+                        <h1>Histórico de Intervenções</h1>
+                        <p>Aqui encontra todas as intervenções que já solucionou.</p>
                     </div>
                     <div style="display:flex; align-items:center; gap: 10px;">
                         <label for="filter-hist-cliente" class="filter-label">Filtrar Cliente:</label>
@@ -197,7 +199,7 @@
                             <tr>
                                 <th>Data</th>
                                 <th>Lavandaria</th>
-                                <th>Máquina</th>
+                                <th>Intervenção</th>
                                 <th>Horas (M)</th>
                                 <th>Relatório</th>
                             </tr>
@@ -294,9 +296,10 @@
                     <div class="a4-section">
                         <h3><i class="ph ph-user"></i> Cliente</h3>
                         <div class="a4-info-box">
-                            <p><strong id="a4-cliente-nome">---</strong></p>
-                            <p id="a4-cliente-email">---</p>
-                            <p id="a4-cliente-contato">---</p>
+                            <p><strong>Nome:</strong> <span id="a4-cliente-nome">---</span></p>
+                            <p><strong>Email:</strong> <span id="a4-cliente-email">---</span></p>
+                            <p><strong>Contacto:</strong> <span id="a4-cliente-contato">---</span></p>
+                            <p><strong>NIF:</strong> <span id="a4-cliente-nif">---</span></p>
                         </div>
                     </div>
                     <div class="a4-section">
@@ -305,6 +308,7 @@
                             <p><strong>Técnico:</strong> <span id="a4-tecnico-nome">---</span></p>
                             <div id="a4-machine-row">
                                 <p><strong>Máquina:</strong> <span id="a4-maquina-nome">---</span></p>
+                                <p id="a4-maquina-serie-row"><strong>Nº de Série:</strong> <span id="a4-maquina-serie">---</span></p>
                                 <p><strong>Avaria:</strong> <span id="a4-tipo-avaria">---</span></p>
                             </div>
                             <div id="a4-service-row" style="display:none;">
@@ -349,8 +353,9 @@
                     <div class="a4-section">
                         <h3><i class="ph ph-clock"></i> Tempo de Trabalho</h3>
                         <div class="form-group" style="margin:0;">
-                            <input type="number" id="relatorio-horas" step="0.1" min="0" placeholder="Ex: 1.5"
+                            <input type="text" id="relatorio-horas" placeholder="HH:mm"
                                 style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1;">
+                            <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Utilize o formato Horas:Minutos (ex: 01:40)</p>
                         </div>
                     </div>
                     <div class="a4-section">
@@ -414,7 +419,7 @@
         </div>
     </div>
 
-    <script src="/js/tecnico.js?v=3.0"></script>
+    <script src="/js/tecnico.js?v=3.1"></script>
 </body>
 
 </html>

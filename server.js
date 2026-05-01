@@ -26,12 +26,13 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) {
             cb(null, true);
         } else {
-            cb(new Error('Apenas imagens são permitidas!'));
+            console.warn(`[UPLOAD] Ficheiro rejeitado (Mimetype inválido): ${file.originalname} (${file.mimetype})`);
+            cb(new Error('Apenas imagens (JPG, PNG, etc.) são permitidas!'));
         }
     }
 });
@@ -159,7 +160,9 @@ app.get('/tecnico.html', authorizeHTML('tecnico'), (req, res, next) => {
 
 // 🔒 SEGURANÇA: Rota protegida para servir fotos dos relatórios (fora da pasta public)
 app.get('/uploads/reports/:filename', (req, res) => {
-    const token = req.cookies.maclau_token;
+    // Tentar obter token dos cookies ou da query string (para <img> tags)
+    const token = req.cookies.maclau_token || req.query.token;
+
     if (!token) {
         securityLog('PHOTO_ACCESS_DENIED', { path: req.path, reason: 'no_token' });
         return res.sendStatus(401);
@@ -170,7 +173,7 @@ app.get('/uploads/reports/:filename', (req, res) => {
             securityLog('PHOTO_ACCESS_DENIED', { path: req.path, reason: 'invalid_token' });
             return res.sendStatus(403);
         }
-        
+
         // Apenas Admins e Técnicos podem ver as fotos
         if (decoded.role !== 'admin' && decoded.role !== 'tecnico') {
             securityLog('PHOTO_ACCESS_DENIED', { path: req.path, reason: 'unauthorized_role', role: decoded.role });
@@ -178,7 +181,7 @@ app.get('/uploads/reports/:filename', (req, res) => {
         }
 
         const filePath = path.join(__dirname, 'uploads', 'reports', req.params.filename);
-        
+
         // Verificar se o ficheiro existe antes de enviar
         if (fs.existsSync(filePath)) {
             res.sendFile(filePath);
@@ -346,14 +349,39 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS manutencoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id INTEGER NOT NULL,
+                tecnico_id INTEGER,
+                estado TEXT DEFAULT 'pendente',
+                estado_faturacao TEXT DEFAULT 'Por Faturar',
+                arquivada INTEGER DEFAULT 0,
+                data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
+                data_hora_inicio DATETIME,
+                data_hora_fim DATETIME,
+                relatorio TEXT,
+                relatorio_submetido INTEGER DEFAULT 0,
+                pecas_substituidas TEXT,
+                horas_trabalho REAL,
+                notas TEXT,
+                data_hora_pausa DATETIME,
+                assinatura_cliente TEXT,
+                assinatura_tecnico TEXT,
+                data_agendada DATETIME,
+                FOREIGN KEY (cliente_id) REFERENCES clientes (id),
+                FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
+            )`);
+
             db.run(`CREATE TABLE IF NOT EXISTS fotos_relatorio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 avaria_id INTEGER,
                 servico_id INTEGER,
+                manutencao_id INTEGER,
                 caminho TEXT NOT NULL,
                 data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (avaria_id) REFERENCES avarias (id),
-                FOREIGN KEY (servico_id) REFERENCES servicos (id)
+                FOREIGN KEY (servico_id) REFERENCES servicos (id),
+                FOREIGN KEY (manutencao_id) REFERENCES manutencoes (id)
             )`);
 
             // 🔒 SEGURANÇA: Migração com serialize para evitar race conditions
@@ -408,7 +436,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 { table: 'administradores', column: 'email', type: 'TEXT' },
                 { table: 'clientes', column: 'morada', type: 'TEXT' },
                 { table: 'clientes', column: 'NIF', type: 'TEXT' },
-                { table: 'utilizadores_cliente', column: 'password_plain', type: 'TEXT' }
+                { table: 'utilizadores_cliente', column: 'password_plain', type: 'TEXT' },
+                { table: 'fotos_relatorio', column: 'manutencao_id', type: 'INTEGER' }
             ];
 
             migrations.forEach(m => {
@@ -437,9 +466,10 @@ async function sendAssignmentEmail(tecnicoEmail, tecnicoNome, machineNome, clien
     if (!process.env.SMTP_HOST || !tecnicoEmail) return;
 
     const isService = type === 'servico';
-    const typeLabel = isService ? 'Serviço' : 'Avaria';
-    const accentColor = isService ? '#1e3a8a' : '#2D5A27'; // Azul para serviço, Verde para avaria
-    const taskDescription = isService ? 'uma nova tarefa de serviço (instalação/transporte)' : 'uma nova tarefa de manutenção';
+    const isManutencao = type === 'manutencao';
+    const typeLabel = isManutencao ? 'Manutenção' : (isService ? 'Serviço' : 'Avaria');
+    const accentColor = isManutencao ? '#7c3aed' : (isService ? '#1e3a8a' : '#2D5A27');
+    const taskDescription = isManutencao ? 'uma nova tarefa de manutenção geral' : (isService ? 'uma nova tarefa de serviço (instalação/transporte)' : 'uma nova tarefa de manutenção');
 
     const mailOptions = {
         from: process.env.EMAIL_FROM || 'Maclau <noreply@maclau.pt>',
@@ -455,7 +485,7 @@ async function sendAssignmentEmail(tecnicoEmail, tecnicoNome, machineNome, clien
                 
                 <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 24px; border-top: 4px solid ${accentColor};">
                     <p style="margin: 0 0 10px 0;"><strong>Cliente/Lavandaria:</strong> ${clientNome}</p>
-                    <p style="margin: 0;"><strong>${isService ? 'Tipo de Serviço' : 'Máquina'}:</strong> ${machineNome}</p>
+                    <p style="margin: 0;"><strong>${isManutencao ? 'Tipo' : (isService ? 'Tipo de Serviço' : 'Máquina')}:</strong> ${machineNome}</p>
                 </div>
 
                 ${notas ? `
@@ -538,7 +568,7 @@ async function sendAdminNotificationEmail(adminEmails, machineNome, clientNome, 
 async function sendFrotaAlertEmail(adminEmails, vehicle, isToday = false) {
     if (!process.env.SMTP_HOST || !adminEmails || adminEmails.length === 0) return;
 
-    const subject = isToday 
+    const subject = isToday
         ? `ALERTA: Inspeção de Veículo HOJE - ${vehicle.marca} ${vehicle.modelo}`
         : `Lembrete: Inspeção de Veículo em 1 Semana - ${vehicle.marca} ${vehicle.modelo}`;
 
@@ -588,7 +618,7 @@ async function sendFrotaAlertEmail(adminEmails, vehicle, isToday = false) {
 // Função para verificar inspeções
 function checkVehicleInspections() {
     console.log('[FROTA] A verificar inspeções agendadas...');
-    
+
     db.all(`SELECT email FROM administradores WHERE email IS NOT NULL AND email != ''`, [], (err, admins) => {
         if (err || !admins || admins.length === 0) return;
         const adminEmails = admins.map(a => a.email);
@@ -618,14 +648,14 @@ function scheduleDailyCheck() {
     const now = new Date();
     const nextCheck = new Date();
     nextCheck.setHours(8, 0, 0, 0);
-    
+
     if (nextCheck <= now) {
         nextCheck.setDate(nextCheck.getDate() + 1);
     }
-    
+
     const delay = nextCheck - now;
     console.log(`[SCHEDULE] Próxima verificação de frota em ${(delay / 1000 / 60 / 60).toFixed(2)} horas.`);
-    
+
     setTimeout(() => {
         checkVehicleInspections();
         setInterval(checkVehicleInspections, 24 * 60 * 60 * 1000);
@@ -656,7 +686,7 @@ const authenticateJWT = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.split(' ')[1];
-        
+
         // Proteção contra 'null' ou 'undefined' passados como string pelo frontend
         if (!token || token === 'null' || token === 'undefined') {
             return res.sendStatus(401);
@@ -802,7 +832,7 @@ app.post('/api/auth/login', (req, res) => {
                         });
 
                         securityLog('LOGIN_SUCCESS_CLIENTE', { user: email, cliente_id: row.cliente_id, ip: req.ip });
-                        
+
                         // Se houver um redirect (ex: página de report), vamos para lá. Caso contrário, placeholder.
                         return res.json({
                             accessToken,
@@ -1168,12 +1198,12 @@ app.put('/api/avarias/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
 app.put('/api/avarias/:id/agendamento', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { data_agendada, notas, tecnico_id } = req.body;
-    db.run(`UPDATE avarias SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`, 
-        [data_agendada || null, notas, tecnico_id || null, id], function(err) {
-        if (err) return handleDBError(res, err);
-        securityLog('AVARIA_AGENDAMENTO_EDITED', { avaria_id: id, tecnico_id: tecnico_id || null });
-        res.json({ message: "Agendamento da avaria atualizado com sucesso" });
-    });
+    db.run(`UPDATE avarias SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`,
+        [data_agendada || null, notas, tecnico_id || null, id], function (err) {
+            if (err) return handleDBError(res, err);
+            securityLog('AVARIA_AGENDAMENTO_EDITED', { avaria_id: id, tecnico_id: tecnico_id || null });
+            res.json({ message: "Agendamento da avaria atualizado com sucesso" });
+        });
 });
 
 // 🔒 SEGURANÇA: Validar se técnico existe antes de atribuir
@@ -1315,6 +1345,7 @@ app.post('/api/tecnico/avarias/:id/submeter-relatorio', authenticateJWT, isTecni
 
 // Endpoint para Detalhes Completos do Relatório (PDF)
 app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const { id } = req.params;
     const query = `
         SELECT a.*, 
@@ -1322,7 +1353,8 @@ app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_inicio) as data_hora_inicio,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim,
                (m.marca || ' - ' || m.modelo) as maquina_nome, m.uuid as maquina_uuid,
-               c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email,
+               c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email, c.NIF as cliente_nif,
+               m.numero_serie as maquina_serie,
                t.nome as tecnico_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
@@ -1519,12 +1551,12 @@ app.put('/api/servicos/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
 app.put('/api/servicos/:id/agendamento', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { data_agendada, notas, tecnico_id } = req.body;
-    db.run(`UPDATE servicos SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`, 
-        [data_agendada || null, notas, tecnico_id || null, id], function(err) {
-        if (err) return handleDBError(res, err);
-        securityLog('SERVICO_AGENDAMENTO_EDITED', { servico_id: id, tecnico_id: tecnico_id || null });
-        res.json({ message: "Agendamento do serviço atualizado com sucesso" });
-    });
+    db.run(`UPDATE servicos SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`,
+        [data_agendada || null, notas, tecnico_id || null, id], function (err) {
+            if (err) return handleDBError(res, err);
+            securityLog('SERVICO_AGENDAMENTO_EDITED', { servico_id: id, tecnico_id: tecnico_id || null });
+            res.json({ message: "Agendamento do serviço atualizado com sucesso" });
+        });
 });
 
 app.put('/api/servicos/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
@@ -1558,13 +1590,14 @@ app.get('/api/tecnico/servicos', authenticateJWT, isTecnico, (req, res) => {
 });
 
 app.get('/api/servicos/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const { id } = req.params;
     const query = `
         SELECT s.*, 
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_inicio) as data_hora_inicio,
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim,
-               c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email,
+               c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email, c.NIF as cliente_nif,
                t.nome as tecnico_nome
         FROM servicos s
         LEFT JOIN clientes c ON s.cliente_id = c.id
@@ -1616,30 +1649,257 @@ app.post('/api/tecnico/servicos/:id/submeter-relatorio', authenticateJWT, isTecn
     });
 });
 
-// --- Upload e Gestão de Fotos ---
-app.post('/api/tecnico/upload-fotos', authenticateJWT, isTecnico, upload.array('fotos', 10), (req, res) => {
-    const { avaria_id, servico_id } = req.body;
-    if (!avaria_id && !servico_id) {
-        return res.status(400).json({ error: "ID da avaria ou serviço é obrigatório" });
+// --- MANUTENÇÕES ROUTES ---
+
+app.get('/api/manutencoes', authenticateJWT, isAdmin, (req, res) => {
+    const query = `
+        SELECT m.*, c.nome as cliente_nome, t.nome as tecnico_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora_pausa) as data_hora_pausa
+        FROM manutencoes m
+        LEFT JOIN clientes c ON m.cliente_id = c.id
+        LEFT JOIN tecnicos t ON m.tecnico_id = t.id
+        WHERE m.arquivada = 0
+        ORDER BY m.data_hora DESC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/manutencoes', authenticateJWT, isAdmin, (req, res) => {
+    const { cliente_id, tecnico_id, notas, data_agendada } = req.body;
+    if (!cliente_id) return res.status(400).json({ error: "Cliente é obrigatório" });
+
+    db.run(`INSERT INTO manutencoes (cliente_id, tecnico_id, notas, data_agendada) VALUES (?, ?, ?, ?)`,
+        [cliente_id, tecnico_id || null, notas, data_agendada || null],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            const manutencaoId = this.lastID;
+
+            if (tecnico_id) {
+                db.get(`SELECT nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+                    db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
+                        if (tech && client) {
+                            sendAssignmentEmail(tech.email, tech.nome, 'Manutenção Geral', client.nome, notas, 'manutencao');
+                        }
+                    });
+                });
+            }
+
+            res.status(201).json({ id: manutencaoId, message: "Manutenção criada com sucesso" });
+        });
+});
+
+app.put('/api/manutencoes/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { tecnico_id } = req.body;
+
+    db.run(`UPDATE manutencoes SET tecnico_id = ? WHERE id = ?`, [tecnico_id, id], function (err) {
+        if (err) return handleDBError(res, err);
+
+        db.get(`SELECT m.notas, m.cliente_id, t.nome as tech_nome, t.email as tech_email, c.nome as client_nome 
+                FROM manutencoes m 
+                JOIN tecnicos t ON t.id = ? 
+                JOIN clientes c ON c.id = m.cliente_id 
+                WHERE m.id = ?`, [tecnico_id, id], (err, row) => {
+            if (!err && row) {
+                sendAssignmentEmail(row.tech_email, row.tech_nome, 'Manutenção Geral', row.client_nome, row.notas, 'manutencao');
+            }
+        });
+
+        res.json({ message: "Técnico atribuído à manutenção" });
+    });
+});
+
+app.put('/api/manutencoes/:id/status', authenticateJWT, isAdminOrTecnico, (req, res) => {
+    const { id } = req.params;
+    const { estado, relatorio } = req.body;
+
+    if (!['pendente', 'em resolução', 'resolvida', 'pausada'].includes(estado)) {
+        return res.status(400).json({ error: "Estado inválido" });
     }
 
-    const id = avaria_id || servico_id;
-    const column = avaria_id ? 'avaria_id' : 'servico_id';
+    let query;
+    let params = [estado];
 
-    // Inserir cada foto na base de dados
-    const stmt = db.prepare(`INSERT INTO fotos_relatorio (${column}, caminho) VALUES (?, ?)`);
-    const paths = [];
+    if (estado === 'em resolução') {
+        query = `UPDATE manutencoes SET estado = ?, data_hora_inicio = COALESCE(data_hora_inicio, CURRENT_TIMESTAMP) WHERE id = ?`;
+        params.push(id);
+    } else if (estado === 'resolvida') {
+        query = `UPDATE manutencoes SET estado = ?, data_hora_fim = CURRENT_TIMESTAMP${relatorio ? ', relatorio = ?' : ''} WHERE id = ?`;
+        if (relatorio) params.push(relatorio);
+        params.push(id);
+    } else if (estado === 'pausada') {
+        query = `UPDATE manutencoes SET estado = ?, data_hora_pausa = CURRENT_TIMESTAMP${req.body.motivo_pausa ? ', relatorio = COALESCE(relatorio || \'\n\n\', \'\') || ?' : ''} WHERE id = ?`;
+        if (req.body.motivo_pausa) {
+            const stamp = `[Manutenção Pausada em ${new Date().toLocaleString('pt-PT')}]: ${req.body.motivo_pausa}`;
+            params.push(stamp);
+        }
+        params.push(id);
+    } else {
+        query = `UPDATE manutencoes SET estado = ? WHERE id = ?`;
+        params.push(id);
+    }
 
-    req.files.forEach(file => {
-        const caminho = `/uploads/reports/${file.filename}`;
-        stmt.run(id, caminho);
-        paths.push(caminho);
-    });
-
-    stmt.finalize((err) => {
+    db.run(query, params, function (err) {
         if (err) return handleDBError(res, err);
-        securityLog('PHOTOS_UPLOADED', { id, count: req.files.length, type: avaria_id ? 'avaria' : 'servico' });
-        res.json({ message: "Fotos enviadas com sucesso", paths });
+        res.json({ message: "Estado da manutenção atualizado", id, estado });
+    });
+});
+
+app.put('/api/manutencoes/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`UPDATE manutencoes SET arquivada = 1 WHERE id = ?`, [id], (err) => {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Manutenção arquivada" });
+    });
+});
+
+app.put('/api/manutencoes/:id/agendamento', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { data_agendada, notas, tecnico_id } = req.body;
+    db.run(`UPDATE manutencoes SET data_agendada = ?, notas = ?, tecnico_id = ? WHERE id = ?`,
+        [data_agendada || null, notas, tecnico_id || null, id], function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Agendamento da manutenção atualizado" });
+        });
+});
+
+app.put('/api/manutencoes/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { estado_faturacao } = req.body;
+    db.run(`UPDATE manutencoes SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], (err) => {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Faturação da manutenção atualizada" });
+    });
+});
+
+app.get('/api/tecnico/manutencoes', authenticateJWT, isTecnico, (req, res) => {
+    const techId = req.user.id;
+    const query = `
+        SELECT m.*, c.nome as cliente_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora_pausa) as data_hora_pausa
+        FROM manutencoes m
+        JOIN clientes c ON m.cliente_id = c.id
+        WHERE m.tecnico_id = ? AND m.estado != 'resolvida' AND m.arquivada = 0
+        ORDER BY CASE WHEN m.estado = 'pausada' THEN 0 ELSE 1 END, m.data_hora DESC
+    `;
+    db.all(query, [techId], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/tecnico/manutencoes/historico', authenticateJWT, isTecnico, (req, res) => {
+    const techId = req.user.id;
+    const query = `
+        SELECT m.*, c.nome as cliente_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora_fim) as data_hora_fim
+        FROM manutencoes m
+        JOIN clientes c ON m.cliente_id = c.id
+        WHERE m.tecnico_id = ? AND m.estado = 'resolvida'
+        ORDER BY m.data_hora_fim DESC
+        LIMIT 50
+    `;
+    db.all(query, [techId], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/manutencoes/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    const { id } = req.params;
+    const query = `
+        SELECT m.*, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora_inicio) as data_hora_inicio,
+               strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora_fim) as data_hora_fim,
+               c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email, c.NIF as cliente_nif,
+               t.nome as tecnico_nome
+        FROM manutencoes m
+        LEFT JOIN clientes c ON m.cliente_id = c.id
+        LEFT JOIN tecnicos t ON m.tecnico_id = t.id
+        WHERE m.id = ?
+    `;
+    db.get(query, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Manutenção não encontrada" });
+
+        db.all(`SELECT id, caminho FROM fotos_relatorio WHERE manutencao_id = ?`, [id], (err, fotos) => {
+            if (err) return handleDBError(res, err);
+            row.fotos = fotos || [];
+            res.json(row);
+        });
+    });
+});
+
+app.put('/api/tecnico/manutencoes/:id/relatorio', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
+    const techId = req.user.id;
+
+    db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ? AND tecnico_id = ?`,
+        [relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, id, techId], function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Rascunho de manutenção salvo" });
+        });
+});
+
+app.post('/api/tecnico/manutencoes/:id/submeter-relatorio', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const techId = req.user.id;
+    db.run(`UPDATE manutencoes SET relatorio_submetido = 1 WHERE id = ? AND tecnico_id = ?`, [id, techId], function (err) {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Relatório de manutenção submetido" });
+    });
+});
+
+// --- Upload e Gestão de Fotos ---
+app.post('/api/tecnico/upload-fotos', authenticateJWT, isTecnico, (req, res, next) => {
+    upload.array('fotos', 10)(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ error: "Uma das fotos é demasiado grande. O limite é de 20MB." });
+            }
+            if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+                return res.status(400).json({ error: "Limite de 10 fotos excedido." });
+            }
+            return res.status(400).json({ error: `Erro no upload: ${err.message}` });
+        } else if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+
+        const { avaria_id, servico_id, manutencao_id } = req.body;
+        if (!avaria_id && !servico_id && !manutencao_id) {
+            return res.status(400).json({ error: "ID da avaria, serviço ou manutenção é obrigatório" });
+        }
+
+        const id = avaria_id || servico_id || manutencao_id;
+        const column = avaria_id ? 'avaria_id' : (servico_id ? 'servico_id' : 'manutencao_id');
+
+        // Inserir cada foto na base de dados
+        const stmt = db.prepare(`INSERT INTO fotos_relatorio (${column}, caminho) VALUES (?, ?)`);
+        const paths = [];
+
+        if (req.files) {
+            req.files.forEach(file => {
+                const caminho = `/uploads/reports/${file.filename}`;
+                stmt.run(id, caminho);
+                paths.push(caminho);
+            });
+        }
+
+        stmt.finalize((err) => {
+            if (err) return handleDBError(res, err);
+            const type = avaria_id ? 'avaria' : (servico_id ? 'servico' : 'manutencao');
+            securityLog('PHOTOS_UPLOADED', { id, count: req.files ? req.files.length : 0, type });
+            res.json({ message: "Fotos enviadas com sucesso", paths });
+        });
     });
 });
 
@@ -1648,10 +1908,12 @@ app.delete('/api/tecnico/fotos/:id', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
 
     const checkQuery = `
-        SELECT f.caminho, f.avaria_id, f.servico_id, a.tecnico_id as a_tech, s.tecnico_id as s_tech
+        SELECT f.caminho, f.avaria_id, f.servico_id, f.manutencao_id, 
+               a.tecnico_id as a_tech, s.tecnico_id as s_tech, m.tecnico_id as m_tech
         FROM fotos_relatorio f
         LEFT JOIN avarias a ON f.avaria_id = a.id
         LEFT JOIN servicos s ON f.servico_id = s.id
+        LEFT JOIN manutencoes m ON f.manutencao_id = m.id
         WHERE f.id = ?
     `;
 
@@ -1659,7 +1921,7 @@ app.delete('/api/tecnico/fotos/:id', authenticateJWT, isTecnico, (req, res) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Foto não encontrada" });
 
-        const ownerId = row.a_tech || row.s_tech;
+        const ownerId = row.a_tech || row.s_tech || row.m_tech;
         if (ownerId !== techId) return res.status(403).json({ error: "Acesso negado" });
 
         db.run(`DELETE FROM fotos_relatorio WHERE id = ?`, [id], function (err) {
@@ -1717,6 +1979,17 @@ app.get('/api/agendamentos', authenticateJWT, isAdmin, (req, res) => {
         LEFT JOIN clientes c ON s.cliente_id = c.id
         LEFT JOIN tecnicos t ON s.tecnico_id = t.id
         WHERE s.data_agendada IS NOT NULL AND s.arquivada = 0
+
+        UNION ALL
+
+        SELECT 'manutencao' as type, mn.id, NULL as maquina_id, 'Manutenção Geral' as tipo_avaria, mn.estado, mn.notas, mn.tecnico_id,
+               mn.data_agendada,
+               'Manutenção Geral' as title,
+               c.nome as cliente_nome, t.nome as tecnico_nome
+        FROM manutencoes mn
+        LEFT JOIN clientes c ON mn.cliente_id = c.id
+        LEFT JOIN tecnicos t ON mn.tecnico_id = t.id
+        WHERE mn.data_agendada IS NOT NULL AND mn.arquivada = 0
     `;
     db.all(query, [], (err, rows) => {
         if (err) return handleDBError(res, err);
@@ -1746,9 +2019,70 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
         LEFT JOIN clientes c ON s.cliente_id = c.id
         WHERE s.data_agendada IS NOT NULL AND s.tecnico_id = ? AND s.estado != 'resolvida' AND s.arquivada = 0
         
+        UNION ALL
+
+        SELECT 'manutencao' as type, mn.id, NULL as maquina_id, 'Manutenção Geral' as tipo_avaria, mn.estado,
+               mn.data_agendada,
+               'Manutenção Geral' as title,
+               c.nome as cliente_nome, mn.notas
+        FROM manutencoes mn
+        LEFT JOIN clientes c ON mn.cliente_id = c.id
+        WHERE mn.data_agendada IS NOT NULL AND mn.tecnico_id = ? AND mn.estado != 'resolvida' AND mn.arquivada = 0
+
         ORDER BY data_agendada ASC
     `;
     db.all(query, [techId, techId], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
+    const query = `
+        SELECT 'avaria' as type, a.id, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
+               a.tecnico_id, t.nome as tecnico_nome, 
+               c.id as cliente_id, c.nome as cliente_nome, 
+               (m.marca || ' - ' || m.modelo) as maquina_nome, m.uuid as maquina_uuid,
+               a.horas_trabalho, a.estado_faturacao, a.relatorio, a.relatorio_submetido
+        FROM avarias a
+        LEFT JOIN tecnicos t ON a.tecnico_id = t.id
+        LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+        LEFT JOIN clientes c ON m.cliente_id = c.id
+        WHERE a.estado = 'resolvida'
+
+        UNION ALL
+
+        SELECT 'servico' as type, s.id, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim, 
+               s.tecnico_id, t.nome as tecnico_nome, 
+               c.id as cliente_id, c.nome as cliente_nome, 
+               s.tipo_servico || (CASE WHEN s.tipo_camiao IS NOT NULL AND s.tipo_camiao != '' THEN ' (' || s.tipo_camiao || ')' ELSE '' END) as maquina_nome, NULL as maquina_uuid,
+               s.horas_trabalho, s.estado_faturacao, s.relatorio, s.relatorio_submetido
+        FROM servicos s
+        LEFT JOIN tecnicos t ON s.tecnico_id = t.id
+        LEFT JOIN clientes c ON s.cliente_id = c.id
+        WHERE s.estado = 'resolvida'
+
+        UNION ALL
+
+        SELECT 'manutencao' as type, mn.id, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', mn.data_hora) as data_hora, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', mn.data_hora_fim) as data_hora_fim, 
+               mn.tecnico_id, t.nome as tecnico_nome, 
+               c.id as cliente_id, c.nome as cliente_nome, 
+               'Todas as Máquinas' as maquina_nome, NULL as maquina_uuid,
+               mn.horas_trabalho, mn.estado_faturacao, mn.relatorio, mn.relatorio_submetido
+        FROM manutencoes mn
+        LEFT JOIN tecnicos t ON mn.tecnico_id = t.id
+        LEFT JOIN clientes c ON mn.cliente_id = c.id
+        WHERE mn.estado = 'resolvida'
+        
+        ORDER BY data_hora_fim DESC
+    `;
+    db.all(query, [], (err, rows) => {
         if (err) return handleDBError(res, err);
         res.json(rows);
     });
@@ -1962,7 +2296,7 @@ app.get('/api/public/maquinas/:uuid', authenticateJWT, (req, res) => {
 
     // Se for um cliente, só pode ver se a máquina pertencer a ele
     let query = `SELECT m.id, (m.marca || ' - ' || m.modelo) as nome, m.cliente_id FROM maquinas m WHERE m.uuid = ?`;
-    
+
     db.get(query, [uuid], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Máquina não encontrada" });
@@ -2096,7 +2430,7 @@ app.listen(PORT, () => {
     console.log(`🚀 Maclau SERVER v2.2 SECURE is running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔐 Security: CORS, Helmet, Rate Limiting, JWT Expiration ENABLED`);
-    
+
     // Iniciar verificação de frota
     checkVehicleInspections(); // Corre uma vez no arranque
     scheduleDailyCheck(); // Agenda para correr todos os dias às 08:00

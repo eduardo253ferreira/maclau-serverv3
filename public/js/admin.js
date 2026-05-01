@@ -3,7 +3,7 @@
 const API_BASE = '/api';
 let jwtToken = localStorage.getItem('maclau_token');
 let currentActiveView = 'dashboard';
-let currentMainDashboard = 'avarias'; // 'avarias' ou 'servicos'
+let currentMainDashboard = 'todas'; // 'todas', 'avarias', 'servicos' ou 'manutencoes'
 let refreshIntervalId = null;
 let lastRefreshTime = new Date();
 let calendar = null;
@@ -30,6 +30,25 @@ function formatDate(dateStr) {
     if (parts.length !== 3) return dateStr;
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
+
+function toLocalYYYYMMDD(date) {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function hoursToHHmm(decimalHours) {
+    if (decimalHours === null || decimalHours === undefined || decimalHours === '') return '-';
+    const totalMins = Math.round(parseFloat(decimalHours) * 60);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+
 
 function escapeHTML(str) {
     if (!str) return '';
@@ -59,8 +78,12 @@ function startAutoRefresh() {
         if (currentActiveView === 'dashboard') {
             if (currentMainDashboard === 'avarias') {
                 loadAvarias();
-            } else {
+            } else if (currentMainDashboard === 'servicos') {
                 loadServicos();
+            } else if (currentMainDashboard === 'manutencoes') {
+                loadManutencoes();
+            } else if (currentMainDashboard === 'todas') {
+                loadTodas();
             }
             updateRefreshStatus();
         }
@@ -179,7 +202,9 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 
         if (target === 'dashboard') {
             if (currentMainDashboard === 'avarias') loadAvarias();
-            else loadServicos();
+            else if (currentMainDashboard === 'servicos') loadServicos();
+            else if (currentMainDashboard === 'manutencoes') loadManutencoes();
+            else if (currentMainDashboard === 'todas') loadTodas();
             updateRefreshStatus();
             startAutoRefresh();
         } else {
@@ -189,6 +214,19 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'historico') {
             loadHistoricoMaquinas();
             loadHistorico();
+            
+            // Adicionar listeners para filtros se ainda não tiverem
+            const filterIds = ['hist-cliente', 'hist-tipo', 'hist-maquina', 'hist-tecnico', 'hist-faturacao', 'hist-date-start', 'hist-date-end'];
+            filterIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && !el.dataset.listenerAdded) {
+                    el.addEventListener('change', () => {
+                        if (id === 'hist-cliente') loadHistoricoMaquinas();
+                        loadHistorico();
+                    });
+                    el.dataset.listenerAdded = 'true';
+                }
+            });
         }
         if (target === 'estatisticas') loadEstatisticas();
         if (target === 'clientes') loadClientes();
@@ -213,11 +251,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (filter === 'avarias') {
                 document.getElementById('wrapper-board-avarias').classList.remove('hidden');
                 document.getElementById('wrapper-board-servicos').classList.add('hidden');
+                document.getElementById('wrapper-board-manutencoes').classList.add('hidden');
+                document.getElementById('wrapper-board-todas').classList.add('hidden');
                 loadAvarias();
-            } else {
+            } else if (filter === 'servicos') {
                 document.getElementById('wrapper-board-avarias').classList.add('hidden');
                 document.getElementById('wrapper-board-servicos').classList.remove('hidden');
+                document.getElementById('wrapper-board-manutencoes').classList.add('hidden');
+                document.getElementById('wrapper-board-todas').classList.add('hidden');
                 loadServicos();
+            } else if (filter === 'manutencoes') {
+                document.getElementById('wrapper-board-avarias').classList.add('hidden');
+                document.getElementById('wrapper-board-servicos').classList.add('hidden');
+                document.getElementById('wrapper-board-manutencoes').classList.remove('hidden');
+                document.getElementById('wrapper-board-todas').classList.add('hidden');
+                loadManutencoes();
+            } else if (filter === 'todas') {
+                document.getElementById('wrapper-board-avarias').classList.add('hidden');
+                document.getElementById('wrapper-board-servicos').classList.add('hidden');
+                document.getElementById('wrapper-board-manutencoes').classList.add('hidden');
+                document.getElementById('wrapper-board-todas').classList.remove('hidden');
+                loadTodas();
             }
             updateRefreshStatus();
         });
@@ -345,17 +399,30 @@ function initCalendar() {
             document.getElementById('escolha-data-label').textContent = `Data Selecionada: ${info.dateStr}`;
             const choiceAvaria = document.getElementById('choice-avaria');
             const choiceServico = document.getElementById('choice-servico');
+            const choiceManutencao = document.getElementById('choice-manutencao');
 
             choiceAvaria.onclick = () => {
                 document.getElementById('report-avaria-agendada').value = info.dateStr + "T09:00";
+                loadClientes();
+                loadTecnicos();
                 closeModal('modal-escolha-agendamento');
                 openModal('modal-report-avaria');
             };
 
             choiceServico.onclick = () => {
                 document.getElementById('report-servico-agendada').value = info.dateStr + "T09:00";
+                loadClientes();
+                loadTecnicos();
                 closeModal('modal-escolha-agendamento');
                 openModal('modal-report-servico');
+            };
+
+            choiceManutencao.onclick = () => {
+                document.getElementById('report-manutencao-agendada').value = info.dateStr + "T09:00";
+                loadClientes();
+                loadTecnicos();
+                closeModal('modal-escolha-agendamento');
+                openModal('modal-report-manutencao');
             };
 
             openModal('modal-escolha-agendamento');
@@ -372,7 +439,7 @@ async function loadAgendamentos() {
         const events = agendamentos.map(a => {
             const date = new Date(a.data_agendada);
             const hourStr = date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
-            const prefix = a.type === 'avaria' ? 'A' : 'S';
+            const prefix = a.type === 'avaria' ? 'A' : (a.type === 'servico' ? 'S' : 'M');
 
             return {
                 id: `${a.type}-${a.id}`,
@@ -481,95 +548,152 @@ async function loadAvarias() {
         const techFilter = document.getElementById('filter-tech-dashboard').value;
 
         avarias.forEach(a => {
-            // Apply Tech Filter to all columns
+            const card = createAvariaCard(a);
+            if (!card) return;
+
+            // Apply Tech Filter
             if (techFilter && a.tecnico_id != techFilter) return;
-
-            const card = document.createElement('div');
-            card.className = 'avaria-card';
-
-            // 1: Eletrica, 2: Desconhecida, 3: Mecanica
-            let tipoStr = a.tipo_avaria === 1 ? 'ELÉTRICA' : (a.tipo_avaria === 3 ? 'MECÂNICA' : 'DESCONHECIDA');
-
-            let tagHTML = `<div class="card-type">${tipoStr}</div>`;
-            if (a.estado === 'pausada') {
-                tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
-            }
-
-            card.innerHTML = `
-                <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">${tagHTML}</div>
-                <h4 class="card-machine-name"></h4>
-                <p class="card-client-name"></p>
-                <div class="assigned-tech" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--accent);">
-                    <span style="color:var(--text-secondary); font-weight:400;">Técnico:</span> <span class="card-tech-name"></span>
-                </div>
-                <div class="date">${new Date(a.data_hora).toLocaleString('pt-PT')}</div>
-                ${a.notas ? `<div class="card-notes" title="Clique para ver nota completa"><strong>Notas:</strong><br>${escapeHTML(a.notas)}</div>` : ''}
-            `;
-
-            if (a.notas) {
-                const notesEl = card.querySelector('.card-notes');
-                notesEl.onclick = (e) => {
-                    e.stopPropagation();
-                    openFullNoteModal(a.notas);
-                };
-            }
-
-            // Preencher dados com segurança
-            card.querySelector('.card-machine-name').textContent = a.maquina_nome || 'Máquina Removida';
-            card.querySelector('.card-client-name').textContent = a.cliente_nome || 'Sem Cliente';
-            card.querySelector('.card-tech-name').textContent = a.tecnico_nome || 'Não Atribuído';
-
-            if (a.estado === 'resolvida') {
-                const btnArchive = document.createElement('button');
-                btnArchive.className = 'btn-archive';
-                btnArchive.title = 'Limpar do dashboard';
-                btnArchive.innerHTML = '<i class="ph ph-x"></i>';
-                btnArchive.onclick = (e) => arquivarAvaria(a.id, e);
-                card.appendChild(btnArchive);
-            }
-
-            // Clicar para atribuir (apenas se estiver pendente ou pausada)
-            if (a.estado === 'pendente' || a.estado === 'pausada') {
-                card.onclick = () => {
-                    document.getElementById('atribuir-avaria-id').value = a.id;
-                    document.getElementById('atribuir-tecnico-select').value = a.tecnico_id || '';
-                    openModal('modal-atribuir-tecnico');
-                };
-            } else {
-                card.style.cursor = 'default';
-            }
 
             if (a.estado === 'pendente' || a.estado === 'pausada') colPendente.appendChild(card);
             else if (a.estado === 'em resolução') colResolucao.appendChild(card);
             else {
                 // Resolvidas - Apply Data Range Filter
                 let addCard = true;
-                const dateRef = new Date(a.data_hora_fim || a.data_hora).toISOString().split('T')[0];
-
-                if (dateStart && dateRef < dateStart) {
-                    addCard = false;
-                }
-                if (dateEnd && dateRef > dateEnd) {
-                    addCard = false;
-                }
+                const dateRef = toLocalYYYYMMDD(a.data_hora_fim || a.data_hora);
+                if (dateStart && dateRef < dateStart) addCard = false;
+                if (dateEnd && dateRef > dateEnd) addCard = false;
                 if (addCard) colResolvida.appendChild(card);
             }
         });
-
     } catch (e) {
         showNotification(e.message, true);
+    }
+}
+
+function createAvariaCard(a) {
+    const card = document.createElement('div');
+    card.className = 'avaria-card';
+
+    // 1: Eletrica, 2: Desconhecida, 3: Mecanica
+    let tipoStr = a.tipo_avaria === 1 ? 'ELÉTRICA' : (a.tipo_avaria === 3 ? 'MECÂNICA' : 'DESCONHECIDA');
+    let tagHTML = `<div class="card-type">${tipoStr}</div>`;
+    if (a.estado === 'pausada') {
+        tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
+    }
+
+    card.innerHTML = `
+        <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">${tagHTML}</div>
+        <h4 class="card-machine-name"></h4>
+        <p class="card-client-name"></p>
+        <div class="assigned-tech" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--accent);">
+            <span style="color:var(--text-secondary); font-weight:400;">Técnico:</span> <span class="card-tech-name"></span>
+        </div>
+        <div class="date">${new Date(a.data_hora).toLocaleString('pt-PT')}</div>
+        ${a.notas ? `<div class="card-notes" title="Clique para ver nota completa"><strong>Notas:</strong><br>${escapeHTML(a.notas)}</div>` : ''}
+    `;
+
+    if (a.notas) {
+        const notesEl = card.querySelector('.card-notes');
+        notesEl.onclick = (e) => {
+            e.stopPropagation();
+            openFullNoteModal(a.notas);
+        };
+    }
+
+    card.querySelector('.card-machine-name').textContent = a.maquina_nome || 'Máquina Removida';
+    card.querySelector('.card-client-name').textContent = a.cliente_nome || 'Sem Cliente';
+    card.querySelector('.card-tech-name').textContent = a.tecnico_nome || 'Não Atribuído';
+
+    if (a.estado === 'resolvida') {
+        const btnArchive = document.createElement('button');
+        btnArchive.className = 'btn-archive';
+        btnArchive.title = 'Limpar do dashboard';
+        btnArchive.innerHTML = '<i class="ph ph-x"></i>';
+        btnArchive.onclick = (e) => arquivarAvaria(a.id, e);
+        card.appendChild(btnArchive);
+    }
+
+    if (a.estado === 'pendente' || a.estado === 'pausada') {
+        card.onclick = () => {
+            document.getElementById('atribuir-avaria-id').value = a.id;
+            document.getElementById('atribuir-type').value = 'avaria';
+            document.getElementById('atribuir-tecnico-select').value = a.tecnico_id || '';
+            openModal('modal-atribuir-tecnico');
+        };
+    } else {
+        card.style.cursor = 'default';
+    }
+    return card;
+}
+
+async function loadTodas() {
+    try {
+        const [avarias, servicos, manutencoes] = await Promise.all([
+            apiFetch('/avarias'),
+            apiFetch('/servicos'),
+            apiFetch('/manutencoes')
+        ]);
+
+        const colPendente = document.querySelector('#all-col-pendente .cards-wrapper');
+        const colResolucao = document.querySelector('#all-col-resolucao .cards-wrapper');
+        const colResolvida = document.querySelector('#all-col-resolvida .cards-wrapper');
+
+        if (!colPendente || !colResolucao || !colResolvida) return;
+
+        colPendente.innerHTML = '';
+        colResolucao.innerHTML = '';
+        colResolvida.innerHTML = '';
+
+        const dateStart = document.getElementById('filter-all-date-start')?.value;
+        const dateEnd = document.getElementById('filter-all-date-end')?.value;
+        const techFilter = document.getElementById('filter-tech-dashboard')?.value;
+
+        const allItems = [
+            ...avarias.map(a => ({ ...a, _type: 'avaria' })),
+            ...servicos.map(s => ({ ...s, _type: 'servico' })),
+            ...manutencoes.map(m => ({ ...m, _type: 'manutencao' }))
+        ];
+
+        allItems.sort((a, b) => new Date(b.data_hora) - new Date(a.data_hora));
+
+        allItems.forEach(item => {
+            if (techFilter && item.tecnico_id != techFilter) return;
+            
+            let card;
+            if (item._type === 'avaria') card = createAvariaCard(item);
+            else if (item._type === 'servico') card = createServicoCard(item);
+            else if (item._type === 'manutencao') card = createManutencaoCard(item);
+
+            if (!card) return;
+
+            if (item.estado === 'pendente' || item.estado === 'pausada') {
+                colPendente.appendChild(card);
+            } else if (item.estado === 'em resolução') {
+                colResolucao.appendChild(card);
+            } else if (item.estado === 'resolvida') {
+                let addCard = true;
+                const dateRef = toLocalYYYYMMDD(item.data_hora_fim || item.data_hora);
+                if (dateStart && dateRef < dateStart) addCard = false;
+                if (dateEnd && dateRef > dateEnd) addCard = false;
+                if (addCard) colResolvida.appendChild(card);
+            }
+        });
+    } catch (e) {
+        console.error("Error in loadTodas:", e);
     }
 }
 
 document.getElementById('form-atribuir-tecnico').addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = document.getElementById('atribuir-avaria-id').value;
+    const type = document.getElementById('atribuir-type').value;
     const tecnico_id = document.getElementById('atribuir-tecnico-select').value;
 
     try {
-        const modal = document.getElementById('modal-atribuir-tecnico');
-        const type = modal.dataset.type || 'avaria';
-        const endpoint = type === 'servico' ? `/servicos/${id}/atribuir` : `/avarias/${id}/atribuir`;
+        let endpoint;
+        if (type === 'servico') endpoint = `/servicos/${id}/atribuir`;
+        else if (type === 'manutencao') endpoint = `/manutencoes/${id}/atribuir`;
+        else endpoint = `/avarias/${id}/atribuir`;
 
         await apiFetch(endpoint, {
             method: 'PUT',
@@ -578,8 +702,10 @@ document.getElementById('form-atribuir-tecnico').addEventListener('submit', asyn
         });
         showNotification('Técnico atribuído!');
         closeModal('modal-atribuir-tecnico');
-        if (type === 'servico') loadServicos(); else loadAvarias();
-        modal.dataset.type = '';
+        
+        if (type === 'servico') loadServicos();
+        else if (type === 'manutencao') loadManutencoes();
+        else loadAvarias();
     } catch (e) {
         showNotification(e.message, true);
     }
@@ -671,7 +797,8 @@ async function loadClientes() {
             document.getElementById('hist-cliente'),
             document.getElementById('filter-cliente-maquinas'),
             document.getElementById('report-avaria-cliente'),
-            document.getElementById('report-servico-cliente')
+            document.getElementById('report-servico-cliente'),
+            document.getElementById('report-manutencao-cliente')
         ];
 
         selects.forEach(select => {
@@ -956,6 +1083,7 @@ async function loadTecnicos() {
         const histTech = document.getElementById('hist-tecnico');
         const reportTech = document.getElementById('report-avaria-tecnico');
         const reportServicoTech = document.getElementById('report-servico-tecnico');
+        const reportManutencaoTech = document.getElementById('report-manutencao-tecnico');
         const editAgendamentoTech = document.getElementById('edit-agendamento-tecnico');
 
         if (selectAtribuir) selectAtribuir.innerHTML = '<option value="">-- Selecionar Técnico --</option>';
@@ -964,6 +1092,7 @@ async function loadTecnicos() {
         if (histTech) histTech.innerHTML = '<option value="">Todos</option>';
         if (reportTech) reportTech.innerHTML = '<option value="">-- Não Atribuir Agora --</option>';
         if (reportServicoTech) reportServicoTech.innerHTML = '<option value="">-- Não Atribuir Agora --</option>';
+        if (reportManutencaoTech) reportManutencaoTech.innerHTML = '<option value="">-- Não Atribuir Agora --</option>';
         if (editAgendamentoTech) editAgendamentoTech.innerHTML = '<option value="">-- Não Atribuir / Remover --</option>';
 
         tecnicos.forEach(t => {
@@ -974,6 +1103,7 @@ async function loadTecnicos() {
             if (histTech) histTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (reportTech) reportTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (reportServicoTech) reportServicoTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
+            if (reportManutencaoTech) reportManutencaoTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (editAgendamentoTech) editAgendamentoTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
         });
 
@@ -1099,68 +1229,18 @@ async function loadServicos() {
         const techFilter = document.getElementById('filter-tech-dashboard').value;
 
         servicos.forEach(s => {
+            const card = createServicoCard(s);
+            if (!card) return;
+
+            // Apply Tech Filter
             if (techFilter && s.tecnico_id != techFilter) return;
-
-            const card = document.createElement('div');
-            card.className = 'avaria-card';
-
-            let tagHTML = `<div class="card-type" style="background:var(--accent); color:white;">${escapeHTML(s.tipo_servico)}</div>`;
-            tagHTML += ` <div class="card-type" style="background:#e2e8f0; color:#475569; margin-left:5px;">${escapeHTML(s.tipo_camiao)}</div>`;
-
-            if (s.estado === 'pausada') {
-                tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
-            }
-
-            card.innerHTML = `
-                <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">${tagHTML}</div>
-                <h4 class="card-machine-name"></h4>
-                <div class="assigned-tech" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--accent);">
-                    <span style="color:var(--text-secondary); font-weight:400;">Técnico:</span> <span class="card-tech-name"></span>
-                </div>
-                <div class="date">${new Date(s.data_hora).toLocaleString('pt-PT')}</div>
-                ${s.notas ? `<div class="card-notes" title="Clique para ver nota completa"><strong>Notas:</strong><br>${escapeHTML(s.notas)}</div>` : ''}
-            `;
-
-            if (s.notas) {
-                const notesEl = card.querySelector('.card-notes');
-                notesEl.onclick = (e) => {
-                    e.stopPropagation();
-                    openFullNoteModal(s.notas);
-                };
-            }
-
-            card.querySelector('.card-machine-name').textContent = s.cliente_nome || 'Sem Cliente';
-            card.querySelector('.card-tech-name').textContent = s.tecnico_nome || 'Não Atribuído';
-
-            if (s.estado === 'resolvida') {
-                const btnArchive = document.createElement('button');
-                btnArchive.className = 'btn-archive';
-                btnArchive.title = 'Limpar do dashboard';
-                btnArchive.innerHTML = '<i class="ph ph-x"></i>';
-                btnArchive.onclick = async (e) => {
-                    e.stopPropagation();
-                    if (!confirm('Deseja limpar este serviço do dashboard?')) return;
-                    try {
-                        await apiFetch(`/servicos/${s.id}/arquivar`, { method: 'PUT' });
-                        loadServicos();
-                    } catch (err) { showNotification(err.message, true); }
-                };
-                card.appendChild(btnArchive);
-            } else {
-                card.onclick = () => {
-                    const modal = document.getElementById('modal-atribuir-tecnico');
-                    modal.dataset.type = 'servico';
-                    document.getElementById('atribuir-avaria-id').value = s.id;
-                    document.getElementById('atribuir-tecnico-select').value = s.tecnico_id || '';
-                    openModal('modal-atribuir-tecnico');
-                };
-            }
 
             if (s.estado === 'pendente' || s.estado === 'pausada') colPendente.appendChild(card);
             else if (s.estado === 'em resolução') colResolucao.appendChild(card);
             else {
+                // Resolvidas - Apply Data Range Filter
                 let addCard = true;
-                const dateRef = new Date(s.data_hora_fim || s.data_hora).toISOString().split('T')[0];
+                const dateRef = toLocalYYYYMMDD(s.data_hora_fim || s.data_hora);
                 if (dateStart && dateRef < dateStart) addCard = false;
                 if (dateEnd && dateRef > dateEnd) addCard = false;
                 if (addCard) colResolvida.appendChild(card);
@@ -1171,7 +1251,163 @@ async function loadServicos() {
     }
 }
 
+function createServicoCard(s) {
+    const card = document.createElement('div');
+    card.className = 'avaria-card';
 
+    let tagHTML = `<div class="card-type" style="background:#1e3a8a; color:white;">SERVIÇO</div>`;
+    if (s.estado === 'pausada') {
+        tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
+    }
+
+    card.innerHTML = `
+        <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">${tagHTML}</div>
+        <h4 class="card-machine-name"></h4>
+        <p class="card-client-name"></p>
+        <div class="assigned-tech" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--accent);">
+            <span style="color:var(--text-secondary); font-weight:400;">Técnico:</span> <span class="card-tech-name"></span>
+        </div>
+        <div class="date">${new Date(s.data_hora).toLocaleString('pt-PT')}</div>
+        ${s.notas ? `<div class="card-notes" title="Clique para ver nota completa"><strong>Notas:</strong><br>${escapeHTML(s.notas)}</div>` : ''}
+    `;
+
+    if (s.notas) {
+        const notesEl = card.querySelector('.card-notes');
+        notesEl.onclick = (e) => {
+            e.stopPropagation();
+            openFullNoteModal(s.notas);
+        };
+    }
+
+    card.querySelector('.card-machine-name').textContent = s.tipo_servico || 'Serviço Externo';
+    card.querySelector('.card-client-name').textContent = s.cliente_nome || 'Sem Cliente';
+    card.querySelector('.card-tech-name').textContent = s.tecnico_nome || 'Não Atribuído';
+
+    if (s.estado === 'resolvida') {
+        const btnArchive = document.createElement('button');
+        btnArchive.className = 'btn-archive';
+        btnArchive.title = 'Limpar do dashboard';
+        btnArchive.innerHTML = '<i class="ph ph-x"></i>';
+        btnArchive.onclick = (e) => arquivarServico(s.id, e);
+        card.appendChild(btnArchive);
+    }
+
+    if (s.estado === 'pendente' || s.estado === 'pausada') {
+        card.onclick = () => {
+            document.getElementById('atribuir-avaria-id').value = s.id;
+            document.getElementById('atribuir-type').value = 'servico';
+            document.getElementById('atribuir-tecnico-select').value = s.tecnico_id || '';
+            openModal('modal-atribuir-tecnico');
+        };
+    } else {
+        card.style.cursor = 'default';
+    }
+    return card;
+}
+
+async function arquivarServico(id, event) {
+    if (event) event.stopPropagation();
+    if (!confirm('Deseja limpar este serviço resolvido do dashboard?')) return;
+    try {
+        await apiFetch(`/servicos/${id}/arquivar`, { method: 'PUT' });
+        loadServicos();
+    } catch (e) { showNotification(e.message, true); }
+}
+
+async function loadManutencoes() {
+    try {
+        const manutencoes = await apiFetch('/manutencoes');
+        const colPendente = document.querySelector('#mnt-col-pendente .cards-wrapper');
+        const colResolucao = document.querySelector('#mnt-col-resolucao .cards-wrapper');
+        const colResolvida = document.querySelector('#mnt-col-resolvida .cards-wrapper');
+
+        colPendente.innerHTML = '';
+        colResolucao.innerHTML = '';
+        colResolvida.innerHTML = '';
+
+        const dateStart = document.getElementById('filter-mnt-date-start').value;
+        const dateEnd = document.getElementById('filter-mnt-date-end').value;
+        const techFilter = document.getElementById('filter-tech-dashboard').value;
+
+        manutencoes.forEach(m => {
+            const card = createManutencaoCard(m);
+            if (!card) return;
+
+            // Apply Tech Filter
+            if (techFilter && m.tecnico_id != techFilter) return;
+
+            if (m.estado === 'pendente' || m.estado === 'pausada') colPendente.appendChild(card);
+            else if (m.estado === 'em resolução') colResolucao.appendChild(card);
+            else {
+                // Resolvidas - Apply Data Range Filter
+                let addCard = true;
+                const dateRef = toLocalYYYYMMDD(m.data_hora_fim || m.data_hora);
+                if (dateStart && dateRef < dateStart) addCard = false;
+                if (dateEnd && dateRef > dateEnd) addCard = false;
+                if (addCard) colResolvida.appendChild(card);
+            }
+        });
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function createManutencaoCard(m) {
+    const card = document.createElement('div');
+    card.className = 'avaria-card';
+
+    let tagHTML = `<div class="card-type" style="background:#7c3aed; color:white;">MANUTENÇÃO</div>`;
+    if (m.estado === 'pausada') {
+        tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
+    }
+
+    card.innerHTML = `
+        <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">${tagHTML}</div>
+        <h4 class="card-machine-name"></h4>
+        <div class="assigned-tech" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--accent);">
+            <span style="color:var(--text-secondary); font-weight:400;">Técnico:</span> <span class="card-tech-name"></span>
+        </div>
+        <div class="date">${new Date(m.data_hora).toLocaleString('pt-PT')}</div>
+        ${m.notas ? `<div class="card-notes" title="Clique para ver nota completa"><strong>Notas:</strong><br>${escapeHTML(m.notas)}</div>` : ''}
+    `;
+
+    if (m.notas) {
+        const notesEl = card.querySelector('.card-notes');
+        notesEl.onclick = (e) => {
+            e.stopPropagation();
+            openFullNoteModal(m.notas);
+        };
+    }
+
+    card.querySelector('.card-machine-name').textContent = m.cliente_nome || 'Sem Cliente';
+    card.querySelector('.card-tech-name').textContent = m.tecnico_nome || 'Não Atribuído';
+
+    if (m.estado === 'resolvida') {
+        const btnArchive = document.createElement('button');
+        btnArchive.className = 'btn-archive';
+        btnArchive.title = 'Limpar do dashboard';
+        btnArchive.innerHTML = '<i class="ph ph-x"></i>';
+        btnArchive.onclick = (e) => arquivarManutencao(m.id, e);
+        card.appendChild(btnArchive);
+    } else {
+        card.onclick = () => {
+            document.getElementById('atribuir-avaria-id').value = m.id;
+            document.getElementById('atribuir-type').value = 'manutencao';
+            document.getElementById('atribuir-tecnico-select').value = m.tecnico_id || '';
+            openModal('modal-atribuir-tecnico');
+        };
+    }
+    return card;
+}
+
+async function arquivarManutencao(id, event) {
+    if (event) event.stopPropagation();
+    if (!confirm('Deseja limpar esta manutenção resolvida do dashboard?')) return;
+    try {
+        await apiFetch(`/manutencoes/${id}/arquivar`, { method: 'PUT' });
+        loadManutencoes();
+    } catch (e) { showNotification(e.message, true); }
+}
 
 function toggleDashboardCol(colId) {
     const col = document.getElementById(colId);
@@ -1296,7 +1532,7 @@ async function loadHistoricoMaquinas() {
 
 async function loadHistorico() {
     try {
-        let data = await apiFetch('/historico/avarias');
+        let data = await apiFetch('/historico');
         if (!Array.isArray(data)) {
             console.error("Erro: Dados do histórico não são um array", data);
             data = [];
@@ -1306,6 +1542,7 @@ async function loadHistorico() {
         if (!tbody) return;
 
         const filtroCliente = document.getElementById('hist-cliente')?.value || '';
+        const filtroTipo = document.getElementById('hist-tipo')?.value || '';
         const filtroMaquina = document.getElementById('hist-maquina')?.value || '';
         const filtroTecnico = document.getElementById('hist-tecnico')?.value || '';
         const filtroFaturacao = document.getElementById('hist-faturacao')?.value || '';
@@ -1317,21 +1554,16 @@ async function loadHistorico() {
         // Filtragem e Ordenação
         const filteredData = data.filter(a => {
             if (filtroCliente && a.cliente_id != filtroCliente) return false;
-            if (filtroMaquina && a.maquina_uuid != filtroMaquina) return false;
+            if (filtroTipo && a.type !== filtroTipo) return false;
+            // Se houver filtro de máquina, apenas filtrar avarias (serviços e manutenções globais não têm UUID de máquina)
+            if (filtroMaquina && a.type === 'avaria' && a.maquina_uuid != filtroMaquina) return false;
             if (filtroTecnico && a.tecnico_id != filtroTecnico) return false;
             if (filtroFaturacao && a.estado_faturacao !== filtroFaturacao) return false;
 
-            const dateObj = a.data_hora_fim ? new Date(a.data_hora_fim) : new Date(a.data_hora);
+            const itemDateStr = toLocalYYYYMMDD(a.data_hora_fim || a.data_hora);
             if (filtroDataInicio || filtroDataFim) {
-                const itemDateOnly = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
-                if (filtroDataInicio) {
-                    const start = new Date(filtroDataInicio);
-                    if (itemDateOnly < start) return false;
-                }
-                if (filtroDataFim) {
-                    const end = new Date(filtroDataFim);
-                    if (itemDateOnly > end) return false;
-                }
+                if (filtroDataInicio && itemDateStr < filtroDataInicio) return false;
+                if (filtroDataFim && itemDateStr > filtroDataFim) return false;
             }
             return true;
         });
@@ -1366,7 +1598,7 @@ async function loadHistorico() {
             const datePart = dateObj.toLocaleDateString('pt-PT');
             const timePart = dateObj.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 
-            const reportBtnHtml = a.relatorio ? `` : `<span style="font-size:11px; color:var(--text-secondary);">Sem Relatório</span>`;
+            const reportBtnHtml = (a.relatorio || a.relatorio_submetido === 1) ? `` : `<span style="font-size:11px; color:var(--text-secondary);">Sem Relatório</span>`;
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -1377,7 +1609,7 @@ async function loadHistorico() {
                 <td class="col-tech"></td>
                 <td class="col-client"></td>
                 <td class="col-machine"></td>
-                <td>${(a.horas_trabalho !== null && a.horas_trabalho !== undefined && a.horas_trabalho !== '') ? a.horas_trabalho + 'h' : '-'}</td>
+                <td>${hoursToHHmm(a.horas_trabalho)}</td>
                 <td>
                     <select class="select-faturacao">
                         <option value="Por Faturar">Por Faturar</option>
@@ -1392,7 +1624,16 @@ async function loadHistorico() {
             `;
             tr.querySelector('.col-tech').textContent = a.tecnico_nome || 'Não Atribuído';
             tr.querySelector('.col-client').textContent = a.cliente_nome || 'Sem Cliente';
-            tr.querySelector('.col-machine').textContent = a.maquina_nome || 'Máquina Removida';
+            
+            let badgeColor = 'var(--accent)';
+            let typeLabel = 'AVARIA';
+            if (a.type === 'servico') { badgeColor = '#1e3a8a'; typeLabel = 'SERVIÇO'; }
+            else if (a.type === 'manutencao') { badgeColor = '#7c3aed'; typeLabel = 'MANUTENÇÃO'; }
+
+            tr.querySelector('.col-machine').innerHTML = `
+                <span style="font-size:10px; font-weight:700; background: ${badgeColor}22; color: ${badgeColor}; padding:2px 6px; border-radius:4px; margin-right:5px; vertical-align:middle;">${typeLabel}</span>
+                <span style="vertical-align:middle;">${escapeHTML(a.maquina_nome || '---')}</span>
+            `;
 
             const selFat = tr.querySelector('.select-faturacao');
             if (a.estado_faturacao) selFat.value = a.estado_faturacao;
@@ -1422,7 +1663,8 @@ async function loadHistorico() {
 
                 updateStatusClass(newVal);
                 try {
-                    await apiFetch('/avarias/' + a.id + '/faturacao', {
+                    const endpoint = a.type === 'servico' ? '/servicos/' : (a.type === 'manutencao' ? '/manutencoes/' : '/avarias/');
+                    await apiFetch(endpoint + a.id + '/faturacao', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ estado_faturacao: newVal })
@@ -1436,7 +1678,7 @@ async function loadHistorico() {
                 }
             });
 
-            if (a.relatorio) {
+            if (a.relatorio || a.relatorio_submetido === 1) {
 
                 const colActions = tr.querySelector('.col-actions div');
                 const btnPdf = document.createElement('button');
@@ -1463,7 +1705,7 @@ async function loadHistorico() {
                     btnPdf.innerHTML = '<i class="ph ph-file-text"></i> Rascunho';
                 }
 
-                btnPdf.onclick = () => window.open(`/relatorio.html?id=${a.id}`, '_blank');
+                btnPdf.onclick = () => window.open(`/relatorio.html?id=${a.id}&type=${a.type}`, '_blank');
                 colActions.appendChild(btnPdf);
             }
 
@@ -1515,7 +1757,13 @@ async function loadMachinesForReport() {
 // INIT
 window.onload = async () => {
     await ensureAuth();
-    loadAvarias();
+    
+    // Carregar o dashboard correto baseado no estado inicial
+    if (currentMainDashboard === 'avarias') loadAvarias();
+    else if (currentMainDashboard === 'servicos') loadServicos();
+    else if (currentMainDashboard === 'manutencoes') loadManutencoes();
+    else loadTodas();
+
     loadClientes();
     loadTecnicos();
 
@@ -1545,6 +1793,18 @@ window.onload = async () => {
 
     const filterSrvEnd = document.getElementById('filter-srv-date-end');
     if (filterSrvEnd) filterSrvEnd.addEventListener('change', loadServicos);
+
+    // Filtros de Data para Manutenções Resolvidas
+    const filterMntStart = document.getElementById('filter-mnt-date-start');
+    const filterMntEnd = document.getElementById('filter-mnt-date-end');
+    if (filterMntStart) filterMntStart.addEventListener('change', loadManutencoes);
+    if (filterMntEnd) filterMntEnd.addEventListener('change', loadManutencoes);
+
+    // Filtros de Data para Dashboard Unificado
+    const filterAllStart = document.getElementById('filter-all-date-start');
+    const filterAllEnd = document.getElementById('filter-all-date-end');
+    if (filterAllStart) filterAllStart.addEventListener('change', loadTodas);
+    if (filterAllEnd) filterAllEnd.addEventListener('change', loadTodas);
 
     // O filtro de técnico já chama loadAvarias, mas precisamos que ele saiba qual dashboard carregar
     if (filterTech) {
@@ -1614,6 +1874,13 @@ window.onload = async () => {
         loadHistorico();
     });
 
+    const histTipo = document.getElementById('hist-tipo');
+    if (histTipo) histTipo.addEventListener('change', () => {
+        histCurrentPage = 1;
+        updateFilterBadge();
+        loadHistorico();
+    });
+
     // Paginação Histórico
     const btnPrevPage = document.getElementById('btn-prev-page');
     if (btnPrevPage) btnPrevPage.addEventListener('click', () => {
@@ -1657,6 +1924,8 @@ window.onload = async () => {
             document.getElementById('hist-faturacao').value = '';
             document.getElementById('hist-date-start').value = '';
             document.getElementById('hist-date-end').value = '';
+            const hTipo = document.getElementById('hist-tipo');
+            if (hTipo) hTipo.value = '';
             loadHistoricoMaquinas();
             updateFilterBadge();
             loadHistorico();
@@ -1665,6 +1934,7 @@ window.onload = async () => {
 
     function updateFilterBadge() {
         const c = document.getElementById('hist-cliente').value;
+        const tp = document.getElementById('hist-tipo')?.value || '';
         const m = document.getElementById('hist-maquina').value;
         const t = document.getElementById('hist-tecnico').value;
         const f = document.getElementById('hist-faturacao').value;
@@ -1673,6 +1943,7 @@ window.onload = async () => {
 
         let count = 0;
         if (c) count++;
+        if (tp) count++;
         if (m) count++;
         if (t) count++;
         if (f) count++;
@@ -1712,25 +1983,32 @@ window.onload = async () => {
     // O listener do form-report-avaria e servico agora está fora do window.onload
     // para suportar chamadas externas se necessário e evitar duplicação
     // No entanto, vou garantir que os campos de data são limpos ao abrir o modal
-    const openReportBtn = document.getElementById('btn-open-report-avaria');
-    if (openReportBtn) {
-        openReportBtn.addEventListener('click', () => {
+    document.querySelectorAll('.btn-open-report-avaria').forEach(btn => {
+        btn.addEventListener('click', () => {
             document.getElementById('report-avaria-agendada').value = '';
             loadClientes();
             loadTecnicos();
             openModal('modal-report-avaria');
         });
-    }
+    });
 
-    const openReportSrvBtn = document.getElementById('btn-open-report-servico');
-    if (openReportSrvBtn) {
-        openReportSrvBtn.addEventListener('click', () => {
+    document.querySelectorAll('.btn-open-report-servico').forEach(btn => {
+        btn.addEventListener('click', () => {
             document.getElementById('report-servico-agendada').value = '';
             loadClientes();
             loadTecnicos();
             openModal('modal-report-servico');
         });
-    }
+    });
+
+    document.querySelectorAll('.btn-open-report-manutencao').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('report-manutencao-agendada').value = '';
+            loadClientes();
+            loadTecnicos();
+            openModal('modal-report-manutencao');
+        });
+    });
 
     // Fecho de Modals
     document.querySelectorAll('.close-btn').forEach(btn => {
@@ -1846,6 +2124,38 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
         if (btn) btn.disabled = false;
     }
 });
+
+// Reportar Manutenção (Manual Admin)
+document.getElementById('form-report-manutencao').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+
+    const payload = {
+        cliente_id: document.getElementById('report-manutencao-cliente').value,
+        tecnico_id: document.getElementById('report-manutencao-tecnico').value || null,
+        notas: document.getElementById('report-manutencao-notas').value,
+        data_agendada: document.getElementById('report-manutencao-agendada').value || null
+    };
+
+    try {
+        await apiFetch('/manutencoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        showNotification('Manutenção criada com sucesso!');
+        closeModal('modal-report-manutencao');
+        document.getElementById('form-report-manutencao').reset();
+        loadManutencoes();
+        if (currentActiveView === 'agendamentos') loadAgendamentos();
+    } catch (e) {
+        showNotification(e.message, true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+});
+
 
 // Filtros de cascata para modal de reporte
 document.getElementById('report-avaria-cliente').addEventListener('change', async (e) => {

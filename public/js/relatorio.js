@@ -4,6 +4,24 @@ const urlParams = new URLSearchParams(window.location.search);
 const reportId = urlParams.get('id');
 const reportType = urlParams.get('type') || 'avaria';
 
+function toLocalYYYYMMDD(date) {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function hoursToHHmm(decimalHours) {
+    if (decimalHours === null || decimalHours === undefined || decimalHours === '') return '-';
+    const totalMins = Math.round(parseFloat(decimalHours) * 60);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+
 async function loadReport() {
     const container = document.getElementById('report-content');
     if (!reportId) {
@@ -18,7 +36,7 @@ async function loadReport() {
             return;
         }
 
-        const endpoint = reportType === 'servico' ? `/api/servicos/${reportId}/detalhes-relatorio` : `/api/avarias/${reportId}/detalhes-relatorio`;
+        const endpoint = reportType === 'servico' ? `/api/servicos/${reportId}/detalhes-relatorio` : (reportType === 'manutencao' ? `/api/manutencoes/${reportId}/detalhes-relatorio` : `/api/avarias/${reportId}/detalhes-relatorio`);
         const res = await fetch(endpoint, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -56,7 +74,13 @@ function renderReport(data) {
     if (reportType === 'avaria') {
         interventionInfo = `
             <p><strong>Máquina:</strong> ${data.maquina_nome}</p>
+            <p><strong>Nº de Série:</strong> ${data.maquina_serie || '---'}</p>
             <p><strong>Tipo:</strong> ${data.tipo_avaria === 1 ? 'Elétrica' : (data.tipo_avaria === 3 ? 'Mecânica' : 'Outra')}</p>
+        `;
+    } else if (reportType === 'manutencao') {
+        interventionInfo = `
+            <p><strong>Tipo:</strong> Manutenção Preventiva/Geral</p>
+            <p><strong>Parque de Máquinas:</strong> Completo</p>
         `;
     } else {
         interventionInfo = `
@@ -82,15 +106,16 @@ function renderReport(data) {
         <div class="section-grid" style="margin-bottom: 20px; gap: 20px;">
             <div class="info-block">
                 <h3><i class="ph ph-user"></i> Cliente</h3>
-                <p><strong>${data.cliente_nome}</strong></p>
-                <p>${data.cliente_email || 'Email não especificado'}</p>
-                <p>${data.cliente_contato || 'Telefone não disponível'}</p>
+                <p><strong>Nome:</strong> ${data.cliente_nome}</p>
+                <p><strong>Email:</strong> ${data.cliente_email || '---'}</p>
+                <p><strong>Contacto:</strong> ${data.cliente_contato || '---'}</p>
+                <p><strong>NIF:</strong> ${data.cliente_nif || '---'}</p>
             </div>
             <div class="info-block">
                 <h3><i class="ph ph-wrench"></i> Intervenção</h3>
                 <p><strong>Técnico:</strong> ${data.tecnico_nome}</p>
                 ${interventionInfo}
-                <p><strong>Horas de Trabalho:</strong> ${(data.horas_trabalho !== null && data.horas_trabalho !== undefined && data.horas_trabalho !== '') ? data.horas_trabalho + 'h' : '---'}</p>
+                <p><strong>Horas de Trabalho:</strong> ${hoursToHHmm(data.horas_trabalho)}</p>
             </div>
         </div>
 
@@ -130,7 +155,7 @@ function renderReport(data) {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 ${data.fotos.map(f => `
                     <div style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: white; break-inside: avoid; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        <img src="${f.caminho}" style="width: 100%; height: 350px; object-fit: cover; display: block;">
+                        <img src="${f.caminho}?token=${localStorage.getItem('maclau_token')}&v=${Date.now()}" style="width: 100%; height: 350px; object-fit: cover; display: block;">
                     </div>
                 `).join('')}
             </div>

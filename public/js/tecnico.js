@@ -59,13 +59,13 @@ function saveTimerState(state) {
 
 function startTimer(id, type) {
     let state = getTimerState();
-    // Se for uma tarefa diferente, limpa o anterior (proteção)
-    if (state.taskId && state.taskId != id) {
+    // Se for uma tarefa diferente (ID ou Tipo), reinicia o cronómetro
+    if (state.taskId && (state.taskId != id || state.taskType != type)) {
         state = { taskId: id, taskType: type, startTime: Date.now(), accumulatedMs: 0 };
     } else {
         state.taskId = id;
         state.taskType = type;
-        state.startTime = Date.now();
+        if (!state.startTime) state.startTime = Date.now();
     }
     saveTimerState(state);
     initGlobalTimer();
@@ -89,6 +89,27 @@ function formatDuration(ms) {
     const minutes = Math.floor((ms / (1000 * 60)) % 60);
     const hours = Math.floor(ms / (1000 * 60 * 60));
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function hoursToHHmm(decimalHours) {
+    if (decimalHours === null || decimalHours === undefined || decimalHours === '') return '';
+    const totalMins = Math.round(parseFloat(decimalHours) * 60);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+}
+
+function HHmmToHours(hhmm) {
+    if (!hhmm) return 0;
+    const s = String(hhmm).trim();
+    if (s.includes(':')) {
+        const parts = s.split(':');
+        const hrs = parseInt(parts[0]) || 0;
+        const mins = parseInt(parts[1]) || 0;
+        return hrs + (mins / 60);
+    }
+    // Suporte para quem ainda usa decimal (ex: 1.5)
+    return parseFloat(s.replace(',', '.')) || 0;
 }
 
 function initGlobalTimer() {
@@ -159,19 +180,22 @@ async function authFetch(url, options = {}) {
 
 async function loadMyTasks() {
     try {
-        const [resAvarias, resServicos] = await Promise.all([
+        const [resAvarias, resServicos, resManutencoes] = await Promise.all([
             authFetch(`${API_BASE}/tecnico/avarias?_=${Date.now()}`),
-            authFetch(`${API_BASE}/tecnico/servicos?_=${Date.now()}`)
+            authFetch(`${API_BASE}/tecnico/servicos?_=${Date.now()}`),
+            authFetch(`${API_BASE}/tecnico/manutencoes?_=${Date.now()}`)
         ]);
 
         const avarias = await resAvarias.json();
         const servicos = await resServicos.json();
+        const manutencoes = await resManutencoes.json();
         updateRefreshStatus();
 
         // Marcar o tipo para cada item
         const tasks = [
             ...avarias.map(a => ({ ...a, _type: 'avaria' })),
-            ...servicos.map(s => ({ ...s, _type: 'servico' }))
+            ...servicos.map(s => ({ ...s, _type: 'servico' })),
+            ...manutencoes.map(m => ({ ...m, _type: 'manutencao' }))
         ];
 
         // Ordenar: Pausadas primeiro, depois por data decrescente
@@ -237,8 +261,8 @@ window.renderPendingTasks = function() {
     container.innerHTML = '';
 
     if (total === 0) {
-        let msg = currentDashboardFilter === 'avaria' ? 'Não tem avarias pendentes.' : (currentDashboardFilter === 'servico' ? 'Não tem serviços pendentes.' : 'Não tem tarefas pendentes.');
-        if (filterClient || filterDate) msg = 'Não há tarefas para os filtros selecionados.';
+        let msg = currentDashboardFilter === 'avaria' ? 'Não tem avarias pendentes.' : (currentDashboardFilter === 'servico' ? 'Não tem serviços pendentes.' : (currentDashboardFilter === 'manutencao' ? 'Não tem manutenções pendentes.' : 'Não tem tarefas pendentes.'));
+        if (filterClient || filterDate) msg = 'Não há tarefas para los filtros selecionados.';
         container.innerHTML = `<p style="text-align:center; color:var(--text-secondary); margin-top:20px;">${msg} Bom trabalho!</p>`;
         return;
     }
@@ -254,10 +278,14 @@ window.renderPendingTasks = function() {
         if (task._type === 'avaria') {
             tagStr = task.tipo_avaria === 1 ? 'ELÉTRICA' : (task.tipo_avaria === 3 ? 'MECÂNICA' : 'DESCONHECIDA');
             titleStr = task.maquina_nome;
-        } else {
-            tagStr = task.tipo_servico;
-            tagColor = '#1E4419';
+        } else if (task._type === 'manutencao') {
+            tagStr = 'MANUTENÇÃO';
+            tagColor = '#7c3aed';
             titleStr = task.cliente_nome;
+        } else {
+            tagStr = 'SERVIÇO';
+            tagColor = '#1E4419';
+            titleStr = task.tipo_servico;
         }
 
         let statusLabel = 'Em Resolução';
@@ -303,7 +331,7 @@ window.renderPendingTasks = function() {
                 </div>
             </div>
             <h3 class="task-machine-name" style="margin-bottom:5px;">${escapeHTML(titleStr)}</h3>
-            <p class="task-client-name" style="font-size:14px; color:var(--text-secondary);">${task._type === 'avaria' ? escapeHTML(task.cliente_nome) : 'Serviço Externo'}</p>
+            <p class="task-client-name" style="font-size:14px; color:var(--text-secondary);">${task._type === 'manutencao' ? 'Todas as Máquinas' : escapeHTML(task.cliente_nome || 'Serviço Externo')}</p>
             ${agendadoHtml}
             <div style="font-size:12px; color:var(--text-secondary); margin-top:${task.data_agendada ? '4px' : '10px'};">Reportado em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
             ${task.notas ? `<div class="admin-note-btn" style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent); cursor:pointer; transition:background 0.2s;"><strong style="color:var(--text-main);">Notas do Admin:</strong><div style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:4px;">${escapeHTML(task.notas)}</div></div>` : ''}
@@ -363,7 +391,7 @@ window.renderPendingTasks = function() {
 
 async function updateStatus(id, newStatus, currentText = '', type = 'avaria') {
     try {
-        const endpoint = type === 'servico' ? `${API_BASE}/servicos/${id}/status` : `${API_BASE}/avarias/${id}/status`;
+        const endpoint = type === 'servico' ? `${API_BASE}/servicos/${id}/status` : (type === 'manutencao' ? `${API_BASE}/manutencoes/${id}/status` : `${API_BASE}/avarias/${id}/status`);
         const res = await authFetch(endpoint, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -433,7 +461,7 @@ function renderPhotosPreview(fotos, disabled = false) {
         div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
         
         const img = document.createElement('img');
-        img.src = f.caminho;
+        img.src = `${f.caminho}?token=${jwtToken}&v=${Date.now()}`;
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'cover';
@@ -472,16 +500,29 @@ function renderPhotosPreview(fotos, disabled = false) {
     });
 }
 
-async function uploadPhotos(files) {
+async function uploadPhotos(filesList) {
+    if (!filesList || filesList.length === 0) return;
+    const files = Array.from(filesList); // Converter para array estático
+
     const id = document.getElementById('relatorio-avaria-id').value;
     const type = document.getElementById('relatorio-type').value;
     
+    // Validação de tamanho no cliente (20MB)
+    const MAX_SIZE = 20 * 1024 * 1024;
+    for (let i = 0; i < files.length; i++) {
+        if (files[i].size > MAX_SIZE) {
+            showNotification(`A foto "${files[i].name}" é demasiado grande (máx 20MB).`, true);
+            return;
+        }
+    }
+
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
         formData.append('fotos', files[i]);
     }
     
     if (type === 'servico') formData.append('servico_id', id);
+    else if (type === 'manutencao') formData.append('manutencao_id', id);
     else formData.append('avaria_id', id);
     
     try {
@@ -491,9 +532,19 @@ async function uploadPhotos(files) {
             body: formData
         });
         
-        if (!res.ok) throw new Error("Erro ao carregar fotos");
+        let data;
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+            data = await res.json();
+        } else {
+            const text = await res.text();
+            throw new Error(`Erro inesperado do servidor: ${res.status}`);
+        }
+
+        if (!res.ok) throw new Error(data.error || "Erro ao carregar fotos");
         
         showNotification("Fotos carregadas com sucesso!");
+        
         // Recarregar o modal para ver as novas fotos
         const currentText = document.getElementById('relatorio-texto').value;
         const currentPecas = document.getElementById('relatorio-pecas').value;
@@ -507,6 +558,7 @@ async function uploadPhotos(files) {
         openRelatorioModal(id, false, currentText, false, currentPecas, currentHoras, currentSig, type, currentSigTech);
         
     } catch (err) {
+        console.error("Upload Error:", err);
         showNotification(err.message, true);
     }
 }
@@ -526,7 +578,7 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
 
     // Fetch Details to populate A4 Sheet
     try {
-        const endpoint = type === 'servico' ? `/api/servicos/${id}/detalhes-relatorio` : `/api/avarias/${id}/detalhes-relatorio`;
+        const endpoint = type === 'servico' ? `/api/servicos/${id}/detalhes-relatorio` : (type === 'manutencao' ? `/api/manutencoes/${id}/detalhes-relatorio` : `/api/avarias/${id}/detalhes-relatorio`);
         const res = await authFetch(endpoint);
         if (!res.ok) throw new Error("Erro ao carregar detalhes");
         const data = await res.json();
@@ -540,6 +592,7 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         document.getElementById('a4-cliente-nome').textContent = data.cliente_nome || '---';
         document.getElementById('a4-cliente-email').textContent = data.cliente_email || '---';
         document.getElementById('a4-cliente-contato').textContent = data.cliente_contato || '---';
+        document.getElementById('a4-cliente-nif').textContent = data.cliente_nif || '---';
 
         document.getElementById('a4-tecnico-nome').textContent = data.tecnico_nome || '---';
         
@@ -552,7 +605,16 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
             machineRow.style.display = 'block';
             serviceRow.style.display = 'none';
             document.getElementById('a4-maquina-nome').textContent = data.maquina_nome || '---';
+            document.getElementById('a4-maquina-serie').textContent = data.maquina_serie || '---';
+            document.getElementById('a4-maquina-serie-row').style.display = 'block';
             document.getElementById('a4-tipo-avaria').textContent = data.tipo_avaria === 1 ? 'Elétrica' : (data.tipo_avaria === 3 ? 'Mecânica' : 'Outra');
+        } else if (type === 'manutencao') {
+            detailsTitle.innerHTML = '<i class="ph ph-wrench"></i> Manutenção';
+            machineRow.style.display = 'block';
+            serviceRow.style.display = 'none';
+            document.getElementById('a4-maquina-nome').textContent = "Todas as máquinas";
+            document.getElementById('a4-maquina-serie-row').style.display = 'none';
+            document.getElementById('a4-tipo-avaria').textContent = "Geral";
         } else {
             detailsTitle.innerHTML = '<i class="ph ph-truck"></i> Serviço';
             machineRow.style.display = 'none';
@@ -565,15 +627,15 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         textarea.value = currentText || data.relatorio || '';
         pecasArea.value = currentPecas || data.pecas_substituidas || '';
         
-        let hoursVal = currentHoras || data.horas_trabalho || '';
+        let hoursVal = currentHoras || hoursToHHmm(data.horas_trabalho) || '';
         // Se estivermos a concluir agora e o campo estiver vazio, usa o cronómetro
         if (!hoursVal && isStatusChange) {
             const state = getTimerState();
             if (state.taskId == id && state.taskType == type) {
                 const totalMs = state.accumulatedMs + (state.startTime ? (Date.now() - state.startTime) : 0);
                 const totalHours = totalMs / (1000 * 60 * 60);
-                if (totalHours > 0.01) { // Apenas se tiver pelo menos ~30 segundos
-                    hoursVal = totalHours.toFixed(2);
+                if (totalHours > 0.005) { // Apenas se tiver pelo menos ~20 segundos
+                    hoursVal = hoursToHHmm(totalHours);
                 }
             }
         }
@@ -625,7 +687,7 @@ async function saveRelatorioDraft() {
     const relatorio = document.getElementById('relatorio-texto').value;
     const pecas_substituidas = document.getElementById('relatorio-pecas').value;
     const horas_raw = document.getElementById('relatorio-horas').value;
-    const horas_trabalho = horas_raw ? horas_raw.replace(',', '.') : '';
+    const horas_trabalho = HHmmToHours(horas_raw);
     const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
     
     const canvasCli = document.getElementById('signature-pad');
@@ -637,7 +699,7 @@ async function saveRelatorioDraft() {
     console.log("Tentando salvar rascunho. Assinatura técnico presente:", !!assinatura_tecnico);
 
     try {
-        const endpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`;
+        const endpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`);
         const res = await authFetch(endpoint, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -664,7 +726,7 @@ async function submitRelatorio() {
     const relatorio = document.getElementById('relatorio-texto').value;
     const pecas_substituidas = document.getElementById('relatorio-pecas').value;
     const horas_raw = document.getElementById('relatorio-horas').value;
-    const horas_trabalho = horas_raw ? horas_raw.replace(',', '.') : '';
+    const horas_trabalho = HHmmToHours(horas_raw);
     const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
     
     const canvasCli = document.getElementById('signature-pad');
@@ -677,7 +739,7 @@ async function submitRelatorio() {
 
     try {
         // Primeiro salvamos o texto atual
-        const draftEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`;
+        const draftEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`);
         await authFetch(draftEndpoint, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -685,7 +747,7 @@ async function submitRelatorio() {
         });
 
         // Depois submetemos
-        const submitEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/submeter-relatorio` : `${API_BASE}/tecnico/avarias/${id}/submeter-relatorio`;
+        const submitEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/submeter-relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/submeter-relatorio` : `${API_BASE}/tecnico/avarias/${id}/submeter-relatorio`);
         const res = await authFetch(submitEndpoint, {
             method: 'POST'
         });
@@ -730,18 +792,21 @@ let historicoData = [];
 
 async function loadHistorico() {
     try {
-        const [resAvarias, resServicos] = await Promise.all([
+        const [resAvarias, resServicos, resManutencoes] = await Promise.all([
             authFetch(`${API_BASE}/tecnico/historico`),
-            authFetch(`${API_BASE}/tecnico/servicos/historico`)
+            authFetch(`${API_BASE}/tecnico/servicos/historico`),
+            authFetch(`${API_BASE}/tecnico/manutencoes/historico`)
         ]);
 
         const avarias = await resAvarias.json();
         const servicos = await resServicos.json();
+        const manutencoes = await resManutencoes.json();
 
         // Marcar tipos
         historicoData = [
             ...avarias.map(a => ({ ...a, _type: 'avaria' })),
-            ...servicos.map(s => ({ ...s, _type: 'servico' }))
+            ...servicos.map(s => ({ ...s, _type: 'servico' })),
+            ...manutencoes.map(m => ({ ...m, _type: 'manutencao' }))
         ];
 
         // Ordenar por data de fim decrescente
@@ -782,23 +847,25 @@ window.renderHistorico = function () {
 
         const tr = document.createElement('tr');
 
-        let maqNome = a.maquina_nome || '-';
-        if (a._type === 'servico') {
+        let maqNome = '';
+        if (a._type === 'avaria') {
+            maqNome = `<span style="color:var(--danger); font-weight:700;">[AVARIA]</span> ${escapeHTML(a.maquina_nome || 'Máquina Removida')}`;
+        } else if (a._type === 'servico') {
             maqNome = `<span style="color:var(--accent); font-weight:700;">[SERVIÇO]</span> ${escapeHTML(a.tipo_servico)}`;
+        } else if (a._type === 'manutencao') {
+            maqNome = `<span style="color:#7c3aed; font-weight:700;">[MANUTENÇÃO]</span>`;
         }
 
         tr.innerHTML = `
             <td>${dateStr}</td>
             <td class="col-client"></td>
             <td class="col-machine">${maqNome}</td>
-            <td>${(a.horas_trabalho !== null && a.horas_trabalho !== undefined && a.horas_trabalho !== '') ? a.horas_trabalho + 'h' : '-'}</td>
+            <td>${hoursToHHmm(a.horas_trabalho)}</td>
             <td class="col-report"><div style="display:flex; gap:5px;"></div></td>
         `;
 
         tr.querySelector('.col-client').textContent = a.cliente_nome || '-';
-        if (a._type === 'avaria') {
-            tr.querySelector('.col-machine').textContent = a.maquina_nome || '-';
-        }
+        // Removida a substituição direta para manter o formato rico (com as etiquetas coloridas)
 
         const colReport = tr.querySelector('.col-report div');
 
@@ -905,8 +972,11 @@ window.onload = () => {
     const inputFotos = document.getElementById('relatorio-fotos');
     if (inputFotos) {
         inputFotos.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                uploadPhotos(e.target.files);
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                uploadPhotos(files);
+                // Pequeno delay para garantir que o FileList foi capturado antes de limpar o valor
+                setTimeout(() => { e.target.value = ''; }, 100);
             }
         });
     }
@@ -999,7 +1069,7 @@ window.onload = () => {
             const motivo = document.getElementById('pausar-motivo').value;
 
             try {
-                const endpoint = type === 'servico' ? `${API_BASE}/servicos/${id}/status` : `${API_BASE}/avarias/${id}/status`;
+                const endpoint = type === 'servico' ? `${API_BASE}/servicos/${id}/status` : (type === 'manutencao' ? `${API_BASE}/manutencoes/${id}/status` : `${API_BASE}/avarias/${id}/status`);
                 const res = await authFetch(endpoint, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -1051,7 +1121,7 @@ function escapeJS(str) {
 window.openReportFromHistory = function (id) {
     const item = historicoData.find(a => a.id === id);
     if (!item) return;
-    openRelatorioModal(item.id, false, item.relatorio, item.relatorio_submetido === 1, item.pecas_substituidas, item.horas_trabalho, item.assinatura_cliente, item._type);
+    openRelatorioModal(item.id, false, item.relatorio, item.relatorio_submetido === 1, item.pecas_substituidas, item.horas_trabalho, item.assinatura_cliente, item._type, item.assinatura_tecnico);
 };
 
 window.openFullNoteModal = function(encodedNote) {
@@ -1194,7 +1264,7 @@ async function loadAgendamentos() {
         agendamentos.forEach(a => {
             const div = document.createElement('div');
             div.className = 'repair-item';
-            div.style.borderLeft = `5px solid ${a.type === 'avaria' ? '#ef4444' : '#3b82f6'}`;
+            div.style.borderLeft = `5px solid ${a.type === 'avaria' ? '#ef4444' : (a.type === 'servico' ? '#3b82f6' : '#7c3aed')}`;
 
             const dateStr = new Date(a.data_agendada).toLocaleString('pt-PT', {
                 weekday: 'long',
@@ -1208,7 +1278,7 @@ async function loadAgendamentos() {
             div.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
                     <span style="font-size:11px; font-weight:700; background:var(--accent-light); color:var(--accent); padding:3px 8px; border-radius:4px;">
-                        ${a.type === 'avaria' ? 'AVARIA' : 'SERVIÇO'}
+                        ${a.type === 'avaria' ? 'AVARIA' : (a.type === 'servico' ? 'SERVIÇO' : 'MANUTENÇÃO')}
                     </span>
                     <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">${a.estado.toUpperCase()}</span>
                 </div>
