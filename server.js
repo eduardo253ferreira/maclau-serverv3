@@ -64,7 +64,7 @@ const isValidUUID = (uuid) => {
     return uuidRegex.test(uuid);
 };
 
-// 🔒 SEGURANÇA: Logger de segurança (substituir por Winston em produção)
+// 🔒 SEGURANÇA: Logger de segurança
 const securityLog = (event, details) => {
     const timestamp = new Date().toISOString();
     console.log(`[SECURITY] ${timestamp} - ${event}:`, JSON.stringify(details));
@@ -80,7 +80,7 @@ app.use(helmet({
             "script-src-attr": ["'self'"],
             "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net", "https://unpkg.com"],
             "font-src": ["'self'", "https://fonts.gstatic.com", "https://unpkg.com", "https://cdn.jsdelivr.net"],
-            "img-src": ["'self'", "data:", "blob:"],  // 🔒 Removido "*" e "http:"
+            "img-src": ["'self'", "data:", "blob:"],
             "connect-src": ["'self'"],
         },
     },
@@ -88,19 +88,15 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// 🔒 SEGURANÇA: CORS configurado corretamente
+// 🔒 CORREÇÃO: CORS sem IPs privados genéricos — usar apenas allowedOrigins do .env
 const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:3000']; // Apenas localhost em dev
+    : ['http://localhost:3000'];
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Permitir requests sem origin (apps mobile, etc) ou do próprio host
         if (!origin) return callback(null, true);
-
-        const isLocalHost = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.') || origin.includes('10.');
-
-        if (allowedOrigins.includes(origin) || isLocalHost) {
+        if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             securityLog('CORS_BLOCKED', { origin });
@@ -112,13 +108,12 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json({ limit: '10mb' })); // 🔒 Limitar tamanho do body
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 // Middleware de Proteção para ficheiros HTML específicos
 const authorizeHTML = (requiredRole) => {
     return (req, res, next) => {
-        // Prevenir caching da página protegida (resolve o problema do botão Voltar do browser)
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
@@ -158,9 +153,8 @@ app.get('/tecnico.html', authorizeHTML('tecnico'), (req, res, next) => {
     });
 });
 
-// 🔒 SEGURANÇA: Rota protegida para servir fotos dos relatórios (fora da pasta public)
+// 🔒 SEGURANÇA: Rota protegida para servir fotos dos relatórios
 app.get('/uploads/reports/:filename', (req, res) => {
-    // Tentar obter token dos cookies ou da query string (para <img> tags)
     const token = req.cookies.maclau_token || req.query.token;
 
     if (!token) {
@@ -174,7 +168,6 @@ app.get('/uploads/reports/:filename', (req, res) => {
             return res.sendStatus(403);
         }
 
-        // Apenas Admins e Técnicos podem ver as fotos
         if (decoded.role !== 'admin' && decoded.role !== 'tecnico') {
             securityLog('PHOTO_ACCESS_DENIED', { path: req.path, reason: 'unauthorized_role', role: decoded.role });
             return res.sendStatus(403);
@@ -182,7 +175,6 @@ app.get('/uploads/reports/:filename', (req, res) => {
 
         const filePath = path.join(__dirname, 'uploads', 'reports', req.params.filename);
 
-        // Verificar se o ficheiro existe antes de enviar
         if (fs.existsSync(filePath)) {
             res.sendFile(filePath);
         } else {
@@ -193,10 +185,10 @@ app.get('/uploads/reports/:filename', (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 🔒 SEGURANÇA: Rate Limiting ajustado
+// 🔒 SEGURANÇA: Rate Limiting
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200, // 🔒 Reduzido de 1000 para 200
+    max: 200,
     message: { error: "Demasiados pedidos a partir deste IP. Tente mais tarde." },
     standardHeaders: true,
     legacyHeaders: false,
@@ -204,14 +196,14 @@ const apiLimiter = rateLimit({
 
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5, // 🔒 Reduzido de 10 para 5
+    max: 5,
     message: { error: "Demasiadas tentativas de login. Tente novamente após 15 minutos." },
-    skipSuccessfulRequests: true, // Não conta logins bem-sucedidos
+    skipSuccessfulRequests: true,
 });
 
 const reportLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10, // 🔒 Reduzido de 20 para 10
+    max: 10,
     message: { error: "Limite de reportes atingido. Tente novamente mais tarde." }
 });
 
@@ -219,10 +211,10 @@ app.use('/api/', apiLimiter);
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/public/avarias', reportLimiter);
 
-// Helper para Erros de DB (evitar leaks)
+// 🔒 CORREÇÃO: handleDBError NÃO vaza mensagem interna — apenas loga no servidor
 const handleDBError = (res, err, customMsg = "Erro interno no servidor") => {
     console.error('[DB ERROR]', err);
-    res.status(500).json({ error: `${customMsg} (${err.message})` });
+    res.status(500).json({ error: customMsg });
 };
 
 // Initialize DB
@@ -247,7 +239,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 email TEXT
             )`);
 
-            // Inicializar Admin se não existir
             db.get(`SELECT COUNT(*) as count FROM administradores`, [], (err, row) => {
                 if (!err && row && row.count === 0) {
                     const adminUser = process.env.ADMIN_USER;
@@ -282,7 +273,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
 
             db.run(`CREATE TABLE IF NOT EXISTS avarias (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                maquina_id TEXT NOT NULL, 
+                maquina_id TEXT NOT NULL,
                 tipo_avaria INTEGER NOT NULL,
                 estado TEXT DEFAULT 'pendente',
                 estado_faturacao TEXT DEFAULT 'Por Faturar',
@@ -300,7 +291,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
             )`);
 
-            // 🔒 SEGURANÇA: Remover password default
             db.run(`CREATE TABLE IF NOT EXISTS tecnicos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome TEXT NOT NULL,
@@ -310,7 +300,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 password TEXT NOT NULL
             )`);
 
-            // Novo: Utilizadores de Clientes
             db.run(`CREATE TABLE IF NOT EXISTS utilizadores_cliente (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 cliente_id INTEGER NOT NULL,
@@ -320,9 +309,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 email TEXT,
                 FOREIGN KEY (cliente_id) REFERENCES clientes (id)
             )`);
-
-            // Migrações movidas para o final do bloco de inicialização para garantir que as tabelas existem
-
 
             db.run(`CREATE TABLE IF NOT EXISTS servicos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -384,13 +370,11 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 FOREIGN KEY (manutencao_id) REFERENCES manutencoes (id)
             )`);
 
-            // 🔒 SEGURANÇA: Migração com serialize para evitar race conditions
             db.serialize(() => {
                 db.all(`SELECT id, password FROM tecnicos`, [], (err, rows) => {
                     if (!err && rows && rows.length > 0) {
                         const stmt = db.prepare(`UPDATE tecnicos SET password = ? WHERE id = ?`);
                         rows.forEach(row => {
-                            // Hash BCrypt tem 60 caracteres
                             if (row.password && row.password.length < 60) {
                                 const hash = bcrypt.hashSync(row.password, 10);
                                 stmt.run(hash, row.id);
@@ -417,7 +401,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 data_ultima_revisao DATE
             )`);
 
-            // --- MIGRATIONS (Adicionar colunas a tabelas existentes) ---
+            // --- MIGRATIONS ---
             const migrations = [
                 { table: 'avarias', column: 'data_hora_inicio', type: 'DATETIME' },
                 { table: 'avarias', column: 'data_hora_fim', type: 'DATETIME' },
@@ -436,8 +420,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 { table: 'administradores', column: 'email', type: 'TEXT' },
                 { table: 'clientes', column: 'morada', type: 'TEXT' },
                 { table: 'clientes', column: 'NIF', type: 'TEXT' },
-                { table: 'utilizadores_cliente', column: 'password_plain', type: 'TEXT' },
                 { table: 'fotos_relatorio', column: 'manutencao_id', type: 'INTEGER' }
+                // 🔒 CORREÇÃO: removida migração de password_plain (coluna eliminada)
             ];
 
             migrations.forEach(m => {
@@ -445,7 +429,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                     // Ignorar erro de "coluna já existe"
                 });
             });
-
         });
     }
 });
@@ -454,7 +437,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    secure: process.env.SMTP_PORT === '465',
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -506,7 +489,7 @@ async function sendAssignmentEmail(tecnicoEmail, tecnicoNome, machineNome, clien
         attachments: [{
             filename: 'logo.png',
             path: path.join(__dirname, 'public', 'img', 'logo.png'),
-            cid: 'logo' // mesmo valor que em src="cid:logo"
+            cid: 'logo'
         }]
     };
 
@@ -518,7 +501,7 @@ async function sendAssignmentEmail(tecnicoEmail, tecnicoNome, machineNome, clien
     }
 }
 
-// Helper para notificar administradores de novas avarias reportadas por clientes
+// Helper para notificar administradores de novas avarias
 async function sendAdminNotificationEmail(adminEmails, machineNome, clientNome, tipoAvaria) {
     if (!process.env.SMTP_HOST || !adminEmails || adminEmails.length === 0) return;
 
@@ -564,7 +547,7 @@ async function sendAdminNotificationEmail(adminEmails, machineNome, clientNome, 
     }
 }
 
-// Helper para alertas de frota (inspeções)
+// Helper para alertas de frota
 async function sendFrotaAlertEmail(adminEmails, vehicle, isToday = false) {
     if (!process.env.SMTP_HOST || !adminEmails || adminEmails.length === 0) return;
 
@@ -628,14 +611,12 @@ function checkVehicleInspections() {
         nextWeekDate.setDate(nextWeekDate.getDate() + 7);
         const nextWeek = nextWeekDate.toISOString().split('T')[0];
 
-        // Hoje
         db.all(`SELECT * FROM frota WHERE data_proxima_inspecao = ?`, [today], (err, vehiclesToday) => {
             if (!err && vehiclesToday) {
                 vehiclesToday.forEach(v => sendFrotaAlertEmail(adminEmails, v, true));
             }
         });
 
-        // 7 dias
         db.all(`SELECT * FROM frota WHERE data_proxima_inspecao = ?`, [nextWeek], (err, vehiclesNextWeek) => {
             if (!err && vehiclesNextWeek) {
                 vehiclesNextWeek.forEach(v => sendFrotaAlertEmail(adminEmails, v, false));
@@ -644,6 +625,8 @@ function checkVehicleInspections() {
     });
 }
 
+// 🔒 CORREÇÃO: scheduleDailyCheck corrigido — sem double-fire no primeiro dia
+// Usa setTimeout recursivo para garantir que corre exactamente uma vez por dia às 08:00
 function scheduleDailyCheck() {
     const now = new Date();
     const nextCheck = new Date();
@@ -658,7 +641,7 @@ function scheduleDailyCheck() {
 
     setTimeout(() => {
         checkVehicleInspections();
-        setInterval(checkVehicleInspections, 24 * 60 * 60 * 1000);
+        scheduleDailyCheck(); // reagendar para o dia seguinte (recursivo)
     }, delay);
 }
 
@@ -681,13 +664,12 @@ process.on('SIGINT', () => {
     });
 });
 
-// Middleware for JWT verification
+// Middleware de verificação JWT
 const authenticateJWT = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.split(' ')[1];
 
-        // Proteção contra 'null' ou 'undefined' passados como string pelo frontend
         if (!token || token === 'null' || token === 'undefined') {
             return res.sendStatus(401);
         }
@@ -731,10 +713,11 @@ const isAdminOrTecnico = (req, res, next) => {
 };
 
 // API: Autenticação
+// 🔒 CORREÇÃO: Apenas UMA rota de logout (a duplicada foi removida)
 app.post('/api/auth/logout', (req, res) => {
     res.clearCookie('maclau_token');
     securityLog('LOGOUT_SUCCESS', { ip: req.ip });
-    res.json({ success: true });
+    res.json({ success: true, message: 'Logout efetuado com sucesso' });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -833,7 +816,6 @@ app.post('/api/auth/login', (req, res) => {
 
                         securityLog('LOGIN_SUCCESS_CLIENTE', { user: email, cliente_id: row.cliente_id, ip: req.ip });
 
-                        // Se houver um redirect (ex: página de report), vamos para lá. Caso contrário, placeholder.
                         return res.json({
                             accessToken,
                             role: 'cliente',
@@ -852,13 +834,7 @@ app.post('/api/auth/login', (req, res) => {
     });
 });
 
-// API: Logout
-app.post('/api/auth/logout', (req, res) => {
-    res.clearCookie('maclau_token');
-    res.json({ message: 'Logout efetuado com sucesso' });
-});
-
-// --- ADMIN ROUTES (Protected by JWT and Admin Role) --- //
+// --- ADMIN ROUTES ---
 
 app.get('/api/clientes', authenticateJWT, isAdmin, (req, res) => {
     db.all(`SELECT * FROM clientes`, [], (err, rows) => {
@@ -870,7 +846,6 @@ app.get('/api/clientes', authenticateJWT, isAdmin, (req, res) => {
 app.post('/api/clientes', authenticateJWT, isAdmin, (req, res) => {
     let { nome, telefone, email, morada, NIF } = req.body;
 
-    // 🔒 SEGURANÇA: Sanitização
     nome = sanitizeString(nome);
     telefone = sanitizeString(telefone, 15);
     email = sanitizeString(email, 255);
@@ -894,7 +869,6 @@ app.put('/api/clientes/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     let { nome, telefone, email, morada, NIF } = req.body;
 
-    // 🔒 SEGURANÇA: Sanitização
     nome = sanitizeString(nome);
     telefone = sanitizeString(telefone, 15);
     email = sanitizeString(email, 255);
@@ -922,11 +896,12 @@ app.delete('/api/clientes/:id', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
-// --- CLIENT USERS MANAGEMENT (Admin only) ---
+// --- CLIENT USERS MANAGEMENT ---
 
 app.get('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    db.all(`SELECT id, nome, username, email, password_plain FROM utilizadores_cliente WHERE cliente_id = ?`, [id], (err, rows) => {
+    // 🔒 CORREÇÃO: password_plain removido da query
+    db.all(`SELECT id, nome, username, email FROM utilizadores_cliente WHERE cliente_id = ?`, [id], (err, rows) => {
         if (err) return handleDBError(res, err);
         res.json(rows);
     });
@@ -946,14 +921,16 @@ app.post('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
 
     const hashedPwd = bcrypt.hashSync(password, 10);
 
-    db.run(`INSERT INTO utilizadores_cliente (cliente_id, nome, username, password, password_plain, email) VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, nome, username, hashedPwd, password, email],
+    // 🔒 CORREÇÃO: password_plain removida — não guardar password em texto claro
+    db.run(`INSERT INTO utilizadores_cliente (cliente_id, nome, username, password, email) VALUES (?, ?, ?, ?, ?)`,
+        [id, nome, username, hashedPwd, email],
         function (err) {
             if (err) {
                 if (err.message.includes('UNIQUE')) return res.status(400).json({ error: "Username já existe" });
                 return handleDBError(res, err);
             }
-            res.status(201).json({ id: this.lastID, message: "Utilizador criado com sucesso" });
+            // Mostrar a password temporária uma única vez na resposta (para o admin partilhar com o utilizador)
+            res.status(201).json({ id: this.lastID, message: "Utilizador criado com sucesso", tempPassword: password });
         });
 });
 
@@ -967,8 +944,9 @@ app.put('/api/clientes-users/:id', authenticateJWT, isAdmin, (req, res) => {
 
     if (password) {
         const hashedPwd = bcrypt.hashSync(password, 10);
-        db.run(`UPDATE utilizadores_cliente SET nome = ?, username = ?, email = ?, password = ?, password_plain = ? WHERE id = ?`,
-            [nome, username, email, hashedPwd, password, id],
+        // 🔒 CORREÇÃO: password_plain removida
+        db.run(`UPDATE utilizadores_cliente SET nome = ?, username = ?, email = ?, password = ? WHERE id = ?`,
+            [nome, username, email, hashedPwd, id],
             function (err) {
                 if (err) return handleDBError(res, err);
                 res.json({ message: "Utilizador atualizado" });
@@ -1054,13 +1032,12 @@ app.delete('/api/maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
 app.get('/api/maquinas/:uuid/qrcode', authenticateJWT, isAdmin, async (req, res) => {
     const { uuid } = req.params;
 
-    // 🔒 SEGURANÇA: Validar UUID
     if (!isValidUUID(uuid)) {
         return res.status(400).json({ error: "UUID inválido" });
     }
 
     const host = req.get('host');
-    const protocol = req.protocol; // 🔒 Usa o mesmo protocolo do pedido atual
+    const protocol = req.protocol;
     const reportUrl = `${protocol}://${host}/report.html?machine=${uuid}`;
 
     try {
@@ -1071,16 +1048,13 @@ app.get('/api/maquinas/:uuid/qrcode', authenticateJWT, isAdmin, async (req, res)
     }
 });
 
-// 🔒 SEGURANÇA CRÍTICA: Endpoint para gerar QR code corrigido
 app.post('/api/maquinas/gerar-qrcode', authenticateJWT, isAdmin, async (req, res) => {
     const { maquina_id } = req.body;
 
-    // 🔒 Validar UUID
     if (!isValidUUID(maquina_id)) {
         return res.status(400).json({ error: "UUID inválido" });
     }
 
-    // 🔒 CORRIGIDO: Usar prepared statement ao invés de string interpolation
     db.get(`SELECT * FROM maquinas WHERE uuid = ?`, [maquina_id], async (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Máquina não encontrada" });
@@ -1131,25 +1105,20 @@ app.post('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
         return res.status(400).json({ error: "Máquina e tipo de avaria são obrigatórios" });
     }
 
-    // Validar UUID
     if (!isValidUUID(maquina_id)) {
-        console.error('[VALIDATION ERROR] UUID inválido:', maquina_id);
         return res.status(400).json({ error: "Máquina selecionada é inválida ou não foi selecionada corretamente." });
     }
 
-    // Validar tipo_avaria
     if (!Number.isInteger(tipo_avaria) || tipo_avaria < 1 || tipo_avaria > 10) {
         return res.status(400).json({ error: "Tipo de avaria inválido" });
     }
 
-    // Verificar se a máquina existe
     db.get(`SELECT (marca || ' - ' || modelo) as nome, cliente_id FROM maquinas WHERE uuid = ?`, [maquina_id], (err, machine) => {
         if (err) return handleDBError(res, err);
         if (!machine) return res.status(404).json({ error: "Máquina não encontrada" });
 
         const data_agendada = req.body.data_agendada || null;
 
-        // Verificar se o técnico existe
         if (tecnico_id) {
             db.get(`SELECT id, nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tecnico) => {
                 if (err) return handleDBError(res, err);
@@ -1175,10 +1144,7 @@ app.post('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
             db.run(`INSERT INTO avarias (maquina_id, tipo_avaria, notas, data_agendada) VALUES (?, ?, ?, ?)`,
                 [maquina_id, tipo_avaria, notas, data_agendada],
                 function (err) {
-                    if (err) {
-                        console.error('[DB ERROR] Falha ao inserir avaria sem técnico:', err);
-                        return handleDBError(res, err, "Erro ao gravar na base de dados. Verifique se todos os campos estão corretos.");
-                    }
+                    if (err) return handleDBError(res, err, "Erro ao gravar na base de dados.");
                     securityLog('AVARIA_REPORTED_BY_ADMIN', { id: this.lastID, maquina_id });
                     res.status(201).json({ id: this.lastID, message: "Avaria reportada" });
                 }
@@ -1191,7 +1157,7 @@ app.put('/api/avarias/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     db.run(`UPDATE avarias SET arquivada = 1 WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
-        res.json({ message: "Avaria arquivada (removida do dashboard)", id });
+        res.json({ message: "Avaria arquivada", id });
     });
 });
 
@@ -1206,7 +1172,6 @@ app.put('/api/avarias/:id/agendamento', authenticateJWT, isAdmin, (req, res) => 
         });
 });
 
-// 🔒 SEGURANÇA: Validar se técnico existe antes de atribuir
 app.put('/api/avarias/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { tecnico_id } = req.body;
@@ -1215,12 +1180,10 @@ app.put('/api/avarias/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
         return res.status(400).json({ error: "ID do técnico é obrigatório" });
     }
 
-    // Verificar se o técnico existe
     db.get(`SELECT id, nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tecnico) => {
         if (err) return handleDBError(res, err);
         if (!tecnico) return res.status(404).json({ error: "Técnico não encontrado" });
 
-        // Buscar detalhes da avaria para o e-mail
         const avariaQuery = `
             SELECT (m.marca || ' - ' || m.modelo) as maquina_nome, c.nome as cliente_nome, a.notas
             FROM avarias a
@@ -1236,7 +1199,6 @@ app.put('/api/avarias/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
                 if (err) return handleDBError(res, err);
                 securityLog('AVARIA_ATRIBUIDA', { avaria_id: id, tecnico_id });
 
-                // Enviar notificação por e-mail
                 if (tecnico.email && avaria) {
                     sendAssignmentEmail(tecnico.email, tecnico.nome, avaria.maquina_nome, avaria.cliente_nome, avaria.notas, 'avaria');
                 }
@@ -1271,9 +1233,7 @@ app.put('/api/avarias/:id/status', authenticateJWT, isAdminOrTecnico, (req, res)
         }
     } else if (estado === 'pausada') {
         if (req.body.motivo_pausa) {
-            query = `UPDATE avarias SET estado = ?, relatorio = COALESCE(relatorio || '
-
-', '') || ?, data_hora_pausa = CURRENT_TIMESTAMP WHERE id = ?`;
+            query = `UPDATE avarias SET estado = ?, relatorio = COALESCE(relatorio || '\n\n', '') || ?, data_hora_pausa = CURRENT_TIMESTAMP WHERE id = ?`;
             const dataS = new Date().toLocaleString('pt-PT');
             const stamp = `[Reparação Pausada em ${dataS}]: ${req.body.motivo_pausa}`;
             params.push(stamp, id);
@@ -1293,17 +1253,12 @@ app.put('/api/avarias/:id/status', authenticateJWT, isAdminOrTecnico, (req, res)
     });
 });
 
-// Salvar rascunho de relatório
+// Salvar rascunho de relatório de avaria
 app.put('/api/tecnico/avarias/:id/relatorio', authenticateJWT, isTecnico, (req, res) => {
     const { id } = req.params;
     const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
     const techId = req.user.id;
 
-    console.log(`[DEBUG] Salvando relatório para ID ${id}. Horas: ${horas_trabalho}`);
-    console.log(`[DEBUG] Assinatura Cliente (len): ${assinatura_cliente ? assinatura_cliente.length : 0}`);
-    console.log(`[DEBUG] Assinatura Técnico (len): ${assinatura_tecnico ? assinatura_tecnico.length : 0}`);
-
-    // Verificar se o técnico é o responsável pela avaria e se não está submetido
     db.get(`SELECT tecnico_id, relatorio_submetido FROM avarias WHERE id = ?`, [id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Avaria não encontrada" });
@@ -1314,22 +1269,18 @@ app.put('/api/tecnico/avarias/:id/relatorio', authenticateJWT, isTecnico, (req, 
 
         db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ?`,
             [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id], function (err) {
-                if (err) {
-                    console.error(`[DEBUG ERROR] Falha ao atualizar ID ${id}:`, err);
-                    return handleDBError(res, err);
-                }
-                console.log(`[DEBUG] ID ${id} atualizado com sucesso. Horas gravadas: ${horasNum}`);
+                if (err) return handleDBError(res, err);
                 res.json({ message: "Rascunho salvo com sucesso" });
             });
     });
 });
 
-// Submeter relatório definitivamente
+// Submeter relatório de avaria
 app.post('/api/tecnico/avarias/:id/submeter-relatorio', authenticateJWT, isTecnico, (req, res) => {
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT tecnico_id, relatorio_submetido, relatorio FROM avarias WHERE id = ?`, [id], (err, row) => {
+    db.get(`SELECT tecnico_id, relatorio_submetido FROM avarias WHERE id = ?`, [id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Avaria não encontrada" });
         if (row.tecnico_id !== techId) return res.status(403).json({ error: "Acesso negado" });
@@ -1338,12 +1289,12 @@ app.post('/api/tecnico/avarias/:id/submeter-relatorio', authenticateJWT, isTecni
         db.run(`UPDATE avarias SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
             if (err) return handleDBError(res, err);
             securityLog('RELATORIO_SUBMETIDO', { avaria_id: id, tecnico_id: techId });
-            res.json({ message: "Relatório submetido com sucesso. Ficou agora visível para o Administrador." });
+            res.json({ message: "Relatório submetido com sucesso." });
         });
     });
 });
 
-// Endpoint para Detalhes Completos do Relatório (PDF)
+// Detalhes Completos do Relatório de avaria
 app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const { id } = req.params;
@@ -1367,7 +1318,6 @@ app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Intervenção não encontrada" });
 
-        // Buscar fotos
         db.all(`SELECT id, caminho FROM fotos_relatorio WHERE avaria_id = ?`, [id], (err, fotos) => {
             if (err) return handleDBError(res, err);
             row.fotos = fotos || [];
@@ -1416,7 +1366,7 @@ app.get('/api/historico/avarias', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
-// Atualizar estado de faturação
+// Atualizar estado de faturação de avaria
 app.put('/api/avarias/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { estado_faturacao } = req.body;
@@ -1470,8 +1420,9 @@ app.post('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
 
         if (tecnico_id) {
             db.get(`SELECT nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+                if (err || !tech) return;
                 db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
-                    if (tech && tech.email) {
+                    if (tech.email) {
                         sendAssignmentEmail(tech.email, tech.nome, `${tipo_servico} (${tipo_camiao})`, client ? client.nome : 'Cliente', notas, 'servico');
                     }
                 });
@@ -1485,7 +1436,13 @@ app.put('/api/servicos/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { tecnico_id } = req.body;
 
+    // 🔒 CORREÇÃO: validar que tecnico_id foi enviado
+    if (!tecnico_id) {
+        return res.status(400).json({ error: "ID do técnico é obrigatório" });
+    }
+
     db.get(`SELECT id, nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+        if (err) return handleDBError(res, err);
         if (!tech) return res.status(404).json({ error: "Técnico não encontrado" });
 
         db.run(`UPDATE servicos SET tecnico_id = ? WHERE id = ?`, [tecnico_id, id], function (err) {
@@ -1494,7 +1451,7 @@ app.put('/api/servicos/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
             db.get(`SELECT s.tipo_servico, s.tipo_camiao, s.notas, c.nome as cliente_nome 
                    FROM servicos s JOIN clientes c ON s.cliente_id = c.id 
                    WHERE s.id = ?`, [id], (err, srv) => {
-                if (srv && tech.email) {
+                if (!err && srv && tech.email) {
                     sendAssignmentEmail(tech.email, tech.nome, `${srv.tipo_servico} (${srv.tipo_camiao})`, srv.cliente_nome, srv.notas, 'servico');
                 }
             });
@@ -1559,9 +1516,16 @@ app.put('/api/servicos/:id/agendamento', authenticateJWT, isAdmin, (req, res) =>
         });
 });
 
+// 🔒 CORREÇÃO: Validação do estado de faturação de serviços
 app.put('/api/servicos/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { estado_faturacao } = req.body;
+
+    const allowed = ['Por Faturar', 'Faturado', 'Oferta', 'Garantia'];
+    if (!allowed.includes(estado_faturacao)) {
+        return res.status(400).json({ error: "Estado de faturação inválido" });
+    }
+
     db.run(`UPDATE servicos SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], (err) => {
         if (err) return handleDBError(res, err);
         res.json({ message: "Faturação atualizada" });
@@ -1608,7 +1572,6 @@ app.get('/api/servicos/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Serviço não encontrado" });
 
-        // Buscar fotos
         db.all(`SELECT id, caminho FROM fotos_relatorio WHERE servico_id = ?`, [id], (err, fotos) => {
             if (err) return handleDBError(res, err);
             row.fotos = fotos || [];
@@ -1680,6 +1643,7 @@ app.post('/api/manutencoes', authenticateJWT, isAdmin, (req, res) => {
 
             if (tecnico_id) {
                 db.get(`SELECT nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+                    if (err || !tech) return;
                     db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
                         if (tech && client) {
                             sendAssignmentEmail(tech.email, tech.nome, 'Manutenção Geral', client.nome, notas, 'manutencao');
@@ -1767,9 +1731,16 @@ app.put('/api/manutencoes/:id/agendamento', authenticateJWT, isAdmin, (req, res)
         });
 });
 
+// 🔒 CORREÇÃO: Validação do estado de faturação de manutenções
 app.put('/api/manutencoes/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { estado_faturacao } = req.body;
+
+    const allowed = ['Por Faturar', 'Faturado', 'Oferta', 'Garantia'];
+    if (!allowed.includes(estado_faturacao)) {
+        return res.status(400).json({ error: "Estado de faturação inválido" });
+    }
+
     db.run(`UPDATE manutencoes SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], (err) => {
         if (err) return handleDBError(res, err);
         res.json({ message: "Faturação da manutenção atualizada" });
@@ -1838,16 +1809,28 @@ app.get('/api/manutencoes/:id/detalhes-relatorio', authenticateJWT, (req, res) =
     });
 });
 
+// 🔒 CORREÇÃO: relatorio de manutenção — validar submissão + parse horas
 app.put('/api/tecnico/manutencoes/:id/relatorio', authenticateJWT, isTecnico, (req, res) => {
     const { id } = req.params;
     const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
     const techId = req.user.id;
 
-    db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ? AND tecnico_id = ?`,
-        [relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, id, techId], function (err) {
-            if (err) return handleDBError(res, err);
-            res.json({ message: "Rascunho de manutenção salvo" });
-        });
+    db.get(`SELECT tecnico_id, relatorio_submetido FROM manutencoes WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Manutenção não encontrada" });
+        if (row.tecnico_id !== techId) return res.status(403).json({ error: "Acesso negado" });
+        // 🔒 CORREÇÃO: verificar se já foi submetido (igual às outras rotas)
+        if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já foi submetido e não pode ser editado." });
+
+        // 🔒 CORREÇÃO: parse correto das horas (igual às outras rotas)
+        const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
+
+        db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ? AND tecnico_id = ?`,
+            [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id, techId], function (err) {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Rascunho de manutenção salvo" });
+            });
+    });
 });
 
 app.post('/api/tecnico/manutencoes/:id/submeter-relatorio', authenticateJWT, isTecnico, (req, res) => {
@@ -1855,6 +1838,7 @@ app.post('/api/tecnico/manutencoes/:id/submeter-relatorio', authenticateJWT, isT
     const techId = req.user.id;
     db.run(`UPDATE manutencoes SET relatorio_submetido = 1 WHERE id = ? AND tecnico_id = ?`, [id, techId], function (err) {
         if (err) return handleDBError(res, err);
+        securityLog('RELATORIO_MANUTENCAO_SUBMETIDO', { manutencao_id: id, tecnico_id: techId });
         res.json({ message: "Relatório de manutenção submetido" });
     });
 });
@@ -1879,26 +1863,37 @@ app.post('/api/tecnico/upload-fotos', authenticateJWT, isTecnico, (req, res, nex
             return res.status(400).json({ error: "ID da avaria, serviço ou manutenção é obrigatório" });
         }
 
-        const id = avaria_id || servico_id || manutencao_id;
+        const techId = req.user.id;
+        const targetId = avaria_id || servico_id || manutencao_id;
         const column = avaria_id ? 'avaria_id' : (servico_id ? 'servico_id' : 'manutencao_id');
+        const table = avaria_id ? 'avarias' : (servico_id ? 'servicos' : 'manutencoes');
 
-        // Inserir cada foto na base de dados
-        const stmt = db.prepare(`INSERT INTO fotos_relatorio (${column}, caminho) VALUES (?, ?)`);
-        const paths = [];
-
-        if (req.files) {
-            req.files.forEach(file => {
-                const caminho = `/uploads/reports/${file.filename}`;
-                stmt.run(id, caminho);
-                paths.push(caminho);
-            });
-        }
-
-        stmt.finalize((err) => {
+        // 🔒 CORREÇÃO: Verificar que o id pertence ao técnico autenticado antes de inserir fotos
+        db.get(`SELECT tecnico_id FROM ${table} WHERE id = ?`, [targetId], (err, row) => {
             if (err) return handleDBError(res, err);
-            const type = avaria_id ? 'avaria' : (servico_id ? 'servico' : 'manutencao');
-            securityLog('PHOTOS_UPLOADED', { id, count: req.files ? req.files.length : 0, type });
-            res.json({ message: "Fotos enviadas com sucesso", paths });
+            if (!row) return res.status(404).json({ error: "Tarefa não encontrada" });
+            if (row.tecnico_id !== techId) {
+                securityLog('UNAUTHORIZED_PHOTO_UPLOAD', { tecnico_id: techId, target_id: targetId, table });
+                return res.status(403).json({ error: "Acesso negado: esta tarefa não lhe pertence." });
+            }
+
+            const stmt = db.prepare(`INSERT INTO fotos_relatorio (${column}, caminho) VALUES (?, ?)`);
+            const paths = [];
+
+            if (req.files) {
+                req.files.forEach(file => {
+                    const caminho = `/uploads/reports/${file.filename}`;
+                    stmt.run(targetId, caminho);
+                    paths.push(caminho);
+                });
+            }
+
+            stmt.finalize((err) => {
+                if (err) return handleDBError(res, err);
+                const type = avaria_id ? 'avaria' : (servico_id ? 'servico' : 'manutencao');
+                securityLog('PHOTOS_UPLOADED', { id: targetId, count: req.files ? req.files.length : 0, type });
+                res.json({ message: "Fotos enviadas com sucesso", paths });
+            });
         });
     });
 });
@@ -1927,7 +1922,6 @@ app.delete('/api/tecnico/fotos/:id', authenticateJWT, isTecnico, (req, res) => {
         db.run(`DELETE FROM fotos_relatorio WHERE id = ?`, [id], function (err) {
             if (err) return handleDBError(res, err);
 
-            // As fotos agora estão na raiz /uploads, não em /public/uploads
             const relativePath = row.caminho.startsWith('/') ? row.caminho.substring(1) : row.caminho;
             const fullPath = path.join(__dirname, relativePath);
             fs.unlink(fullPath, (err) => {
@@ -1997,6 +1991,7 @@ app.get('/api/agendamentos', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
+// 🔒 CORREÇÃO: Agendamentos do técnico — passava [techId, techId] com 3 placeholders. Corrigido para [techId, techId, techId]
 app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
     const query = `
@@ -2031,7 +2026,8 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
 
         ORDER BY data_agendada ASC
     `;
-    db.all(query, [techId, techId], (err, rows) => {
+    // 🔒 CORREÇÃO: 3 parâmetros para os 3 placeholders (antes era só 2 e as manutenções não apareciam)
+    db.all(query, [techId, techId, techId], (err, rows) => {
         if (err) return handleDBError(res, err);
         res.json(rows);
     });
@@ -2088,9 +2084,8 @@ app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
-// --- TECNICOS ROUTES --- //
+// --- TECNICOS ROUTES ---
 
-// 🔒 SEGURANÇA: Não retornar passwords
 app.get('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
     db.all(`SELECT id, nome, especialidade, telefone, email FROM tecnicos`, [], (err, rows) => {
         if (err) return handleDBError(res, err);
@@ -2101,7 +2096,6 @@ app.get('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
 app.post('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
     let { nome, especialidade, telefone, email } = req.body;
 
-    // 🔒 SEGURANÇA: Sanitização
     nome = sanitizeString(nome);
     especialidade = sanitizeString(especialidade);
     telefone = sanitizeString(telefone, 15);
@@ -2119,7 +2113,6 @@ app.post('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
         return res.status(400).json({ error: "Telefone deve conter exatamente 9 dígitos numéricos" });
     }
 
-    // 🔒 SEGURANÇA: Gerar palavra-passe simples (6 dígitos) pois será alterada
     const generatedPassword = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPwd = bcrypt.hashSync(generatedPassword, 10);
 
@@ -2139,7 +2132,7 @@ app.post('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
                 especialidade,
                 telefone,
                 email,
-                tempPassword: generatedPassword // Retornar a pass temporária para o admin
+                tempPassword: generatedPassword
             });
         });
 });
@@ -2148,7 +2141,6 @@ app.put('/api/tecnicos/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     let { nome, especialidade, telefone, email, password } = req.body;
 
-    // 🔒 SEGURANÇA: Sanitização
     nome = sanitizeString(nome);
     especialidade = sanitizeString(especialidade);
     telefone = sanitizeString(telefone, 15);
@@ -2186,7 +2178,7 @@ app.delete('/api/tecnicos/:id', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
-// --- PORTAL DO TÉCNICO (Protected by JWT) --- //
+// --- PORTAL DO TÉCNICO ---
 
 app.get('/api/tecnico/avarias', authenticateJWT, isTecnico, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -2261,7 +2253,6 @@ app.put('/api/tecnico/password', authenticateJWT, isTecnico, (req, res) => {
 
     if (!oldPassword || !newPassword) return res.status(400).json({ error: "Preencha a password atual e a nova password" });
 
-    // 🔒 SEGURANÇA: Validar força da nova password
     if (newPassword.length < 8) {
         return res.status(400).json({ error: "Nova password deve ter no mínimo 8 caracteres" });
     }
@@ -2282,28 +2273,22 @@ app.put('/api/tecnico/password', authenticateJWT, isTecnico, (req, res) => {
     });
 });
 
-// --- PUBLIC ROUTES (Client mobile) --- //
-
-// --- PUBLIC ROUTES (Client mobile) --- //
+// --- PUBLIC ROUTES ---
 
 app.get('/api/public/maquinas/:uuid', authenticateJWT, (req, res) => {
     const { uuid } = req.params;
 
-    // 🔒 SEGURANÇA: Validar UUID
     if (!isValidUUID(uuid)) {
         return res.status(400).json({ error: "UUID inválido" });
     }
 
-    // Se for um cliente, só pode ver se a máquina pertencer a ele
-    let query = `SELECT m.id, (m.marca || ' - ' || m.modelo) as nome, m.cliente_id FROM maquinas m WHERE m.uuid = ?`;
-
-    db.get(query, [uuid], (err, row) => {
+    db.get(`SELECT m.id, (m.marca || ' - ' || m.modelo) as nome, m.cliente_id FROM maquinas m WHERE m.uuid = ?`, [uuid], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Máquina não encontrada" });
 
         if (req.user.role === 'cliente') {
             if (row.cliente_id !== req.user.cliente_id) {
-                securityLog('UNAUTHORIZED_MACHINE_ACCESS', { user: req.user.id, machine_uuid: uuid, machine_owner: row.cliente_id, user_owner: req.user.cliente_id });
+                securityLog('UNAUTHORIZED_MACHINE_ACCESS', { user: req.user.id, machine_uuid: uuid });
                 return res.status(403).json({ error: "Acesso negado: Esta máquina não pertence à sua lavandaria." });
             }
         }
@@ -2319,17 +2304,14 @@ app.post('/api/public/avarias', authenticateJWT, (req, res) => {
         return res.status(400).json({ error: "Faltam parâmetros" });
     }
 
-    // 🔒 SEGURANÇA: Validar UUID
     if (!isValidUUID(maquina_id)) {
         return res.status(400).json({ error: "UUID de máquina inválido" });
     }
 
-    // Validar tipo_avaria
     if (!Number.isInteger(tipo_avaria) || tipo_avaria < 1 || tipo_avaria > 10) {
         return res.status(400).json({ error: "Tipo de avaria inválido" });
     }
 
-    // Verificar propriedade da máquina se for cliente
     db.get(`SELECT cliente_id, (marca || ' - ' || modelo) as nome FROM maquinas WHERE uuid = ?`, [maquina_id], (err, machine) => {
         if (err) return handleDBError(res, err);
         if (!machine) return res.status(404).json({ error: "Máquina não encontrada" });
@@ -2348,7 +2330,6 @@ app.post('/api/public/avarias', authenticateJWT, (req, res) => {
                 const avariaId = this.lastID;
                 securityLog('AVARIA_REPORTED', { id: avariaId, maquina_id, tipo_avaria, user: req.user.id });
 
-                // Notificar Administradores
                 db.get(`SELECT nome FROM clientes WHERE id = ?`, [machine.cliente_id], (err, clientInfo) => {
                     if (!err && clientInfo) {
                         db.all(`SELECT email FROM administradores WHERE email IS NOT NULL`, [], (err, admins) => {
@@ -2365,7 +2346,7 @@ app.post('/api/public/avarias', authenticateJWT, (req, res) => {
     });
 });
 
-// --- GESTÃO DE FROTA ROUTES ---
+// --- GESTÃO DE FROTA ---
 
 app.get('/api/frota', authenticateJWT, isAdmin, (req, res) => {
     db.all(`SELECT * FROM frota ORDER BY id DESC`, [], (err, rows) => {
@@ -2419,7 +2400,7 @@ app.delete('/api/frota/:id', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
-// Error Handler Global (Ocultar Stack Traces)
+// Error Handler Global
 app.use((err, req, res, next) => {
     console.error('[SERVER ERROR]', err);
     securityLog('UNHANDLED_ERROR', { error: err.message, path: req.path });
@@ -2427,11 +2408,10 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Maclau SERVER v2.2 SECURE is running on port ${PORT}`);
+    console.log(`🚀 Maclau SERVER v3.0 SECURE is running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🔐 Security: CORS, Helmet, Rate Limiting, JWT Expiration ENABLED`);
 
-    // Iniciar verificação de frota
     checkVehicleInspections(); // Corre uma vez no arranque
-    scheduleDailyCheck(); // Agenda para correr todos os dias às 08:00
+    scheduleDailyCheck();     // Agenda para correr todos os dias às 08:00 (sem double-fire)
 });
