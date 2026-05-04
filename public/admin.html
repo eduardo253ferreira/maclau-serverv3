@@ -401,6 +401,24 @@
             align-items: center;
             gap: 8px;
         }
+
+        /* Clickable avaria card */
+        .avaria-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .avaria-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+        .avaria-card button, 
+        .avaria-card .card-notes,
+        .avaria-card a {
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+        }
     </style>
 </head>
 
@@ -1813,6 +1831,16 @@
                 </div>
                 <button type="submit" class="btn-primary w-100">Atualizar Acesso</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Ticket Details -->
+    <div id="modal-ticket-details" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-ticket-details">&times;</span>
+            <div id="ticket-details-content">
+                <!-- JS popula aqui -->
+            </div>
         </div>
     </div>
 

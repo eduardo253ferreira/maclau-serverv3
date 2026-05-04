@@ -69,25 +69,31 @@ function updateRefreshStatus() {
     `;
 }
 
+function refreshActiveDashboard() {
+    // Agora fazemos refresh sempre que solicitado, mesmo em background,
+    // para garantir que os dados estão prontos quando o utilizador mudar de vista.
+    
+    if (currentMainDashboard === 'avarias') loadAvarias();
+    else if (currentMainDashboard === 'servicos') loadServicos();
+    else if (currentMainDashboard === 'manutencoes') loadManutencoes();
+    else if (currentMainDashboard === 'todas') loadTodas();
+    
+    updateRefreshStatus();
+}
+
 function startAutoRefresh() {
+    if (refreshIntervalId) clearInterval(refreshIntervalId);
     refreshIntervalId = setInterval(() => {
         // Não fazer refresh se houver modais abertos
         const openModals = document.querySelectorAll('.modal:not(.hidden)');
         if (openModals.length > 0) return;
 
         if (currentActiveView === 'dashboard') {
-            if (currentMainDashboard === 'avarias') {
-                loadAvarias();
-            } else if (currentMainDashboard === 'servicos') {
-                loadServicos();
-            } else if (currentMainDashboard === 'manutencoes') {
-                loadManutencoes();
-            } else if (currentMainDashboard === 'todas') {
-                loadTodas();
-            }
-            updateRefreshStatus();
+            refreshActiveDashboard();
+        } else if (currentActiveView === 'agendamentos') {
+            loadAgendamentos();
         }
-    }, 30000); // 30 segundos
+    }, 10000); // 10 segundos
 }
 
 // --- Funções de Gestão (Globais para onclick) ---
@@ -97,7 +103,7 @@ async function arquivarAvaria(id, event) {
     if (!confirm('Deseja limpar esta avaria resolvida do dashboard? Ela continuará registada na base de dados.')) return;
     try {
         await apiFetch(`/avarias/${id}/arquivar`, { method: 'PUT' });
-        loadAvarias();
+        refreshActiveDashboard();
     } catch (e) { showNotification(e.message, true); }
 }
 
@@ -473,6 +479,117 @@ function openFullNoteModal(note) {
     openModal('modal-view-note');
 }
 
+window.openTicketDetailsModal = function(task) {
+    const content = document.getElementById('ticket-details-content');
+    if (!content) return;
+    
+    let typeLabel = '';
+    let typeColor = '';
+    let icon = '';
+    let titleStr = '';
+    let subTitleStr = '';
+    
+    if (task._type === 'avaria') {
+        typeLabel = 'Avaria';
+        typeColor = 'var(--accent)';
+        icon = 'ph-wrench';
+        titleStr = task.maquina_nome || 'Máquina Removida';
+        subTitleStr = task.tipo_avaria === 1 ? 'Elétrica' : (task.tipo_avaria === 3 ? 'Mecânica' : 'Outra');
+    } else if (task._type === 'servico') {
+        typeLabel = 'Serviço';
+        typeColor = '#1e3a8a';
+        icon = 'ph-truck';
+        titleStr = task.tipo_servico || task.title || 'Serviço Externo';
+        subTitleStr = `Camião: ${task.tipo_camiao || '---'}`;
+    } else {
+        typeLabel = 'Manutenção';
+        typeColor = '#7c3aed';
+        icon = 'ph-washing-machine';
+        titleStr = task.cliente_nome || task.title;
+        subTitleStr = 'Manutenção Geral';
+    }
+
+    const statusMap = {
+        'pendente': { label: 'Aguardando Início', color: 'var(--danger)' },
+        'em resolução': { label: 'Em Resolução', color: 'var(--warning)' },
+        'pausada': { label: 'Pausada', color: '#ca8a04' },
+        'resolvida': { label: 'Resolvida', color: '#10b981' }
+    };
+    
+    const status = statusMap[task.estado] || { label: task.estado ? task.estado.toUpperCase() : 'AGENDADO', color: 'var(--text-secondary)' };
+
+    content.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--border-color); padding-bottom:15px;">
+            <div style="background:${typeColor}; color:white; width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px;">
+                <i class="ph-bold ${icon}"></i>
+            </div>
+            <div>
+                <h2 style="margin:0; font-size:18px;">Detalhes do Ticket #${task.id ? task.id.toString().padStart(5, '0') : '---'}</h2>
+                <span style="font-size:12px; font-weight:700; color:${typeColor}; text-transform:uppercase;">${typeLabel}</span>
+            </div>
+            <div style="margin-left:auto; text-align:right;">
+                <span style="display:inline-block; padding:4px 10px; border-radius:6px; background:${status.color}15; color:${status.color}; font-size:12px; font-weight:700;">${status.label}</span>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+            <div>
+                <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-user"></i> Cliente</h3>
+                <p style="margin:0; font-weight:600; font-size:15px;">${escapeHTML(task.cliente_nome)}</p>
+                ${task.cliente_morada ? `<p style="margin:4px 0 0 0; font-size:13px; color:var(--accent);"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.cliente_morada)}" target="_blank" style="text-decoration:none; color:inherit;"><i class="ph ph-map-pin"></i> ${escapeHTML(task.cliente_morada)}</a></p>` : ''}
+            </div>
+            <div>
+                <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-calendar"></i> Datas</h3>
+                ${task.data_hora ? `<p style="margin:0; font-size:13px;"><strong>Reportado:</strong> ${new Date(task.data_hora).toLocaleString('pt-PT')}</p>` : ''}
+                ${task.data_agendada ? `<p style="margin:4px 0 0 0; font-size:13px; color:var(--primary-color);"><strong>Agendado:</strong> ${new Date(task.data_agendada).toLocaleString('pt-PT')}</p>` : ''}
+            </div>
+        </div>
+
+        <div style="background:#f8fafc; padding:15px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:20px;">
+            <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-info"></i> Informação</h3>
+            <p style="margin:0; font-weight:600;">${escapeHTML(titleStr)}</p>
+            <p style="margin:4px 0 0 0; font-size:12px; color:var(--text-secondary);">${subTitleStr}</p>
+            <p style="margin:8px 0 0 0; font-size:13px; color:var(--accent);"><strong>Técnico Atribuído:</strong> ${escapeHTML(task.tecnico_nome || 'Não Atribuído')}</p>
+        </div>
+
+        ${task.notas ? `
+        <div style="margin-bottom:20px;">
+            <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-note"></i> Notas do Admin</h3>
+            <div style="background:#fffbeb; border-left:4px solid #f59e0b; padding:12px; border-radius:4px; font-size:14px; color:#92400e; line-height:1.5; white-space:pre-wrap;">${escapeHTML(task.notas)}</div>
+        </div>
+        ` : ''}
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:25px;">
+            ${(task.estado === 'pendente' || task.estado === 'pausada') ? `
+                <button class="btn-secondary" id="btn-atribuir-from-modal" style="width:auto; padding:8px 20px;">
+                    <i class="ph ph-user-plus"></i> Atribuir Técnico
+                </button>
+            ` : ''}
+            <button class="btn-primary" id="btn-close-ticket-details" style="width:auto; padding:8px 25px;">Fechar</button>
+        </div>
+    `;
+
+    // Listeners para os botões dentro do modal
+    const btnFechar = document.getElementById('btn-close-ticket-details');
+    if (btnFechar) {
+        btnFechar.onclick = () => closeModal('modal-ticket-details');
+    }
+
+    // Listener para o botão de atribuir técnico dentro do modal
+    const btnAtribuir = document.getElementById('btn-atribuir-from-modal');
+    if (btnAtribuir) {
+        btnAtribuir.onclick = () => {
+            document.getElementById('atribuir-avaria-id').value = task.id;
+            document.getElementById('atribuir-type').value = task._type;
+            document.getElementById('atribuir-tecnico-select').value = task.tecnico_id || '';
+            closeModal('modal-ticket-details');
+            openModal('modal-atribuir-tecnico');
+        };
+    }
+
+    openModal('modal-ticket-details');
+};
+
 // Editar Agendamento Listeners
 document.addEventListener('DOMContentLoaded', () => {
     const btnEditAgendamento = document.getElementById('btn-edit-agendamento');
@@ -514,15 +631,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 showNotification('Agendamento atualizado com sucesso!');
+                showNotification('Agendamento atualizado!');
                 closeModal('modal-edit-agendamento');
-
-                // Recarregar calendário
-                if (calendar) {
-                    loadAgendamentos();
-                }
-                // Refresh dashboards if needed
-                if (currentMainDashboard === 'avarias') loadAvarias();
-                else loadServicos();
+                refreshActiveDashboard();
+                loadAgendamentos();
 
             } catch (err) {
                 showNotification(err.message, true);
@@ -613,16 +725,8 @@ function createAvariaCard(a) {
         card.appendChild(btnArchive);
     }
 
-    if (a.estado === 'pendente' || a.estado === 'pausada') {
-        card.onclick = () => {
-            document.getElementById('atribuir-avaria-id').value = a.id;
-            document.getElementById('atribuir-type').value = 'avaria';
-            document.getElementById('atribuir-tecnico-select').value = a.tecnico_id || '';
-            openModal('modal-atribuir-tecnico');
-        };
-    } else {
-        card.style.cursor = 'default';
-    }
+    card.onclick = () => openTicketDetailsModal({...a, _type: 'avaria'});
+    
     return card;
 }
 
@@ -702,10 +806,7 @@ document.getElementById('form-atribuir-tecnico').addEventListener('submit', asyn
         });
         showNotification('Técnico atribuído!');
         closeModal('modal-atribuir-tecnico');
-        
-        if (type === 'servico') loadServicos();
-        else if (type === 'manutencao') loadManutencoes();
-        else loadAvarias();
+        refreshActiveDashboard();
     } catch (e) {
         showNotification(e.message, true);
     }
@@ -724,7 +825,7 @@ document.getElementById('form-status-avaria').addEventListener('submit', async (
         });
         showNotification('Estado atualizado!');
         closeModal('modal-status-avaria');
-        loadAvarias(); // refresh
+        refreshActiveDashboard();
     } catch (e) {
         showNotification(e.message, true);
     }
@@ -1292,16 +1393,8 @@ function createServicoCard(s) {
         card.appendChild(btnArchive);
     }
 
-    if (s.estado === 'pendente' || s.estado === 'pausada') {
-        card.onclick = () => {
-            document.getElementById('atribuir-avaria-id').value = s.id;
-            document.getElementById('atribuir-type').value = 'servico';
-            document.getElementById('atribuir-tecnico-select').value = s.tecnico_id || '';
-            openModal('modal-atribuir-tecnico');
-        };
-    } else {
-        card.style.cursor = 'default';
-    }
+    card.onclick = () => openTicketDetailsModal({...s, _type: 'servico'});
+
     return card;
 }
 
@@ -1310,7 +1403,7 @@ async function arquivarServico(id, event) {
     if (!confirm('Deseja limpar este serviço resolvido do dashboard?')) return;
     try {
         await apiFetch(`/servicos/${id}/arquivar`, { method: 'PUT' });
-        loadServicos();
+        refreshActiveDashboard();
     } catch (e) { showNotification(e.message, true); }
 }
 
@@ -1389,14 +1482,10 @@ function createManutencaoCard(m) {
         btnArchive.innerHTML = '<i class="ph ph-x"></i>';
         btnArchive.onclick = (e) => arquivarManutencao(m.id, e);
         card.appendChild(btnArchive);
-    } else {
-        card.onclick = () => {
-            document.getElementById('atribuir-avaria-id').value = m.id;
-            document.getElementById('atribuir-type').value = 'manutencao';
-            document.getElementById('atribuir-tecnico-select').value = m.tecnico_id || '';
-            openModal('modal-atribuir-tecnico');
-        };
     }
+
+    card.onclick = () => openTicketDetailsModal({...m, _type: 'manutencao'});
+    
     return card;
 }
 
@@ -1625,13 +1714,13 @@ async function loadHistorico() {
             tr.querySelector('.col-tech').textContent = a.tecnico_nome || 'Não Atribuído';
             tr.querySelector('.col-client').textContent = a.cliente_nome || 'Sem Cliente';
             
-            let badgeColor = 'var(--accent)';
+            let badgeColor = '#ef4444'; // Vermelho para Avaria
             let typeLabel = 'AVARIA';
-            if (a.type === 'servico') { badgeColor = '#1e3a8a'; typeLabel = 'SERVIÇO'; }
+            if (a.type === 'servico') { badgeColor = '#3b82f6'; typeLabel = 'SERVIÇO'; }
             else if (a.type === 'manutencao') { badgeColor = '#7c3aed'; typeLabel = 'MANUTENÇÃO'; }
 
             tr.querySelector('.col-machine').innerHTML = `
-                <span style="font-size:10px; font-weight:700; background: ${badgeColor}22; color: ${badgeColor}; padding:2px 6px; border-radius:4px; margin-right:5px; vertical-align:middle;">${typeLabel}</span>
+                <span style="font-size:10px; font-weight:700; background: ${badgeColor}15; color: ${badgeColor}; border: 1px solid ${badgeColor}33; padding:2px 8px; border-radius:4px; margin-right:8px; vertical-align:middle;">${typeLabel}</span>
                 <span style="vertical-align:middle;">${escapeHTML(a.maquina_nome || '---')}</span>
             `;
 
@@ -2083,7 +2172,7 @@ document.getElementById('form-report-avaria').addEventListener('submit', async (
         showNotification('Avaria reportada com sucesso!');
         closeModal('modal-report-avaria');
         document.getElementById('form-report-avaria').reset();
-        loadAvarias();
+        refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
         showNotification(e.message, true);
@@ -2116,7 +2205,7 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
         showNotification('Serviço reportado com sucesso!');
         closeModal('modal-report-servico');
         document.getElementById('form-report-servico').reset();
-        loadServicos();
+        refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
         showNotification(e.message, true);
@@ -2210,7 +2299,7 @@ document.getElementById('form-report-manutencao').addEventListener('submit', asy
         showNotification('Manutenção criada com sucesso!');
         closeModal('modal-report-manutencao');
         document.getElementById('form-report-manutencao').reset();
-        loadManutencoes();
+        refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
         showNotification(e.message, true);

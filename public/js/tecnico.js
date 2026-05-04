@@ -33,18 +33,26 @@ function updateRefreshStatus() {
     `;
 }
 
+function refreshTechnicianDashboard() {
+    const dashboardView = document.getElementById('view-dashboard');
+    const historicoView = document.getElementById('view-historico');
+    const agendamentosView = document.getElementById('view-agendamentos');
+
+    // Refresh regardless of visibility to keep background data in sync
+    loadMyTasks();
+    loadHistorico();
+    loadAgendamentos();
+}
+
 function startAutoRefresh() {
     if (refreshIntervalId) clearInterval(refreshIntervalId);
     refreshIntervalId = setInterval(() => {
-        // Não atualizar se houver modais abertos ou se não estiver no dashboard
+        // Não atualizar se houver modais abertos
         const openModals = document.querySelectorAll('.modal:not(.hidden)');
         if (openModals.length > 0) return;
 
-        const dashboardView = document.getElementById('view-dashboard');
-        if (dashboardView && !dashboardView.classList.contains('hidden')) {
-            loadMyTasks();
-        }
-    }, 30000); // 30 segundos
+        refreshTechnicianDashboard();
+    }, 10000); // 10 segundos
 }
 
 // --- Gestão de Cronómetro ---
@@ -383,8 +391,14 @@ window.renderPendingTasks = function() {
         const ehAguardando = (task.estado === 'pendente' || task.estado === 'pausada');
         btn.className = 'btn-status ' + (ehAguardando ? 'btn-resolucao' : 'btn-resolvida');
         btn.innerHTML = ehAguardando ? '<i class="ph ph-play"></i> ' + (task.estado === 'pausada' ? 'Retomar' : 'Começar') : '<i class="ph ph-check"></i> Concluir';
-        btn.onclick = () => updateStatus(task.id, ehAguardando ? 'em resolução' : 'resolvida', task.relatorio, task._type);
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            updateStatus(task.id, ehAguardando ? 'em resolução' : 'resolvida', task.relatorio, task._type);
+        };
         actionsDiv.appendChild(btn);
+
+        // Click no card abre detalhes
+        div.onclick = () => window.openTicketDetailsModal(task);
 
         container.appendChild(div);
     });
@@ -402,6 +416,8 @@ async function updateStatus(id, newStatus, currentText = '', type = 'avaria') {
         if (res.ok) {
             if (newStatus === 'resolvida') {
                 pauseTimer();
+                // Refresh background list immediately so the task disappears while filling report
+                loadMyTasks(); 
                 openRelatorioModal(id, true, currentText, false, '', '', '', type);
             } else {
                 if (newStatus === 'em resolução') startTimer(id, type);
@@ -735,8 +751,7 @@ async function saveRelatorioDraft() {
         if (res.ok) {
             showNotification("Rascunho salvo com sucesso.");
             document.getElementById('modal-relatorio').classList.add('hidden');
-            if (isStatusChange) loadMyTasks();
-        else loadHistorico();
+            refreshTechnicianDashboard();
         } else {
             const data = await res.json();
             throw new Error(data.error || "Erro ao salvar rascunho");
@@ -796,8 +811,7 @@ async function submitRelatorio() {
                 showNotification("Relatório submetido com sucesso!");
                 modalConfirm.classList.add('hidden');
                 document.getElementById('modal-relatorio').classList.add('hidden');
-                if (isStatusChange) loadMyTasks();
-                else loadHistorico();
+                refreshTechnicianDashboard();
             } else {
                 const data = await res.json();
                 throw new Error(data.error || "Erro ao submeter");
@@ -893,18 +907,30 @@ window.renderHistorico = function () {
         const tr = document.createElement('tr');
 
         let maqNome = '';
+        let badgeColor = '#10b981';
+        let typeLabel = 'AVARIA';
+
         if (a._type === 'avaria') {
-            maqNome = `<span style="color:var(--danger); font-weight:700;">[AVARIA]</span> ${escapeHTML(a.maquina_nome || 'Máquina Removida')}`;
+            badgeColor = '#ef4444'; // Vermelho para Avarias
+            typeLabel = 'AVARIA';
+            maqNome = escapeHTML(a.maquina_nome || 'Máquina Removida');
         } else if (a._type === 'servico') {
-            maqNome = `<span style="color:var(--accent); font-weight:700;">[SERVIÇO]</span> ${escapeHTML(a.tipo_servico)}`;
+            badgeColor = '#3b82f6'; // Azul para Serviços
+            typeLabel = 'SERVIÇO';
+            maqNome = escapeHTML(a.tipo_servico);
         } else if (a._type === 'manutencao') {
-            maqNome = `<span style="color:#7c3aed; font-weight:700;">[MANUTENÇÃO]</span>`;
+            badgeColor = '#7c3aed'; // Roxo para Manutenções
+            typeLabel = 'MANUTENÇÃO';
+            maqNome = 'Todas as Máquinas';
         }
 
         tr.innerHTML = `
             <td>${dateStr}</td>
             <td class="col-client"></td>
-            <td class="col-machine">${maqNome}</td>
+            <td class="col-machine">
+                <span style="font-size:10px; font-weight:700; background: ${badgeColor}15; color: ${badgeColor}; border: 1px solid ${badgeColor}33; padding:2px 8px; border-radius:4px; margin-right:8px; vertical-align:middle;">${typeLabel}</span>
+                <span style="vertical-align:middle; font-weight:600; color:var(--text-primary);">${maqNome}</span>
+            </td>
             <td>${hoursToHHmm(a.horas_trabalho)}</td>
             <td class="col-report"><div style="display:flex; gap:5px;"></div></td>
         `;
@@ -1125,7 +1151,7 @@ window.onload = () => {
                     pauseTimer(); // Para o cronómetro ao pausar
                     showNotification("Tarefa pausada.");
                     document.getElementById('modal-pausar').classList.add('hidden');
-                    loadMyTasks();
+                    refreshTechnicianDashboard();
                 } else {
                     const data = await res.json();
                     throw new Error(data.error || "Erro ao pausar.");
@@ -1173,6 +1199,98 @@ window.openFullNoteModal = function(encodedNote) {
     const note = decodeURIComponent(encodedNote);
     document.getElementById('full-note-content').textContent = note;
     document.getElementById('modal-view-note').classList.remove('hidden');
+};
+
+window.openTicketDetailsModal = function(task) {
+    const content = document.getElementById('ticket-details-content');
+    if (!content) return;
+    
+    let typeLabel = '';
+    let typeColor = '';
+    let icon = '';
+    let titleStr = '';
+    let subTitleStr = '';
+    
+    if (task._type === 'avaria') {
+        typeLabel = 'Avaria';
+        typeColor = 'var(--accent)';
+        icon = 'ph-wrench';
+        titleStr = task.maquina_nome;
+        subTitleStr = task.tipo_avaria === 1 ? 'Elétrica' : (task.tipo_avaria === 3 ? 'Mecânica' : 'Outra');
+    } else if (task._type === 'servico') {
+        typeLabel = 'Serviço';
+        typeColor = '#1E4419';
+        icon = 'ph-truck';
+        titleStr = task.tipo_servico || task.title; // Fallback for agendamentos
+        subTitleStr = `Camião: ${task.tipo_camiao || '---'}`;
+    } else {
+        typeLabel = 'Manutenção';
+        typeColor = '#7c3aed';
+        icon = 'ph-washing-machine';
+        titleStr = task.cliente_nome || task.title;
+        subTitleStr = 'Manutenção Geral';
+    }
+
+    const statusMap = {
+        'pendente': { label: 'Aguardando Início', color: 'var(--danger)' },
+        'em resolução': { label: 'Em Resolução', color: 'var(--warning)' },
+        'pausada': { label: 'Pausada', color: '#ca8a04' },
+        'resolvida': { label: 'Resolvida', color: '#10b981' }
+    };
+    
+    const status = statusMap[task.estado] || { label: task.estado ? task.estado.toUpperCase() : 'AGENDADO', color: 'var(--text-secondary)' };
+
+    content.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--border-color); padding-bottom:15px;">
+            <div style="background:${typeColor}; color:white; width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:24px;">
+                <i class="ph-bold ${icon}"></i>
+            </div>
+            <div>
+                <h2 style="margin:0; font-size:18px;">Detalhes do Ticket #${task.id ? task.id.toString().padStart(5, '0') : '---'}</h2>
+                <span style="font-size:12px; font-weight:700; color:${typeColor}; text-transform:uppercase;">${typeLabel}</span>
+            </div>
+            <div style="margin-left:auto; text-align:right;">
+                <span style="display:inline-block; padding:4px 10px; border-radius:6px; background:${status.color}15; color:${status.color}; font-size:12px; font-weight:700;">${status.label}</span>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+            <div>
+                <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-user"></i> Cliente</h3>
+                <p style="margin:0; font-weight:600; font-size:15px;">${escapeHTML(task.cliente_nome)}</p>
+                ${task.cliente_morada ? `<p style="margin:4px 0 0 0; font-size:13px; color:var(--accent);"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.cliente_morada)}" target="_blank" style="text-decoration:none; color:inherit;"><i class="ph ph-map-pin"></i> ${escapeHTML(task.cliente_morada)}</a></p>` : ''}
+            </div>
+            <div>
+                <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-calendar"></i> Datas</h3>
+                ${task.data_hora ? `<p style="margin:0; font-size:13px;"><strong>Reportado:</strong> ${new Date(task.data_hora).toLocaleString('pt-PT')}</p>` : ''}
+                ${task.data_agendada ? `<p style="margin:4px 0 0 0; font-size:13px; color:var(--primary-color);"><strong>Agendado:</strong> ${new Date(task.data_agendada).toLocaleString('pt-PT')}</p>` : ''}
+            </div>
+        </div>
+
+        <div style="background:#f8fafc; padding:15px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:20px;">
+            <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-info"></i> Informação</h3>
+            <p style="margin:0; font-weight:600;">${escapeHTML(titleStr)}</p>
+            <p style="margin:4px 0 0 0; font-size:12px; color:var(--text-secondary);">${subTitleStr}</p>
+        </div>
+
+        ${task.notas ? `
+        <div style="margin-bottom:20px;">
+            <h3 style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;"><i class="ph ph-note"></i> Notas do Admin</h3>
+            <div style="background:#fffbeb; border-left:4px solid #f59e0b; padding:12px; border-radius:4px; font-size:14px; color:#92400e; line-height:1.5; white-space:pre-wrap;">${escapeHTML(task.notas)}</div>
+        </div>
+        ` : ''}
+        
+        <div style="display:flex; justify-content:flex-end; margin-top:25px;">
+            <button class="btn-primary" id="btn-close-ticket-details" style="width:auto; padding:8px 25px;">Fechar</button>
+        </div>
+    `;
+
+    const btnFechar = document.getElementById('btn-close-ticket-details');
+    if (btnFechar) {
+        btnFechar.onclick = () => document.getElementById('modal-ticket-details').classList.add('hidden');
+    }
+
+    document.getElementById('modal-ticket-details').classList.remove('hidden');
 };
 
 // --- Assinatura Digital ---
@@ -1335,6 +1453,8 @@ async function loadAgendamentos() {
                 </div>
                 ${a.notas ? `<div style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px;"><strong style="color:var(--text-main);">Notas:</strong><br>${escapeHTML(a.notas)}</div>` : ''}
             `;
+            // Click no card abre detalhes
+            div.onclick = () => window.openTicketDetailsModal({...a, _type: a.type});
             container.appendChild(div);
         });
     } catch (e) {

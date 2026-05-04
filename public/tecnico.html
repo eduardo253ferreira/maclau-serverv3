@@ -84,6 +84,24 @@
             .dashboard-toggle { width: 100%; }
             .toggle-btn { flex: 1; padding: 10px 5px; font-size: 13px; }
         }
+
+        /* Clickable repair item */
+        .repair-item {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .repair-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+        .repair-item .btn-status, 
+        .repair-item .admin-note-btn,
+        .repair-item a {
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+        }
     </style>
     <link rel="icon" type="image/png" href="img/logo.png">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
@@ -438,6 +456,16 @@
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button type="button" id="btn-cancel-submit" class="btn-secondary" style="flex: 1;">Cancelar</button>
                 <button type="button" id="btn-confirm-submit-action" class="btn-primary" style="flex: 1; background: #059669;">Submeter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ticket Details -->
+    <div id="modal-ticket-details" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-ticket-details">&times;</span>
+            <div id="ticket-details-content">
+                <!-- JS popula aqui -->
             </div>
         </div>
     </div>
