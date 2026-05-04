@@ -1,13 +1,20 @@
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('database.db');
 
-db.all("PRAGMA table_info(avarias)", (err, rows) => {
-    if (err) console.error(err);
-    console.log("Avarias Columns:", rows.map(r => r.name).join(', '));
+const tables = ['clientes', 'avarias', 'servicos', 'manutencoes'];
 
-    db.all("PRAGMA table_info(servicos)", (err, rows) => {
-        if (err) console.error(err);
-        console.log("Servicos Columns:", rows.map(r => r.name).join(', '));
-        db.close();
+tables.forEach(table => {
+    db.all(`PRAGMA table_info(${table})`, (err, rows) => {
+        if (err) {
+            console.error(`Error checking ${table}:`, err);
+            return;
+        }
+        if (rows && rows.length > 0) {
+            console.log(`${table.toUpperCase()} Columns:`, rows.map(r => r.name).join(', '));
+        } else {
+            console.log(`${table.toUpperCase()} does not exist or has no columns.`);
+        }
     });
 });
+
+setTimeout(() => db.close(), 2000);

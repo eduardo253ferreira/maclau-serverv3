@@ -277,7 +277,7 @@
 
             <div class="a4-toolbar">
                 <button type="button" id="btn-save-draft" class="btn-a4-draft">Guardar Rascunho</button>
-                <button type="submit" id="btn-submit-report" class="btn-a4-submit">Submeter ao Admin</button>
+                <button type="button" id="btn-submit-report" class="btn-a4-submit">Submeter ao Admin</button>
             </div>
 
             <div class="a4-sheet" id="a4-report-sheet">
@@ -319,6 +319,14 @@
                     </div>
                 </div>
 
+                <div id="a4-manutencao-maquinas-section" class="a4-editable-section" style="display:none; margin-top: 20px;">
+                    <h3 style="font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ph-bold ph-washing-machine" style="color: var(--accent);"></i> Máquinas Intervencionadas
+                    </h3>
+                    <div id="a4-manutencao-maquinas-list" style="margin-top: 5px;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
                 <div class="a4-editable-section">
                     <h3><i class="ph ph-clipboard-text"></i> Descrição da Intervenção</h3>
                     <div class="a4-editable-area">
@@ -419,7 +427,22 @@
         </div>
     </div>
 
-    <script src="/js/tecnico.js?v=3.1"></script>
+    <!-- Modal Confirmação Submissão -->
+    <div id="modal-confirm-submit" class="modal hidden" style="z-index: 10001;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px;">
+            <i class="ph ph-warning-circle" style="font-size: 48px; color: #f59e0b; margin-bottom: 20px;"></i>
+            <h2 style="margin-bottom: 10px;">Submeter Relatório?</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.5;">
+                Após submeter não poderá fazer mais alterações e o Administrador terá acesso imediato ao mesmo.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" id="btn-cancel-submit" class="btn-secondary" style="flex: 1;">Cancelar</button>
+                <button type="button" id="btn-confirm-submit-action" class="btn-primary" style="flex: 1; background: #059669;">Submeter</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/tecnico.js?v=1.1"></script>
 </body>
 
 </html>

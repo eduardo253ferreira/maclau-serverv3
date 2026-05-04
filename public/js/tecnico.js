@@ -331,7 +331,8 @@ window.renderPendingTasks = function() {
                 </div>
             </div>
             <h3 class="task-machine-name" style="margin-bottom:5px;">${escapeHTML(titleStr)}</h3>
-            <p class="task-client-name" style="font-size:14px; color:var(--text-secondary);">${task._type === 'manutencao' ? 'Todas as Máquinas' : escapeHTML(task.cliente_nome || 'Serviço Externo')}</p>
+            <p class="task-client-name" style="font-size:14px; color:var(--text-secondary); font-weight:600;">${task._type === 'manutencao' ? 'Todas as Máquinas' : escapeHTML(task.cliente_nome || 'Serviço Externo')}</p>
+            ${task.cliente_morada ? `<div style="font-size:13px; color:var(--accent); margin-top:2px;"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.cliente_morada)}" target="_blank" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:4px;"><i class="ph ph-map-pin"></i> ${escapeHTML(task.cliente_morada)}</a></div>` : ''}
             ${agendadoHtml}
             <div style="font-size:12px; color:var(--text-secondary); margin-top:${task.data_agendada ? '4px' : '10px'};">Reportado em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
             ${task.notas ? `<div class="admin-note-btn" style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent); cursor:pointer; transition:background 0.2s;"><strong style="color:var(--text-main);">Notas do Admin:</strong><div style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:4px;">${escapeHTML(task.notas)}</div></div>` : ''}
@@ -623,6 +624,31 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
             document.getElementById('a4-tipo-camiao').textContent = data.tipo_camiao || '---';
         }
 
+        // Handle Manutenção Machines List
+        const mntSection = document.getElementById('a4-manutencao-maquinas-section');
+        const mntList = document.getElementById('a4-manutencao-maquinas-list');
+        if (mntSection && mntList) {
+            if (type === 'manutencao' && data.maquinas && data.maquinas.length > 0) {
+                mntSection.style.display = 'block';
+                mntList.style.display = 'grid';
+                mntList.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
+                mntList.style.gap = '10px';
+                mntList.style.padding = '0';
+                
+                mntList.innerHTML = data.maquinas.map(m => `
+                    <div style="font-size: 12px; background: #f8fafc; padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                        <i class="ph-fill ph-check-circle" style="color: #10b981; font-size: 16px;"></i>
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="font-weight: 700; color: #1e293b; font-size: 13px;">${m.marca} ${m.modelo}</span>
+                            <span style="color: #64748b; font-family: 'Inter', monospace; font-size: 11px;"> - SN: ${m.numero_serie || '---'}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                mntSection.style.display = 'none';
+            }
+        }
+
         // Populate Editable Fields
         textarea.value = currentText || data.relatorio || '';
         pecasArea.value = currentPecas || data.pecas_substituidas || '';
@@ -710,7 +736,7 @@ async function saveRelatorioDraft() {
             showNotification("Rascunho salvo com sucesso.");
             document.getElementById('modal-relatorio').classList.add('hidden');
             if (isStatusChange) loadMyTasks();
-            else loadHistorico();
+        else loadHistorico();
         } else {
             const data = await res.json();
             throw new Error(data.error || "Erro ao salvar rascunho");
@@ -721,50 +747,69 @@ async function saveRelatorioDraft() {
 }
 
 async function submitRelatorio() {
-    const id = document.getElementById('relatorio-avaria-id').value;
-    const type = document.getElementById('relatorio-type').value;
-    const relatorio = document.getElementById('relatorio-texto').value;
-    const pecas_substituidas = document.getElementById('relatorio-pecas').value;
-    const horas_raw = document.getElementById('relatorio-horas').value;
-    const horas_trabalho = HHmmToHours(horas_raw);
-    const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
+    const btnAction = document.getElementById('btn-confirm-submit-action');
+    const modalConfirm = document.getElementById('modal-confirm-submit');
     
-    const canvasCli = document.getElementById('signature-pad');
-    const canvasTec = document.getElementById('signature-pad-tech');
+    // Abrir o modal de confirmação
+    modalConfirm.classList.remove('hidden');
+
+    // Limpar listeners anteriores para evitar submissões duplicadas
+    const newBtnAction = btnAction.cloneNode(true);
+    btnAction.parentNode.replaceChild(newBtnAction, btnAction);
     
-    const assinatura_cliente = isCanvasBlank(canvasCli) ? null : canvasCli.toDataURL('image/png');
-    const assinatura_tecnico = isCanvasBlank(canvasTec) ? null : canvasTec.toDataURL('image/png');
+    document.getElementById('btn-cancel-submit').onclick = () => modalConfirm.classList.add('hidden');
 
-    if (!confirm("Deseja submeter este relatório? Após submeter não poderá fazer mais alterações e o Administrador terá acesso ao mesmo.")) return;
+    newBtnAction.onclick = async () => {
+        const originalText = newBtnAction.textContent;
+        newBtnAction.disabled = true;
+        newBtnAction.textContent = "A submeter...";
+        
+        try {
+            const id = document.getElementById('relatorio-avaria-id').value;
+            const type = document.getElementById('relatorio-type').value;
+            const relatorio = document.getElementById('relatorio-texto').value;
+            const pecas_substituidas = document.getElementById('relatorio-pecas').value;
+            const horas_raw = document.getElementById('relatorio-horas').value;
+            const horas_trabalho = HHmmToHours(horas_raw);
+            const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
+            
+            const canvasCli = document.getElementById('signature-pad');
+            const canvasTec = document.getElementById('signature-pad-tech');
+            
+            const assinatura_cliente = isCanvasBlank(canvasCli) ? null : canvasCli.toDataURL('image/png');
+            const assinatura_tecnico = isCanvasBlank(canvasTec) ? null : canvasTec.toDataURL('image/png');
 
-    try {
-        // Primeiro salvamos o texto atual
-        const draftEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`);
-        await authFetch(draftEndpoint, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico })
-        });
+            // 1. Salvar Rascunho Final
+            const draftEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`);
+            await authFetch(draftEndpoint, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico })
+            });
 
-        // Depois submetemos
-        const submitEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/submeter-relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/submeter-relatorio` : `${API_BASE}/tecnico/avarias/${id}/submeter-relatorio`);
-        const res = await authFetch(submitEndpoint, {
-            method: 'POST'
-        });
+            // 2. Submeter
+            const submitEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/submeter-relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/submeter-relatorio` : `${API_BASE}/tecnico/avarias/${id}/submeter-relatorio`);
+            const res = await authFetch(submitEndpoint, { method: 'POST' });
 
-        if (res.ok) {
-            stopTimer(); // Limpa cronómetro após submeter com sucesso
-            showNotification("Relatório submetido com sucesso!");
-            document.getElementById('modal-relatorio').classList.add('hidden');
-            if (isStatusChange) loadMyTasks();
-            else loadHistorico();
-        } else {
-            const data = await res.json();
-            throw new Error(data.error || "Erro ao submeter");
+            if (res.ok) {
+                stopTimer();
+                showNotification("Relatório submetido com sucesso!");
+                modalConfirm.classList.add('hidden');
+                document.getElementById('modal-relatorio').classList.add('hidden');
+                if (isStatusChange) loadMyTasks();
+                else loadHistorico();
+            } else {
+                const data = await res.json();
+                throw new Error(data.error || "Erro ao submeter");
+            }
+        } catch (e) {
+            console.error("Erro na submissão:", e);
+            showNotification(e.message, true);
+        } finally {
+            newBtnAction.disabled = false;
+            newBtnAction.textContent = originalText;
         }
-    } catch (e) {
-        showNotification(e.message, true);
-    }
+    };
 }
 
 function formatTimeDifference(startStr, endStr) {
@@ -1283,7 +1328,8 @@ async function loadAgendamentos() {
                     <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">${a.estado.toUpperCase()}</span>
                 </div>
                 <h3 style="margin-bottom:5px;">${escapeHTML(a.title)}</h3>
-                <p style="font-size:14px; color:var(--text-secondary);">${escapeHTML(a.cliente_nome)}</p>
+                <p style="font-size:14px; color:var(--text-secondary); font-weight:600;">${escapeHTML(a.cliente_nome)}</p>
+                ${a.cliente_morada ? `<div style="font-size:13px; color:var(--accent); margin-top:2px;"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a.cliente_morada)}" target="_blank" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:4px;"><i class="ph ph-map-pin"></i> ${escapeHTML(a.cliente_morada)}</a></div>` : ''}
                 <div style="margin-top:10px; font-weight:600; color:var(--accent); display:flex; align-items:center; gap:5px;">
                     <i class="ph ph-calendar-blank"></i> ${dateStr}
                 </div>

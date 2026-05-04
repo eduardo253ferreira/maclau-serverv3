@@ -2125,17 +2125,80 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
     }
 });
 
+// Carregar máquinas para o modal de manutenção
+async function loadMachinesForMaintenance() {
+    const clienteId = document.getElementById('report-manutencao-cliente').value;
+    const container = document.getElementById('report-manutencao-maquinas-container');
+
+    if (!clienteId) {
+        container.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
+        return;
+    }
+
+    try {
+        container.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Carregando máquinas...</p>';
+        const maquinas = await apiFetch('/maquinas');
+        const filtradas = maquinas.filter(m => m.cliente_id == clienteId);
+
+        if (filtradas.length === 0) {
+            container.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Nenhuma máquina encontrada para este cliente.</p>';
+        } else {
+            container.innerHTML = '';
+            filtradas.forEach(m => {
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.gap = '10px';
+                div.style.padding = '8px';
+                div.style.borderBottom = '1px solid #edf2f7';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'mnt-maquina-checkbox';
+                checkbox.value = m.id;
+                checkbox.id = `mnt-maq-${m.id}`;
+                checkbox.style.width = '18px';
+                checkbox.style.height = '18px';
+                checkbox.style.cursor = 'pointer';
+
+                const label = document.createElement('label');
+                label.htmlFor = `mnt-maq-${m.id}`;
+                label.style.fontSize = '14px';
+                label.style.cursor = 'pointer';
+                label.style.flex = '1';
+                label.textContent = `${m.marca} - ${m.modelo} (${m.numero_serie || 'S/N'})`;
+
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+    } catch (e) {
+        container.innerHTML = '<p style="font-size: 13px; color: var(--danger); text-align: center;">Erro ao carregar máquinas.</p>';
+    }
+}
+
 // Reportar Manutenção (Manual Admin)
 document.getElementById('form-report-manutencao').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
 
+    const maquina_ids = Array.from(document.querySelectorAll('.mnt-maquina-checkbox:checked')).map(cb => parseInt(cb.value));
+
+    if (maquina_ids.length === 0) {
+        if (!confirm('Não selecionou nenhuma máquina. Deseja reportar manutenção para TODAS as máquinas do cliente?')) {
+            if (btn) btn.disabled = false;
+            return;
+        }
+    }
+
     const payload = {
         cliente_id: document.getElementById('report-manutencao-cliente').value,
         tecnico_id: document.getElementById('report-manutencao-tecnico').value || null,
         notas: document.getElementById('report-manutencao-notas').value,
-        data_agendada: document.getElementById('report-manutencao-agendada').value || null
+        data_agendada: document.getElementById('report-manutencao-agendada').value || null,
+        maquina_ids: maquina_ids
     };
 
     try {
@@ -2183,6 +2246,16 @@ document.getElementById('report-avaria-cliente').addEventListener('change', asyn
     } catch (e) {
         showNotification('Erro ao carregar máquinas', true);
     }
+});
+
+document.getElementById('report-manutencao-cliente').addEventListener('change', loadMachinesForMaintenance);
+
+document.getElementById('btn-mnt-select-all').addEventListener('click', () => {
+    document.querySelectorAll('.mnt-maquina-checkbox').forEach(cb => cb.checked = true);
+});
+
+document.getElementById('btn-mnt-deselect-all').addEventListener('click', () => {
+    document.querySelectorAll('.mnt-maquina-checkbox').forEach(cb => cb.checked = false);
 });
 
 // --- Gestão de Frota ---

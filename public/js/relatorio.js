@@ -80,7 +80,7 @@ function renderReport(data) {
     } else if (reportType === 'manutencao') {
         interventionInfo = `
             <p><strong>Tipo:</strong> Manutenção Preventiva/Geral</p>
-            <p><strong>Parque de Máquinas:</strong> Completo</p>
+            <p><strong>Parque de Máquinas:</strong> ${data.maquinas && data.maquinas.length > 0 ? 'Parcial' : 'Completo'}</p>
         `;
     } else {
         interventionInfo = `
@@ -103,6 +103,7 @@ function renderReport(data) {
             </div>
         </header>
 
+
         <div class="section-grid" style="margin-bottom: 20px; gap: 20px;">
             <div class="info-block">
                 <h3><i class="ph ph-user"></i> Cliente</h3>
@@ -119,6 +120,25 @@ function renderReport(data) {
             </div>
         </div>
 
+        ${data.maquinas && data.maquinas.length > 0 ? `
+        <div class="section" style="margin-top: 20px; margin-bottom: 20px;">
+            <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+                <i class="ph-bold ph-washing-machine" style="color: var(--accent);"></i> Máquinas Intervencionadas
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
+                ${data.maquinas.map(m => `
+                    <div style="font-size: 12px; background: #f8fafc; padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                        <i class="ph-fill ph-check-circle" style="color: #10b981; font-size: 16px;"></i>
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="font-weight: 700; color: #1e293b; font-size: 13px;">${m.marca} ${m.modelo}</span>
+                            <span style="color: #64748b; font-family: 'Inter', monospace; font-size: 11px;"> - SN: ${m.numero_serie || '---'}</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
+
         ${data.notas ? `
         <div class="content-section" style="margin-bottom: 30px;">
             <h3><i class="ph ph-warning-circle"></i> Notas de Reporte (Admin)</h3>
@@ -132,11 +152,17 @@ function renderReport(data) {
         </div>
 
         ${data.pecas_substituidas ? `
-        <div class="content-section" style="margin-bottom: 30px;">
+        <div class="section">
             <h3><i class="ph ph-package"></i> Peças Substituídas</h3>
-            <div class="content-box" style="min-height: 50px;">${data.pecas_substituidas}</div>
+            <div style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6;">${data.pecas_substituidas || 'Nenhuma peça registada.'}</div>
         </div>
         ` : ''}
+
+
+        <div class="section">
+            <h3><i class="ph ph-note"></i> Relatório do Técnico</h3>
+            <div style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6;">${data.relatorio || 'Nenhuma observação registada.'}</div>
+        </div>
 
         ${data.fotos && data.fotos.length > 0 ? `
         <div style="page-break-before: always; padding-top: 20px;">

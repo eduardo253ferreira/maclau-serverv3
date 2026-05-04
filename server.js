@@ -188,7 +188,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // 🔒 SEGURANÇA: Rate Limiting
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200,
+    max: 2000,
     message: { error: "Demasiados pedidos a partir deste IP. Tente mais tarde." },
     standardHeaders: true,
     legacyHeaders: false,
@@ -368,6 +368,14 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 FOREIGN KEY (avaria_id) REFERENCES avarias (id),
                 FOREIGN KEY (servico_id) REFERENCES servicos (id),
                 FOREIGN KEY (manutencao_id) REFERENCES manutencoes (id)
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS manutencao_maquinas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                manutencao_id INTEGER NOT NULL,
+                maquina_id INTEGER NOT NULL,
+                FOREIGN KEY (manutencao_id) REFERENCES manutencoes (id) ON DELETE CASCADE,
+                FOREIGN KEY (maquina_id) REFERENCES maquinas (id) ON DELETE CASCADE
             )`);
 
             db.serialize(() => {
@@ -1536,7 +1544,7 @@ app.get('/api/tecnico/servicos', authenticateJWT, isTecnico, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const techId = req.user.id;
     const query = `
-        SELECT s.*, c.nome as cliente_nome,
+        SELECT s.*, c.nome as cliente_nome, c.morada as cliente_morada,
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
                strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_pausa) as data_hora_pausa
         FROM servicos s
@@ -1549,6 +1557,8 @@ app.get('/api/tecnico/servicos', authenticateJWT, isTecnico, (req, res) => {
     `;
     db.all(query, [techId], (err, rows) => {
         if (err) return handleDBError(res, err);
+        console.log(`[DEBUG] /api/tecnico/servicos rows:`, rows.length);
+        if (rows.length > 0) console.log(`[DEBUG] First row cliente_morada:`, rows[0].cliente_morada);
         res.json(rows);
     });
 });
@@ -1632,28 +1642,67 @@ app.get('/api/manutencoes', authenticateJWT, isAdmin, (req, res) => {
 });
 
 app.post('/api/manutencoes', authenticateJWT, isAdmin, (req, res) => {
-    const { cliente_id, tecnico_id, notas, data_agendada } = req.body;
+    const { cliente_id, tecnico_id, notas, data_agendada, maquina_ids } = req.body;
     if (!cliente_id) return res.status(400).json({ error: "Cliente é obrigatório" });
 
-    db.run(`INSERT INTO manutencoes (cliente_id, tecnico_id, notas, data_agendada) VALUES (?, ?, ?, ?)`,
-        [cliente_id, tecnico_id || null, notas, data_agendada || null],
-        function (err) {
-            if (err) return handleDBError(res, err);
-            const manutencaoId = this.lastID;
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
 
-            if (tecnico_id) {
-                db.get(`SELECT nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
-                    if (err || !tech) return;
-                    db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
-                        if (tech && client) {
-                            sendAssignmentEmail(tech.email, tech.nome, 'Manutenção Geral', client.nome, notas, 'manutencao');
-                        }
+        db.run(`INSERT INTO manutencoes (cliente_id, tecnico_id, notas, data_agendada) VALUES (?, ?, ?, ?)`,
+            [cliente_id, tecnico_id || null, notas, data_agendada || null],
+            function (err) {
+                if (err) {
+                    db.run('ROLLBACK');
+                    return handleDBError(res, err);
+                }
+                const manutencaoId = this.lastID;
+
+                if (Array.isArray(maquina_ids) && maquina_ids.length > 0) {
+                    const stmt = db.prepare(`INSERT INTO manutencao_maquinas (manutencao_id, maquina_id) VALUES (?, ?)`);
+                    let hasError = false;
+
+                    maquina_ids.forEach(mId => {
+                        stmt.run(manutencaoId, mId, (err) => {
+                            if (err) {
+                                console.error('[DB ERROR] Error inserting maintenance machine:', err);
+                                hasError = true;
+                            }
+                        });
                     });
-                });
-            }
 
-            res.status(201).json({ id: manutencaoId, message: "Manutenção criada com sucesso" });
-        });
+                    stmt.finalize((err) => {
+                        if (err || hasError) {
+                            db.run('ROLLBACK');
+                            return handleDBError(res, err || new Error("Erro ao associar máquinas"));
+                        }
+                        db.run('COMMIT', (commitErr) => {
+                            if (commitErr) return handleDBError(res, commitErr);
+                            sendNotificationAndRespond(manutencaoId);
+                        });
+                    });
+                } else {
+                    db.run('COMMIT', (commitErr) => {
+                        if (commitErr) return handleDBError(res, commitErr);
+                        sendNotificationAndRespond(manutencaoId);
+                    });
+                }
+            }
+        );
+    });
+
+    function sendNotificationAndRespond(manutencaoId) {
+        if (tecnico_id) {
+            db.get(`SELECT nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+                if (err || !tech) return;
+                db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
+                    if (tech && client) {
+                        sendAssignmentEmail(tech.email, tech.nome, 'Manutenção Geral', client.nome, notas, 'manutencao');
+                    }
+                });
+            });
+        }
+        res.status(201).json({ id: manutencaoId, message: "Manutenção criada com sucesso" });
+    }
 });
 
 app.put('/api/manutencoes/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
@@ -1750,7 +1799,7 @@ app.put('/api/manutencoes/:id/faturacao', authenticateJWT, isAdmin, (req, res) =
 app.get('/api/tecnico/manutencoes', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
     const query = `
-        SELECT m.*, c.nome as cliente_nome,
+        SELECT m.*, c.nome as cliente_nome, c.morada as cliente_morada,
                strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora) as data_hora,
                strftime('%Y-%m-%dT%H:%M:%SZ', m.data_hora_pausa) as data_hora_pausa
         FROM manutencoes m
@@ -1804,7 +1853,19 @@ app.get('/api/manutencoes/:id/detalhes-relatorio', authenticateJWT, (req, res) =
         db.all(`SELECT id, caminho FROM fotos_relatorio WHERE manutencao_id = ?`, [id], (err, fotos) => {
             if (err) return handleDBError(res, err);
             row.fotos = fotos || [];
-            res.json(row);
+
+            // Adicionar máquinas associadas
+            const machinesQuery = `
+                SELECT m.id, m.marca, m.modelo, m.numero_serie
+                FROM manutencao_maquinas mm
+                JOIN maquinas m ON mm.maquina_id = m.id
+                WHERE mm.manutencao_id = ?
+            `;
+            db.all(machinesQuery, [id], (err, machines) => {
+                if (err) return handleDBError(res, err);
+                row.maquinas = machines || [];
+                res.json(row);
+            });
         });
     });
 });
@@ -1998,7 +2059,7 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
         SELECT 'avaria' as type, a.id, a.maquina_id, a.tipo_avaria, a.estado,
                a.data_agendada,
                COALESCE(m.marca || ' - ' || m.modelo, 'Máquina Removida') as title,
-               c.nome as cliente_nome, a.notas
+               c.nome as cliente_nome, c.morada as cliente_morada, a.notas
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
         LEFT JOIN clientes c ON m.cliente_id = c.id
@@ -2009,7 +2070,7 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
         SELECT 'servico' as type, s.id, NULL as maquina_id, s.tipo_servico as tipo_avaria, s.estado,
                s.data_agendada,
                s.tipo_servico || ' (' || s.tipo_camiao || ')' as title,
-               c.nome as cliente_nome, s.notas
+               c.nome as cliente_nome, c.morada as cliente_morada, s.notas
         FROM servicos s
         LEFT JOIN clientes c ON s.cliente_id = c.id
         WHERE s.data_agendada IS NOT NULL AND s.tecnico_id = ? AND s.estado != 'resolvida' AND s.arquivada = 0
@@ -2019,7 +2080,7 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
         SELECT 'manutencao' as type, mn.id, NULL as maquina_id, 'Manutenção Geral' as tipo_avaria, mn.estado,
                mn.data_agendada,
                'Manutenção Geral' as title,
-               c.nome as cliente_nome, mn.notas
+               c.nome as cliente_nome, c.morada as cliente_morada, mn.notas
         FROM manutencoes mn
         LEFT JOIN clientes c ON mn.cliente_id = c.id
         WHERE mn.data_agendada IS NOT NULL AND mn.tecnico_id = ? AND mn.estado != 'resolvida' AND mn.arquivada = 0
@@ -2190,7 +2251,7 @@ app.get('/api/tecnico/avarias', authenticateJWT, isTecnico, (req, res) => {
                a.notas,
                a.relatorio, a.relatorio_submetido, a.pecas_substituidas, a.horas_trabalho,
                a.assinatura_cliente,
-               (m.marca || ' - ' || m.modelo) as maquina_nome, c.nome as cliente_nome
+               (m.marca || ' - ' || m.modelo) as maquina_nome, c.nome as cliente_nome, c.morada as cliente_morada
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
         LEFT JOIN clientes c ON m.cliente_id = c.id
