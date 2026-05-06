@@ -159,11 +159,6 @@ function renderReport(data) {
         ` : ''}
 
 
-        <div class="section">
-            <h3><i class="ph ph-note"></i> Relatório do Técnico</h3>
-            <div style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6;">${data.relatorio || 'Nenhuma observação registada.'}</div>
-        </div>
-
         ${data.fotos && data.fotos.length > 0 ? `
         <div style="page-break-before: always; padding-top: 20px;">
             <div class="header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); padding-bottom: 20px; margin-bottom: 30px;">
@@ -211,5 +206,23 @@ window.onload = () => {
     loadReport();
 
     document.getElementById('btn-print').addEventListener('click', () => window.print());
-    document.getElementById('btn-close').addEventListener('click', () => window.close());
+    document.getElementById('btn-close').addEventListener('click', () => {
+        if (window.parent && window.parent !== window) {
+            try {
+                // Tentar encontrar o modal no documento pai
+                const modal = window.parent.document.getElementById('modal-relatorio');
+                if (modal) {
+                    modal.classList.add('hidden');
+                    // Opcional: Limpar o src do iframe no pai para libertar memória
+                    const iframe = window.parent.document.getElementById('pdf-iframe');
+                    if (iframe) iframe.src = '';
+                    return;
+                }
+            } catch (e) {
+                console.error("Erro ao fechar modal pai via iframe:", e);
+            }
+        }
+        // Fallback para fechar janela se não estiver em iframe ou se falhar
+        window.close();
+    });
 };

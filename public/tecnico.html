@@ -46,11 +46,10 @@
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 1;
         }
-        /* Positions for 4 buttons */
+        /* Positions for 3 buttons */
         [data-filter="all"].active ~ .toggle-slider { transform: translateX(0); }
         [data-filter="avaria"].active ~ .toggle-slider { transform: translateX(calc(100% + 4px)); }
         [data-filter="servico"].active ~ .toggle-slider { transform: translateX(calc(200% + 8px)); }
-        [data-filter="manutencao"].active ~ .toggle-slider { transform: translateX(calc(300% + 12px)); }
 
         .timer-badge {
             background: #fefce8;
@@ -438,16 +437,24 @@
             <span class="close-btn" data-modal="modal-relatorio"
                 style="color:white; top:10px; right:20px;">&times;</span>
 
-            <div class="a4-toolbar" style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button type="button" id="btn-save-draft" class="btn-a4-draft">Guardar Rascunho</button>
-                <button type="button" id="btn-submit-report" class="btn-a4-submit">Submeter ao Admin</button>
-                <button type="button" id="btn-close-report-top" class="btn-secondary" style="display:none; margin-left: auto;">Fechar Relatório</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div class="a4-toolbar" id="relatorio-toolbar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 0;">
+                    <button type="button" id="btn-save-draft" class="btn-a4-draft">Guardar Rascunho</button>
+                    <button type="button" id="btn-submit-report" class="btn-a4-submit">Submeter ao Admin</button>
+                </div>
+            </div>
+
+            <!-- PDF Viewer for History -->
+            <div id="pdf-viewer-container" class="hidden" style="width: 100%; height: calc(90vh - 100px); background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <iframe id="pdf-iframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
             </div>
 
             <div class="a4-sheet" id="a4-report-sheet">
                 <header class="a4-header">
-                    <div class="a4-logo-section">
-                        <img src="img/logo.png" alt="Maclau Logo">
+                    <div class="a4-logo-section" style="max-width: 180px; text-align: center;">
+                        <img src="img/logo.png" alt="Maclau Logo" style="width: 100%; height: auto; margin-bottom: 2px;">
+                        <p style="font-size: 10px; line-height: 1.2;">Assistência Técnica Especializada</p>
+                        <p style="font-size: 10px; line-height: 1.2;">Manutenção Industrial e Comercial</p>
                     </div>
                     <div class="a4-id-section">
                         <h2 id="a4-report-type">Relatório de Intervenção</h2>
@@ -467,18 +474,19 @@
                         </div>
                     </div>
                     <div class="a4-section">
-                        <h3 id="a4-details-title"><i class="ph ph-wrench"></i> Detalhes</h3>
+                        <h3 id="a4-details-title"><i class="ph ph-wrench"></i> Máquina</h3>
                         <div class="a4-info-box">
                             <p><strong>Técnico:</strong> <span id="a4-tecnico-nome">---</span></p>
                             <div id="a4-machine-row">
                                 <p><strong>Máquina:</strong> <span id="a4-maquina-nome">---</span></p>
                                 <p id="a4-maquina-serie-row"><strong>Nº de Série:</strong> <span id="a4-maquina-serie">---</span></p>
-                                <p><strong>Avaria:</strong> <span id="a4-tipo-avaria">---</span></p>
+                                <p><strong>Tipo:</strong> <span id="a4-tipo-avaria">---</span></p>
                             </div>
                             <div id="a4-service-row" style="display:none;">
                                 <p><strong>Serviço:</strong> <span id="a4-tipo-servico">---</span></p>
                                 <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
                             </div>
+                            <p><strong>Horas de Trabalho:</strong> <span id="a4-horas-trabalho">---</span></p>
                         </div>
                     </div>
                 </div>
@@ -491,9 +499,19 @@
                         <!-- JS popula aqui -->
                     </div>
                 </div>
+                <div id="a4-admin-notes-section" class="a4-editable-section" style="display:none;">
+                    <h3><i class="ph ph-warning-circle"></i> Notas de Reporte (Admin)</h3>
+                    <div class="a4-info-box" id="a4-admin-notes" style="min-height: 40px; background: #fffbeb; border-color: #fef3c7; color: #92400e;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
+
                 <div class="a4-editable-section">
                     <h3><i class="ph ph-clipboard-text"></i> Descrição da Intervenção</h3>
-                    <div class="a4-editable-area">
+                    <div class="a4-info-box" id="a4-desc-display" style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6; min-height: 80px; display: none;">
+                        <!-- JS popula aqui -->
+                    </div>
+                    <div class="a4-editable-area" id="a4-desc-input-section">
                         <textarea id="relatorio-texto"
                             placeholder="Descreva aqui o trabalho que realizou..."></textarea>
                     </div>
@@ -501,19 +519,22 @@
 
                 <div class="a4-editable-section">
                     <h3><i class="ph ph-package"></i> Peças Substituídas</h3>
-                    <div class="a4-editable-area" style="min-height: 60px;">
+                    <div class="a4-info-box" id="a4-pecas-display" style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6; display: none;">
+                        <!-- JS popula aqui -->
+                    </div>
+                    <div class="a4-editable-area" id="a4-pecas-input-section" style="min-height: 60px;">
                         <textarea id="relatorio-pecas" rows="2" placeholder="Liste as peças utilizadas..."></textarea>
                     </div>
                 </div>
 
                 <div class="a4-editable-section">
-                    <h3 style="display: flex; align-items: center; justify-content: space-between;">
+                    <h3 id="a4-fotos-title" style="display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="ph ph-camera"></i> Fotos da Intervenção</span>
                         <button type="button" id="btn-add-fotos" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">
                             <i class="ph ph-plus"></i> Adicionar
                         </button>
                     </h3>
-                    <div class="a4-editable-area">
+                    <div class="a4-editable-area" id="a4-fotos-input-section">
                         <input type="file" id="relatorio-fotos" multiple accept="image/png, image/jpeg, image/jpg, image/*" style="display:none;">
                         <div id="fotos-preview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:5px;">
                             <!-- Fotos serão carregadas aqui -->
@@ -521,7 +542,7 @@
                     </div>
                 </div>
 
-                <div class="a4-grid" style="margin-bottom: 20px;">
+                <div id="a4-time-input-section" class="a4-grid" style="margin-bottom: 20px;">
                     <div class="a4-section">
                         <h3><i class="ph ph-clock"></i> Tempo de Trabalho</h3>
                         <div class="form-group" style="margin:0;">
@@ -529,9 +550,6 @@
                                 style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1;">
                             <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Utilize o formato Horas:Minutos (ex: 01:40)</p>
                         </div>
-                    </div>
-                    <div class="a4-section">
-                        <!-- Espaço vazio ou info extra -->
                     </div>
                 </div>
 

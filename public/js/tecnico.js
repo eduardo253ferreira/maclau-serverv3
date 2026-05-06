@@ -466,6 +466,41 @@ function renderPhotosPreview(fotos, disabled = false) {
     if (!container) return;
     container.innerHTML = '';
     
+    // Se estiver desativado (visualização), usar estilo A4 (grid 2 colunas, imagens maiores)
+    if (disabled) {
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gap = '20px';
+        container.style.width = '100%';
+        container.style.marginTop = '15px';
+        
+        fotos.forEach(f => {
+            const div = document.createElement('div');
+            div.style.border = '1px solid #e2e8f0';
+            div.style.borderRadius = '8px';
+            div.style.overflow = 'hidden';
+            div.style.background = 'white';
+            div.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+            
+            const img = document.createElement('img');
+            img.src = `${f.caminho}?token=${jwtToken}&v=${Date.now()}`;
+            img.style.width = '100%';
+            img.style.height = '300px';
+            img.style.objectFit = 'cover';
+            img.style.display = 'block';
+            div.appendChild(img);
+            
+            container.appendChild(div);
+        });
+        return;
+    }
+
+    // Estilo edição (thumbnails pequenos com botão de remover)
+    container.style.display = 'flex';
+    container.style.flexWrap = 'wrap';
+    container.style.gap = '10px';
+    container.style.width = 'auto';
+
     fotos.forEach(f => {
         const div = document.createElement('div');
         div.className = 'foto-preview-item';
@@ -484,35 +519,32 @@ function renderPhotosPreview(fotos, disabled = false) {
         img.style.objectFit = 'cover';
         div.appendChild(img);
         
-        if (!disabled) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.innerHTML = '<i class="ph ph-x" style="font-weight:bold;"></i>';
-            btn.style.position = 'absolute';
-            btn.style.top = '4px';
-            btn.style.right = '4px';
-            btn.style.background = '#ef4444';
-            btn.style.color = 'white';
-            btn.style.border = 'none';
-            btn.style.borderRadius = '50%';
-            btn.style.width = '24px';
-            btn.style.height = '24px';
-            btn.style.cursor = 'pointer';
-            btn.style.display = 'flex';
-            btn.style.alignItems = 'center';
-            btn.style.justifyContent = 'center';
-            btn.style.zIndex = '999';
-            btn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-            
-            btn.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                window.deletePhoto(f.id);
-            };
-            
-            div.appendChild(btn);
-        }
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerHTML = '<i class="ph ph-x" style="font-weight:bold;"></i>';
+        btn.style.position = 'absolute';
+        btn.style.top = '4px';
+        btn.style.right = '4px';
+        btn.style.background = '#ef4444';
+        btn.style.color = 'white';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '50%';
+        btn.style.width = '24px';
+        btn.style.height = '24px';
+        btn.style.cursor = 'pointer';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
+        btn.style.zIndex = '999';
+        btn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
         
+        btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.deletePhoto(f.id);
+        };
+        
+        div.appendChild(btn);
         container.appendChild(div);
     });
 }
@@ -668,6 +700,18 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         // Populate Editable Fields
         textarea.value = currentText || data.relatorio || '';
         pecasArea.value = currentPecas || data.pecas_substituidas || '';
+
+        // Handle Admin Notes in Report
+        const adminNotesSection = document.getElementById('a4-admin-notes-section');
+        const adminNotesDiv = document.getElementById('a4-admin-notes');
+        if (adminNotesSection && adminNotesDiv) {
+            if (data.notas) {
+                adminNotesSection.style.display = 'block';
+                adminNotesDiv.textContent = data.notas;
+            } else {
+                adminNotesSection.style.display = 'none';
+            }
+        }
         
         let hoursVal = currentHoras || hoursToHHmm(data.horas_trabalho) || '';
         // Se estivermos a concluir agora e o campo estiver vazio, usa o cronómetro
@@ -682,6 +726,10 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
             }
         }
         horasInput.value = hoursVal;
+
+        // Populate Static Horas for viewing
+        const staticHoras = document.getElementById('a4-horas-trabalho');
+        if (staticHoras) staticHoras.textContent = hoursToHHmm(data.horas_trabalho);
 
         // Handle Signatures
         clearSignature();
@@ -710,28 +758,63 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         btnSave.style.display = disabled ? 'none' : 'block';
         warning.style.display = disabled ? 'none' : 'block';
 
-        const btnCloseTop = document.getElementById('btn-close-report-top');
-        const footerClose = document.getElementById('relatorio-footer-close');
+        // Visibility adjustments for "Identical to PDF"
+        const reportSheet = document.getElementById('a4-report-sheet');
+        const pdfViewer = document.getElementById('pdf-viewer-container');
+        const pdfIframe = document.getElementById('pdf-iframe');
+        const toolbar = document.getElementById('relatorio-toolbar');
         
-        if (btnCloseTop) {
-            btnCloseTop.style.display = disabled ? 'block' : 'none';
-            btnCloseTop.onclick = () => document.getElementById('modal-relatorio').classList.add('hidden');
-        }
-        
-        if (footerClose) {
-            footerClose.style.display = disabled ? 'block' : 'none';
-            const btnCloseBottom = document.getElementById('btn-close-report-bottom');
-            if (btnCloseBottom) {
-                btnCloseBottom.onclick = () => document.getElementById('modal-relatorio').classList.add('hidden');
+        if (disabled) {
+            // Em modo de visualização (submetido), mostrar o PDF REAL em iframe
+            if (reportSheet) reportSheet.style.display = 'none';
+            if (toolbar) toolbar.style.display = 'none';
+            if (pdfViewer) {
+                pdfViewer.classList.remove('hidden');
+                pdfViewer.style.display = 'block';
+                pdfIframe.src = `/relatorio.html?id=${id}&type=${type}`;
             }
+        } else {
+            // Em modo de edição, mostrar a folha interativa
+            if (pdfViewer) {
+                pdfViewer.classList.add('hidden');
+                pdfViewer.style.display = 'none';
+                pdfIframe.src = '';
+            }
+            if (reportSheet) reportSheet.style.display = 'block';
+            if (toolbar) toolbar.style.display = 'flex';
+            
+            // Populate sections normally
+            const timeInputSection = document.getElementById('a4-time-input-section');
+            const descInputSection = document.getElementById('a4-desc-input-section');
+            const pecasInputSection = document.getElementById('a4-pecas-input-section');
+            const pecasDisplay = document.getElementById('a4-pecas-display');
+            const btnAddFotos = document.getElementById('btn-add-fotos');
+
+            if (timeInputSection) timeInputSection.style.display = 'block';
+            if (descInputSection) descInputSection.style.display = 'block';
+            if (pecasDisplay) pecasDisplay.style.display = 'none';
+            if (btnAddFotos) btnAddFotos.style.display = 'block';
+
+            // Hide clear buttons normally
+            const btnClearSig = document.getElementById('btn-clear-signature');
+            const btnClearSigTech = document.getElementById('btn-clear-signature-tech');
+            if (btnClearSig) btnClearSig.style.display = 'block';
+            if (btnClearSigTech) btnClearSigTech.style.display = 'block';
+
+            // Renderizar fotos para edição
+            renderPhotosPreview(data.fotos || [], false);
         }
 
-        // Renderizar fotos
-        renderPhotosPreview(data.fotos || [], disabled);
-        
-        // Esconder botão de adicionar fotos se desativado
-        const btnAddPhotos = document.getElementById('btn-add-fotos');
-        if (btnAddPhotos) btnAddPhotos.style.display = disabled ? 'none' : 'block';
+        // Ajustar títulos dinâmicos
+        if (detailsTitle) {
+            if (type === 'servico') {
+                detailsTitle.innerHTML = '<i class="ph ph-wrench"></i> Serviço';
+            } else if (type === 'manutencao') {
+                detailsTitle.innerHTML = '<i class="ph ph-wrench"></i> Manutenção';
+            } else {
+                detailsTitle.innerHTML = '<i class="ph ph-wrench"></i> Máquina';
+            }
+        }
 
         document.getElementById('modal-relatorio').classList.remove('hidden');
     } catch (e) {
@@ -1596,7 +1679,6 @@ function draw(e) {
 function stopDrawing() { isDrawing = false; sigCtx.beginPath(); }
 function clearSignature() {
     if (!sigCanvas || !sigCtx) return;
-    if (document.getElementById('relatorio-texto').disabled) return;
     sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
 }
 
@@ -1629,7 +1711,6 @@ function drawTech(e) {
 function stopDrawingTech() { isDrawingTech = false; sigCtxTech.beginPath(); }
 function clearSignatureTech() {
     if (!sigCanvasTech || !sigCtxTech) return;
-    if (document.getElementById('relatorio-texto').disabled) return;
     sigCtxTech.clearRect(0, 0, sigCanvasTech.width, sigCanvasTech.height);
 }
 
