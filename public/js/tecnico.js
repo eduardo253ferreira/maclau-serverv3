@@ -710,6 +710,22 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         btnSave.style.display = disabled ? 'none' : 'block';
         warning.style.display = disabled ? 'none' : 'block';
 
+        const btnCloseTop = document.getElementById('btn-close-report-top');
+        const footerClose = document.getElementById('relatorio-footer-close');
+        
+        if (btnCloseTop) {
+            btnCloseTop.style.display = disabled ? 'block' : 'none';
+            btnCloseTop.onclick = () => document.getElementById('modal-relatorio').classList.add('hidden');
+        }
+        
+        if (footerClose) {
+            footerClose.style.display = disabled ? 'block' : 'none';
+            const btnCloseBottom = document.getElementById('btn-close-report-bottom');
+            if (btnCloseBottom) {
+                btnCloseBottom.onclick = () => document.getElementById('modal-relatorio').classList.add('hidden');
+            }
+        }
+
         // Renderizar fotos
         renderPhotosPreview(data.fotos || [], disabled);
         
@@ -999,8 +1015,224 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'dashboard') loadMyTasks();
         if (target === 'agendamentos') loadAgendamentos();
         if (target === 'historico') loadHistorico();
+        if (target === 'consulta') loadConsultaClientes();
+        if (target === 'checklists') loadChecklistModelos();
     });
 });
+
+// --- Consulta por Máquina ---
+let consultaClientes = [];
+let consultaMaquinas = [];
+let consultaHistorico = [];
+
+// --- Helper for Custom Select Search ---
+function setupCustomSelect(inputId, dropdownId, data, onSelect) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    
+    dropdown.innerHTML = '';
+    data.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'custom-search-option';
+        div.textContent = item.label;
+        div.dataset.id = item.id;
+        
+        div.onmousedown = (e) => {
+            e.preventDefault(); // Prevents input blur
+            input.value = item.label;
+            dropdown.classList.remove('show');
+            onSelect(item.id);
+        };
+        dropdown.appendChild(div);
+    });
+
+    input.oninput = () => {
+        dropdown.classList.add('show');
+        const filter = input.value.toLowerCase();
+        Array.from(dropdown.children).forEach(child => {
+            if (child.textContent.toLowerCase().includes(filter)) {
+                child.classList.remove('hidden');
+            } else {
+                child.classList.add('hidden');
+            }
+        });
+    };
+
+    input.onfocus = () => {
+        if (!input.disabled && data.length > 0) {
+            dropdown.classList.add('show');
+            Array.from(dropdown.children).forEach(child => child.classList.remove('hidden'));
+        }
+    };
+
+    input.onblur = () => {
+        dropdown.classList.remove('show');
+        const match = data.find(d => d.label === input.value);
+        if (!match) {
+            input.value = '';
+            onSelect(null);
+        }
+    };
+}
+
+async function loadConsultaClientes() {
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/clientes`);
+        if (!res.ok) throw new Error("Erro ao buscar clientes");
+        consultaClientes = await res.json();
+        
+        const inputClient = document.getElementById('filter-consulta-cliente');
+        const inputMachine = document.getElementById('filter-consulta-maquina');
+        const dropdownMachine = document.getElementById('dropdown-maquinas');
+        const emptyMsg = document.getElementById('consulta-empty');
+        const tableContainer = document.getElementById('consulta-table-container');
+
+        inputClient.value = '';
+        inputClient.placeholder = 'Escreva ou selecione...';
+        inputClient.disabled = false;
+
+        inputMachine.value = '';
+        inputMachine.placeholder = 'Selecione primeiro o cliente';
+        inputMachine.disabled = true;
+        dropdownMachine.innerHTML = '';
+        emptyMsg.style.display = 'block';
+        tableContainer.style.display = 'none';
+
+        const clientData = consultaClientes.map(c => ({ id: c.id, label: c.nome }));
+
+        setupCustomSelect('filter-consulta-cliente', 'dropdown-clientes', clientData, (clientId) => {
+            if (clientId) {
+                loadConsultaMaquinas(clientId);
+            } else {
+                inputMachine.value = '';
+                inputMachine.placeholder = 'Selecione primeiro o cliente';
+                inputMachine.disabled = true;
+                dropdownMachine.innerHTML = '';
+                emptyMsg.style.display = 'block';
+                tableContainer.style.display = 'none';
+            }
+        });
+
+    } catch (e) {
+        showNotification("Erro ao carregar clientes para consulta.", true);
+    }
+}
+
+async function loadConsultaMaquinas(clienteId) {
+    const inputMachine = document.getElementById('filter-consulta-maquina');
+    const dropdownMachine = document.getElementById('dropdown-maquinas');
+    inputMachine.value = '';
+    inputMachine.placeholder = 'A carregar máquinas...';
+    inputMachine.disabled = true;
+    dropdownMachine.innerHTML = '';
+
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/clientes/${clienteId}/maquinas`);
+        if (!res.ok) throw new Error("Erro ao buscar máquinas");
+        consultaMaquinas = await res.json();
+
+        if (consultaMaquinas.length === 0) {
+            inputMachine.placeholder = 'Nenhuma máquina encontrada';
+        } else {
+            inputMachine.placeholder = 'Escreva ou selecione a máquina...';
+            const machineData = consultaMaquinas.map(m => ({
+                id: m.id,
+                label: `${m.marca} ${m.modelo} (SN: ${m.numero_serie || 'N/A'})`
+            }));
+
+            setupCustomSelect('filter-consulta-maquina', 'dropdown-maquinas', machineData, (maquinaId) => {
+                if (maquinaId) {
+                    loadConsultaHistorico(maquinaId);
+                } else {
+                    document.getElementById('consulta-empty').style.display = 'block';
+                    document.getElementById('consulta-table-container').style.display = 'none';
+                }
+            });
+            inputMachine.disabled = false;
+        }
+        
+        document.getElementById('consulta-empty').style.display = 'block';
+        document.getElementById('consulta-table-container').style.display = 'none';
+    } catch (e) {
+        inputMachine.placeholder = 'Erro ao carregar';
+        showNotification("Erro ao carregar máquinas do cliente.", true);
+    }
+}
+
+async function loadConsultaHistorico(maquinaId) {
+    const loadingMsg = document.getElementById('consulta-loading');
+    const emptyMsg = document.getElementById('consulta-empty');
+    const tableContainer = document.getElementById('consulta-table-container');
+    const tbody = document.getElementById('table-consulta-body');
+
+    loadingMsg.style.display = 'block';
+    emptyMsg.style.display = 'none';
+    tableContainer.style.display = 'none';
+
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/maquinas/${maquinaId}/historico`);
+        if (!res.ok) throw new Error("Erro ao buscar histórico");
+        consultaHistorico = await res.json();
+
+        loadingMsg.style.display = 'none';
+
+        if (consultaHistorico.length === 0) {
+            emptyMsg.style.display = 'block';
+        } else {
+            tbody.innerHTML = '';
+            consultaHistorico.forEach(item => {
+                const tr = document.createElement('tr');
+
+                const tdDate = document.createElement('td');
+                const d = new Date(item.data_hora_fim);
+                tdDate.innerHTML = `<span style="font-weight:600; color:var(--text-main);">${d.toLocaleDateString('pt-PT')}</span><br><span style="font-size:12px; color:var(--text-secondary);">${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}h</span>`;
+                tr.appendChild(tdDate);
+
+                const tdClient = document.createElement('td');
+                tdClient.textContent = item.cliente_nome || '---';
+                tr.appendChild(tdClient);
+
+                const tdType = document.createElement('td');
+                let tagColor = 'var(--accent)';
+                let tagStr = 'AVARIA';
+                let tipoDesc = '';
+                
+                if (item.tipo === 'manutencao') {
+                    tagStr = 'MANUTENÇÃO';
+                    tagColor = '#7c3aed';
+                    tipoDesc = 'Geral';
+                } else {
+                    tipoDesc = item.tipo_avaria === 1 ? 'Elétrica' : (item.tipo_avaria === 3 ? 'Mecânica' : 'Outra');
+                }
+                tdType.innerHTML = `<span style="font-size:11px; font-weight:700; background:var(--accent-light); color:${tagColor}; padding:3px 8px; border-radius:4px; display:inline-block; margin-bottom:4px;">${tagStr}</span><br>${tipoDesc}`;
+                tr.appendChild(tdType);
+
+                const tdTech = document.createElement('td');
+                tdTech.textContent = item.tecnico_nome || '---';
+                tr.appendChild(tdTech);
+
+                const tdReport = document.createElement('td');
+                const btnView = document.createElement('button');
+                btnView.className = 'btn-secondary';
+                btnView.style.padding = '6px 12px';
+                btnView.style.fontSize = '12px';
+                btnView.innerHTML = '<i class="ph ph-file-text"></i> Ver Relatório';
+                btnView.onclick = () => {
+                    openRelatorioModal(item.id, false, '', true, '', '', '', item.tipo);
+                };
+                tdReport.appendChild(btnView);
+                tr.appendChild(tdReport);
+
+                tbody.appendChild(tr);
+            });
+            tableContainer.style.display = 'block';
+        }
+    } catch (e) {
+        loadingMsg.style.display = 'none';
+        emptyMsg.style.display = 'block';
+        showNotification("Erro ao carregar histórico da máquina.", true);
+    }
+}
 
 // Password Change Form
 const pwdForm = document.getElementById('form-change-password');
@@ -1460,4 +1692,197 @@ async function loadAgendamentos() {
     } catch (e) {
         showNotification("Erro ao carregar agendamentos.", true);
     }
+}
+
+// --- Guias de Resolução (Checklists) ---
+async function loadChecklistModelos() {
+    try {
+        const rawRes = await authFetch(`${API_BASE}/modelos`);
+        const res = await rawRes.json();
+        const trigger = document.getElementById('trigger-tech-checklist-modelo');
+        const optionsContainer = document.getElementById('options-tech-checklist-modelo');
+        const hiddenInput = document.getElementById('tech-checklist-modelo');
+        
+        if (!trigger || !optionsContainer || !hiddenInput) return;
+
+        // Limpar dropdown anterior
+        optionsContainer.innerHTML = '';
+
+        // Adicionar opção "Todos"
+        const optionTodos = document.createElement('div');
+        optionTodos.className = 'custom-select-option';
+        optionTodos.textContent = 'Todos os Modelos';
+        optionTodos.dataset.value = '';
+        optionTodos.onclick = () => {
+            hiddenInput.value = '';
+            trigger.querySelector('.custom-select-text').textContent = 'Todos os Modelos';
+            document.getElementById('dropdown-tech-checklist-modelo').classList.add('hidden');
+            loadTechChecklists();
+        };
+        optionsContainer.appendChild(optionTodos);
+
+        // Preencher com modelos
+        res.forEach(m => {
+            const label = `${m.marca} ${m.modelo}`;
+            const opt = document.createElement('div');
+            opt.className = 'custom-select-option';
+            opt.textContent = label;
+            opt.dataset.value = JSON.stringify({marca: m.marca, modelo: m.modelo});
+            
+            opt.onclick = () => {
+                hiddenInput.value = opt.dataset.value;
+                trigger.querySelector('.custom-select-text').textContent = label;
+                document.getElementById('dropdown-tech-checklist-modelo').classList.add('hidden');
+                loadTechChecklists();
+            };
+            optionsContainer.appendChild(opt);
+        });
+
+        initCustomSelect('tech-checklist-modelo');
+
+        // Initial load
+        loadTechChecklists();
+    } catch (e) {
+        console.error("Erro ao carregar modelos", e);
+    }
+}
+
+async function loadTechChecklists() {
+    try {
+        const hiddenInput = document.getElementById('tech-checklist-modelo');
+        if (!hiddenInput) return;
+        
+        const filterVal = hiddenInput.value;
+        let url = `${API_BASE}/checklists`;
+        if (filterVal) {
+            const { marca, modelo } = JSON.parse(filterVal);
+            url += `?marca=${encodeURIComponent(marca)}&modelo=${encodeURIComponent(modelo)}`;
+        }
+        
+        const rawChecklists = await authFetch(url);
+        const checklists = await rawChecklists.json();
+        const container = document.getElementById('tech-checklists-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (checklists.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">Nenhuma checklist encontrada.</div>';
+            return;
+        }
+
+        for (const c of checklists) {
+            // Need to fetch details for steps
+            const rawDetails = await authFetch(`${API_BASE}/checklists/${c.id}`);
+            const details = await rawDetails.json();
+            const passos = details.passos || [];
+
+            const card = document.createElement('div');
+            card.style.background = 'var(--surface-color)';
+            card.style.borderRadius = '12px';
+            card.style.boxShadow = 'var(--shadow-sm)';
+            card.style.overflow = 'hidden';
+
+            const header = document.createElement('div');
+            header.style.padding = '15px 20px';
+            header.style.background = '#f8fafc';
+            header.style.borderBottom = '1px solid var(--border-color)';
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.cursor = 'pointer';
+
+            header.innerHTML = `
+                <div>
+                    <h3 style="margin:0; font-size:16px; color:var(--text-main);"><span style="color:var(--text-secondary); font-size:12px; display:block; text-transform:uppercase;">${escapeHTML(c.marca)} ${escapeHTML(c.modelo)}</span>${escapeHTML(c.titulo_avaria)}</h3>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-light); padding:4px 8px; border-radius:6px;">${passos.length} Passos</span>
+                    <i class="ph ph-caret-down checklist-caret" style="transition: transform 0.3s; font-size:20px; color:var(--text-secondary);"></i>
+                </div>
+            `;
+
+            const body = document.createElement('div');
+            body.className = 'checklist-body hidden';
+            body.style.padding = '20px';
+
+            let bodyHtml = '';
+            if (c.descricao) {
+                bodyHtml += `<p style="margin-top:0; margin-bottom:20px; font-size:14px; color:var(--text-secondary); line-height:1.5;">${escapeHTML(c.descricao)}</p>`;
+            }
+
+            if (passos.length > 0) {
+                bodyHtml += `<div style="display:flex; flex-direction:column; gap:12px;">`;
+                passos.forEach((p, idx) => {
+                    const uniqueId = `passo-${c.id}-${idx}`;
+                    bodyHtml += `
+                        <label for="${uniqueId}" style="display:flex; gap:12px; align-items:flex-start; padding:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; transition: background 0.2s;">
+                            <input type="checkbox" id="${uniqueId}" style="margin-top:4px; width:18px; height:18px; accent-color:var(--primary);">
+                            <div style="flex:1;">
+                                <span style="font-weight:bold; color:var(--text-secondary); margin-right:5px;">${idx + 1}.</span>
+                                <span style="font-size:15px; color:var(--text-main);">${escapeHTML(p.descricao)}</span>
+                            </div>
+                        </label>
+                    `;
+                });
+                bodyHtml += `</div>`;
+            }
+
+            body.innerHTML = bodyHtml;
+
+            // Toggle Expand/Collapse
+            header.onclick = () => {
+                body.classList.toggle('hidden');
+                const caret = header.querySelector('.checklist-caret');
+                if (body.classList.contains('hidden')) {
+                    caret.style.transform = 'rotate(0deg)';
+                } else {
+                    caret.style.transform = 'rotate(180deg)';
+                }
+            };
+
+            card.appendChild(header);
+            card.appendChild(body);
+            container.appendChild(card);
+        }
+    } catch(e) {
+        console.error("Erro ao carregar guias de resolução", e);
+    }
+}
+
+// --- Funções Auxiliares para Custom Selects ---
+function initCustomSelect(id) {
+    const trigger = document.getElementById(`trigger-${id}`);
+    const dropdown = document.getElementById(`dropdown-${id}`);
+    const search = document.getElementById(`search-${id}`);
+    const optionsContainer = document.getElementById(`options-${id}`);
+    
+    if (!trigger || !dropdown) return;
+
+    trigger.onclick = (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('hidden');
+        if (!dropdown.classList.contains('hidden')) {
+            if(search) search.focus();
+        }
+    };
+
+    if (search && optionsContainer) {
+        search.oninput = () => {
+            const filter = search.value.toLowerCase();
+            Array.from(optionsContainer.children).forEach(child => {
+                if (child.textContent.toLowerCase().includes(filter)) {
+                    child.style.display = '';
+                } else {
+                    child.style.display = 'none';
+                }
+            });
+        };
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest(`#wrapper-${id}`)) {
+            dropdown.classList.add('hidden');
+        }
+    });
 }

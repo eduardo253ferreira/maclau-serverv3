@@ -1506,4 +1506,59 @@ body {
 
 .btn-toggle-password:hover {
     color: var(--accent);
+}/* Custom Select Components */
+.custom-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+.custom-select-trigger {
+    padding: 12px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: #fff;
+    transition: border-color 0.2s;
+}
+.custom-select-trigger:hover {
+    border-color: var(--primary);
+}
+.custom-select-dropdown {
+    position: absolute;
+    width: 100%;
+    background: #fff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    margin-top: 5px;
+    z-index: 1000;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+.custom-select-search-container {
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.custom-select-search {
+    border: none;
+    outline: none;
+    width: 100%;
+    background: transparent;
+    font-size: 14px;
+}
+.custom-select-options {
+    max-height: 200px;
+    overflow-y: auto;
+}
+.custom-select-option {
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 14px;
+}
+.custom-select-option:hover {
+    background: #f1f5f9;
 }

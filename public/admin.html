@@ -465,6 +465,9 @@
                 <button class="nav-btn" data-target="tecnicos">
                     <i class="ph ph-wrench"></i> Gestão de Técnicos
                 </button>
+                <button class="nav-btn" data-target="checklists">
+                    <i class="ph ph-list-checks"></i> Gestão de Checklists
+                </button>
                 <button class="nav-btn" data-target="frota">
                     <i class="ph ph-truck"></i> Gestão de Frota
                 </button>
@@ -1043,10 +1046,130 @@
                     </table>
                 </div>
             </section>
+
+            <!-- Checklists View -->
+            <section id="view-checklists" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Gestão de Checklists</h1>
+                        <p>Crie guiões de resolução passo a passo para as avarias mais comuns.</p>
+                    </div>
+                    <button id="btn-open-add-checklist" class="btn-primary">+ Nova Checklist</button>
+                </header>
+                <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 20px;">
+                    <label for="filter-checklist-modelo" class="filter-label">Filtrar por Modelo:</label>
+                    <select id="filter-checklist-modelo" class="filter-select">
+                        <option value="">Todos os Modelos</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Marca</th>
+                                <th>Modelo</th>
+                                <th>Avaria (Problema)</th>
+                                <th>Passos</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-checklists-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </main>
     </div> <!-- .app-container -->
 
     <!-- Modals -->
+    <!-- Modal Add Checklist -->
+    <div id="modal-add-checklist" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-add-checklist">&times;</span>
+            <h2>Nova Checklist de Resolução</h2>
+            <form id="form-add-checklist">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label>Máquinas *</label>
+                    <div class="custom-select-wrapper" id="wrapper-admin-checklist-modelo" style="position:relative; width: 100%;">
+                        <input type="text" id="search-admin-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
+                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-admin-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                            <div class="custom-select-options" id="options-admin-checklist-modelo">
+                                <!-- JS popula aqui -->
+                            </div>
+                        </div>
+                        <input type="hidden" id="admin-checklist-modelo">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Título da Avaria *</label>
+                    <input type="text" id="checklist-titulo" required placeholder="Ex: Erro E20 - Não escoa água">
+                </div>
+                <div class="form-group">
+                    <label>Descrição (Opcional)</label>
+                    <textarea id="checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Passos de Resolução *</label>
+                    <div id="checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                        <div class="checklist-passo-row" style="display:flex; gap:10px; align-items:flex-start;">
+                            <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">1.</span>
+                            <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba" style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;"></textarea>
+                            <button type="button" class="btn-remove-passo btn-icon" style="color:var(--danger); display:none; margin-top:5px;"><i class="ph ph-trash"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
+                </div>
+
+                <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Guardar Checklist</button>
+            </form>
+            <datalist id="datalist-marcas-modelos"></datalist>
+        </div>
+    </div>
+    
+    <!-- Modal Edit Checklist -->
+    <div id="modal-edit-checklist" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-edit-checklist">&times;</span>
+            <h2>Editar Checklist de Resolução</h2>
+            <form id="form-edit-checklist">
+                <input type="hidden" id="edit-checklist-id">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label>Máquinas *</label>
+                    <div class="custom-select-wrapper" id="wrapper-edit-checklist-modelo" style="position:relative; width: 100%;">
+                        <input type="text" id="search-edit-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
+                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-edit-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                            <div class="custom-select-options" id="options-edit-checklist-modelo">
+                                <!-- JS popula aqui -->
+                            </div>
+                        </div>
+                        <input type="hidden" id="edit-checklist-modelo">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Título da Avaria *</label>
+                    <input type="text" id="edit-checklist-titulo" required placeholder="Ex: Erro E20 - Não escoa água">
+                </div>
+                <div class="form-group">
+                    <label>Descrição (Opcional)</label>
+                    <textarea id="edit-checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Passos de Resolução *</label>
+                    <div id="edit-checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                        <!-- JS popula os passos aqui -->
+                    </div>
+                    <button type="button" id="btn-edit-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
+                </div>
+
+                <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Atualizar Checklist</button>
+            </form>
+        </div>
+    </div>
     <!-- Modal Add Cliente -->
     <div id="modal-add-client" class="modal hidden">
         <div class="modal-content">

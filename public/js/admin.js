@@ -239,6 +239,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'maquinas') loadMaquinas();
         if (target === 'tecnicos') loadTecnicos();
         if (target === 'frota') loadFrota();
+        if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
         if (target === 'agendamentos') initCalendar();
     });
 });
@@ -2652,6 +2653,455 @@ if (formEditClientUser) {
             loadClientUsers(currentViewingClientId);
         } catch (e) {
             showNotification(e.message, true);
+        }
+    });
+}
+
+// --- Gestão de Checklists ---
+async function loadChecklistModelos() {
+    try {
+        const res = await apiFetch('/modelos');
+        const filterSelect = document.getElementById('filter-checklist-modelo');
+        
+        const adminOptionsContainer = document.getElementById('options-admin-checklist-modelo');
+        const adminHiddenInput = document.getElementById('admin-checklist-modelo');
+        const adminSearchInput = document.getElementById('search-admin-checklist-modelo');
+        
+        const editOptionsContainer = document.getElementById('options-edit-checklist-modelo');
+        const editHiddenInput = document.getElementById('edit-checklist-modelo');
+        const editSearchInput = document.getElementById('search-edit-checklist-modelo');
+        
+        if (filterSelect) filterSelect.innerHTML = '<option value="">Todos os Modelos</option>';
+        if (adminOptionsContainer) adminOptionsContainer.innerHTML = '';
+        if (editOptionsContainer) editOptionsContainer.innerHTML = '';
+
+        res.forEach(m => {
+            const label = `${m.marca} ${m.modelo}`;
+            const optVal = JSON.stringify({marca: m.marca, modelo: m.modelo});
+            
+            if (filterSelect) {
+                const optFilter = document.createElement('option');
+                optFilter.value = optVal;
+                optFilter.textContent = label;
+                filterSelect.appendChild(optFilter);
+            }
+
+            if (adminOptionsContainer) {
+                const div = document.createElement('div');
+                div.className = 'custom-select-option';
+                div.textContent = label;
+                div.dataset.value = optVal;
+                
+                div.onclick = () => {
+                    adminHiddenInput.value = optVal;
+                    if (adminSearchInput) adminSearchInput.value = label;
+                    document.getElementById('dropdown-admin-checklist-modelo').classList.add('hidden');
+                };
+                adminOptionsContainer.appendChild(div);
+            }
+
+            if (editOptionsContainer) {
+                const div = document.createElement('div');
+                div.className = 'custom-select-option';
+                div.textContent = label;
+                div.dataset.value = optVal;
+                
+                div.onclick = () => {
+                    editHiddenInput.value = optVal;
+                    if (editSearchInput) editSearchInput.value = label;
+                    document.getElementById('dropdown-edit-checklist-modelo').classList.add('hidden');
+                };
+                editOptionsContainer.appendChild(div);
+            }
+        });
+        
+        initCustomSelect('admin-checklist-modelo');
+        initCustomSelect('edit-checklist-modelo');
+        
+        // Also populate edit custom select
+        const editOptionsContainerForEdit = document.getElementById('options-edit-checklist-modelo');
+        if (editOptionsContainerForEdit) {
+            editOptionsContainerForEdit.innerHTML = '';
+            res.forEach(m => {
+                const label = `${m.marca} ${m.modelo}`;
+                const optVal = JSON.stringify({marca: m.marca, modelo: m.modelo});
+                const div = document.createElement('div');
+                div.className = 'custom-select-option';
+                div.textContent = label;
+                div.dataset.value = optVal;
+                
+                div.onclick = () => {
+                    document.getElementById('edit-checklist-modelo').value = optVal;
+                    const searchInput = document.getElementById('search-edit-checklist-modelo');
+                    if (searchInput) searchInput.value = label;
+                    document.getElementById('dropdown-edit-checklist-modelo').classList.add('hidden');
+                };
+                editOptionsContainerForEdit.appendChild(div);
+            });
+            initCustomSelect('edit-checklist-modelo');
+        }
+        
+    } catch (e) {
+        console.error("Erro ao carregar modelos", e);
+    }
+}
+
+async function loadChecklists() {
+    try {
+        const filterSelect = document.getElementById('filter-checklist-modelo');
+        if (!filterSelect) return;
+        
+        const filterVal = filterSelect.value;
+        let url = '/checklists';
+        if (filterVal) {
+            const { marca, modelo } = JSON.parse(filterVal);
+            url += `?marca=${encodeURIComponent(marca)}&modelo=${encodeURIComponent(modelo)}`;
+        }
+        const checklists = await apiFetch(url);
+        
+        const tbody = document.getElementById('table-checklists-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        if(checklists.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma checklist encontrada</td></tr>';
+            return;
+        }
+
+        for (const c of checklists) {
+            // Need to fetch steps to show count
+            const details = await apiFetch(`/checklists/${c.id}`);
+            const count = details.passos ? details.passos.length : 0;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escapeHTML(c.marca)}</td>
+                <td>${escapeHTML(c.modelo)}</td>
+                <td style="font-weight:600;">${escapeHTML(c.titulo_avaria)}</td>
+                <td><span class="status-pill status-em-resolucao" style="background:#dbeafe; color:#2563eb; padding:4px 8px; border-radius:6px;">${count} Passos</span></td>
+                <td>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-icon btn-edit-checklist" data-id="${c.id}" title="Editar"><i class="ph ph-pencil-simple"></i></button>
+                        <button class="btn-icon btn-delete-checklist" data-id="${c.id}" title="Eliminar"><i class="ph ph-trash"></i></button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        document.querySelectorAll('.btn-delete-checklist').forEach(btn => {
+            btn.onclick = async () => {
+                if(confirm("Tem a certeza que deseja eliminar esta checklist?")) {
+                    try {
+                        await apiFetch(`/checklists/${btn.dataset.id}`, { method: 'DELETE' });
+                        showNotification('Checklist eliminada');
+                        loadChecklists();
+                    } catch(e) {
+                        showNotification(e.message, true);
+                    }
+                }
+            }
+        });
+
+        document.querySelectorAll('.btn-edit-checklist').forEach(btn => {
+            btn.onclick = async () => {
+                try {
+                    const checklist = await apiFetch(`/checklists/${btn.dataset.id}`);
+                    document.getElementById('edit-checklist-id').value = checklist.id;
+                    const optVal = JSON.stringify({marca: checklist.marca, modelo: checklist.modelo});
+                    document.getElementById('edit-checklist-modelo').value = optVal;
+                    document.getElementById('search-edit-checklist-modelo').value = `${checklist.marca} ${checklist.modelo}`;
+                    document.getElementById('edit-checklist-titulo').value = checklist.titulo_avaria;
+                    document.getElementById('edit-checklist-descricao').value = checklist.descricao || '';
+                    
+                    const container = document.getElementById('edit-checklist-passos-container');
+                    container.innerHTML = '';
+                    if (checklist.passos && checklist.passos.length > 0) {
+                        checklist.passos.forEach((p, index) => {
+                            addPassoRow(container, index + 1, p.descricao);
+                        });
+                    } else {
+                        addPassoRow(container, 1, '');
+                    }
+                    openModal('modal-edit-checklist');
+                } catch(e) {
+                    showNotification(e.message, true);
+                }
+            };
+        });
+
+    } catch (e) {
+        console.error("Erro ao carregar checklists", e);
+    }
+}
+
+// Add Checklist setup
+const filterChecklistModelo = document.getElementById('filter-checklist-modelo');
+if (filterChecklistModelo) filterChecklistModelo.addEventListener('change', loadChecklists);
+
+const btnOpenAddChecklist = document.getElementById('btn-open-add-checklist');
+if (btnOpenAddChecklist) {
+    btnOpenAddChecklist.addEventListener('click', () => {
+        document.getElementById('form-add-checklist').reset();
+        const container = document.getElementById('checklist-passos-container');
+        container.innerHTML = '';
+        addPassoRow(container, 1, '');
+        
+        // Se houver um filtro de modelo selecionado, preencher logo a marca e modelo no form
+        const filterVal = document.getElementById('filter-checklist-modelo').value;
+        const hiddenInput = document.getElementById('admin-checklist-modelo');
+        const searchInput = document.getElementById('search-admin-checklist-modelo');
+        
+        if (filterVal) {
+            const { marca, modelo } = JSON.parse(filterVal);
+            if (hiddenInput) hiddenInput.value = filterVal;
+            if (searchInput) searchInput.value = `${marca} ${modelo}`;
+        } else {
+            if (hiddenInput) hiddenInput.value = '';
+            if (searchInput) searchInput.value = '';
+        }
+
+        openModal('modal-add-checklist');
+    });
+}
+
+const formEditChecklist = document.getElementById('form-edit-checklist');
+if (formEditChecklist) {
+    formEditChecklist.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const id = document.getElementById('edit-checklist-id').value;
+        const checklistModeloInput = document.getElementById('edit-checklist-modelo').value;
+        if (!checklistModeloInput) {
+            return showNotification("Por favor, selecione uma máquina.", true);
+        }
+        
+        const { marca, modelo } = JSON.parse(checklistModeloInput);
+        const titulo = document.getElementById('edit-checklist-titulo').value.trim();
+        const descricao = document.getElementById('edit-checklist-descricao').value.trim();
+        
+        const passosInputs = document.querySelectorAll('#edit-checklist-passos-container .passo-input');
+        const passos = Array.from(passosInputs)
+                            .map(input => input.value.trim())
+                            .filter(val => val !== '');
+                            
+        if (passos.length === 0) {
+            return showNotification("A checklist deve ter pelo menos um passo.", true);
+        }
+
+        const body = { marca, modelo, titulo_avaria: titulo, descricao, passos };
+
+        try {
+            const res = await apiFetch(`/checklists/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            showNotification(res.message || "Checklist atualizada!");
+            closeModal('modal-edit-checklist');
+            loadChecklists();
+        } catch (err) {
+            showNotification(err.message, true);
+        }
+    });
+}
+
+
+
+function addPassoRow(container, number, value = '') {
+    const div = document.createElement('div');
+    div.className = 'checklist-passo-row';
+    div.style.display = 'flex';
+    div.style.gap = '10px';
+    div.style.alignItems = 'flex-start';
+    div.style.marginTop = '10px';
+    div.innerHTML = `
+        <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">${number}.</span>
+        <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba" style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;">${escapeHTML(value)}</textarea>
+        <button type="button" class="btn-remove-passo btn-icon" style="color:var(--danger); margin-top:5px;"><i class="ph ph-trash"></i></button>
+    `;
+    container.appendChild(div);
+    updatePassosNumbers(container.id);
+}
+
+const btnAddPasso = document.getElementById('btn-add-passo');
+if (btnAddPasso) {
+    btnAddPasso.addEventListener('click', () => {
+        const container = document.getElementById('checklist-passos-container');
+        const rowsCount = container.querySelectorAll('.checklist-passo-row').length + 1;
+        addPassoRow(container, rowsCount, '');
+    });
+}
+
+const btnEditAddPasso = document.getElementById('btn-edit-add-passo');
+if (btnEditAddPasso) {
+    btnEditAddPasso.addEventListener('click', () => {
+        const container = document.getElementById('edit-checklist-passos-container');
+        const rowsCount = container.querySelectorAll('.checklist-passo-row').length + 1;
+        addPassoRow(container, rowsCount, '');
+    });
+}
+
+const passosContainers = [
+    document.getElementById('checklist-passos-container'),
+    document.getElementById('edit-checklist-passos-container')
+];
+
+passosContainers.forEach(container => {
+    if (container) {
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-remove-passo');
+            if (btn) {
+                btn.closest('.checklist-passo-row').remove();
+                updatePassosNumbers(container.id);
+            }
+        });
+    }
+});
+
+function updatePassosNumbers(containerId = 'checklist-passos-container') {
+    const rows = document.querySelectorAll(`#${containerId} .checklist-passo-row`);
+    rows.forEach((row, index) => {
+        row.querySelector('.passo-numero').textContent = (index + 1) + '.';
+        const removeBtn = row.querySelector('.btn-remove-passo');
+        if (rows.length === 1) {
+            removeBtn.style.display = 'none';
+        } else {
+            removeBtn.style.display = 'inline-flex';
+        }
+    });
+}
+
+const formAddChecklist = document.getElementById('form-add-checklist');
+if (formAddChecklist) {
+    formAddChecklist.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const checklistModeloInput = document.getElementById('admin-checklist-modelo').value;
+        if (!checklistModeloInput) {
+            return showNotification("Por favor, selecione uma máquina.", true);
+        }
+        const { marca, modelo } = JSON.parse(checklistModeloInput);
+        const titulo_avaria = document.getElementById('checklist-titulo').value;
+        const descricao = document.getElementById('checklist-descricao').value;
+        
+        const passosInputs = document.querySelectorAll('#checklist-passos-container .passo-input');
+        const passos = Array.from(passosInputs).map(i => i.value).filter(v => v.trim() !== '');
+
+        if (passos.length === 0) {
+            return showNotification("Adicione pelo menos um passo.", true);
+        }
+
+        try {
+            await apiFetch('/checklists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ marca, modelo, titulo_avaria, descricao, passos })
+            });
+            showNotification("Checklist guardada com sucesso!");
+            closeModal('modal-add-checklist');
+            loadChecklistModelos(); // might have new model
+            loadChecklists();
+        } catch (err) {
+            showNotification(err.message, true);
+        }
+    });
+}
+
+function openEditChecklistModal(checklist) {
+    document.getElementById('edit-checklist-id').value = checklist.id;
+    document.getElementById('edit-checklist-titulo').value = checklist.titulo_avaria || '';
+    document.getElementById('edit-checklist-descricao').value = checklist.descricao || '';
+    
+    // Fill custom select
+    const filterVal = JSON.stringify({marca: checklist.marca, modelo: checklist.modelo});
+    const hiddenInput = document.getElementById('edit-checklist-modelo');
+    const searchInput = document.getElementById('search-edit-checklist-modelo');
+    if (hiddenInput) hiddenInput.value = filterVal;
+    if (searchInput) searchInput.value = `${checklist.marca} ${checklist.modelo}`;
+
+    // Fill Passos
+    const container = document.getElementById('edit-checklist-passos-container');
+    container.innerHTML = '';
+    
+    if (checklist.passos && checklist.passos.length > 0) {
+        checklist.passos.forEach((p, index) => {
+            const div = document.createElement('div');
+            div.className = 'edit-checklist-passo-row';
+            div.style.display = 'flex';
+            div.style.gap = '10px';
+            div.style.alignItems = 'center';
+            div.style.marginTop = '10px';
+            div.innerHTML = `
+                <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px;">${index + 1}.</span>
+                <input type="text" class="passo-input" required value="${escapeHTML(p.descricao)}" style="flex:1;">
+                <button type="button" class="btn-remove-edit-passo btn-icon" style="color:var(--danger);"><i class="ph ph-trash"></i></button>
+            `;
+            container.appendChild(div);
+        });
+    } else {
+        // Fallback for no steps
+        const div = document.createElement('div');
+        div.className = 'edit-checklist-passo-row';
+        div.style.display = 'flex';
+        div.style.gap = '10px';
+        div.style.alignItems = 'center';
+        div.style.marginTop = '10px';
+        div.innerHTML = `
+            <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px;">1.</span>
+            <input type="text" class="passo-input" required placeholder="Novo passo..." style="flex:1;">
+            <button type="button" class="btn-remove-edit-passo btn-icon" style="color:var(--danger); display:none;"><i class="ph ph-trash"></i></button>
+        `;
+        container.appendChild(div);
+    }
+    
+    updateEditPassosNumbers();
+    
+    openModal('modal-edit-checklist');
+}
+
+
+
+// --- Funções Auxiliares para Custom Selects ---
+function initCustomSelect(id) {
+    const trigger = document.getElementById(`trigger-${id}`);
+    const dropdown = document.getElementById(`dropdown-${id}`);
+    const search = document.getElementById(`search-${id}`);
+    const optionsContainer = document.getElementById(`options-${id}`);
+    
+    if (!dropdown) return;
+
+    if (trigger) {
+        trigger.onclick = (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+            if (!dropdown.classList.contains('hidden')) {
+                if(search) search.focus();
+            }
+        };
+    } else if (search) {
+        search.onclick = (e) => {
+            e.stopPropagation();
+            dropdown.classList.remove('hidden');
+        };
+    }
+
+    if (search && optionsContainer) {
+        search.oninput = () => {
+            dropdown.classList.remove('hidden');
+            const filter = search.value.toLowerCase();
+            Array.from(optionsContainer.children).forEach(child => {
+                if (child.textContent.toLowerCase().includes(filter)) {
+                    child.style.display = '';
+                } else {
+                    child.style.display = 'none';
+                }
+            });
+        };
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest(`#wrapper-${id}`)) {
+            dropdown.classList.add('hidden');
         }
     });
 }

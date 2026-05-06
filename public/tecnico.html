@@ -102,6 +102,66 @@
             position: relative;
             z-index: 2;
         }
+        /* Custom Select Searchable */
+        .custom-search-select {
+            position: relative;
+            width: 100%;
+            flex: 1;
+            min-width: 250px;
+            max-width: 320px;
+        }
+        .custom-search-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .custom-search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .custom-search-input:disabled {
+            background: #f1f5f9;
+            cursor: not-allowed;
+            color: #94a3b8;
+            border-color: #e2e8f0;
+        }
+        .custom-search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 250px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            margin-top: 4px;
+            display: none;
+        }
+        .custom-search-dropdown.show {
+            display: block;
+        }
+        .custom-search-option {
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-main);
+            border-bottom: 1px solid #f8fafc;
+        }
+        .custom-search-option:hover {
+            background: #f1f5f9;
+            color: var(--primary);
+        }
+        .custom-search-option.hidden {
+            display: none;
+        }
     </style>
     <link rel="icon" type="image/png" href="img/logo.png">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
@@ -131,6 +191,8 @@
                 <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
                 <button class="nav-btn" data-target="agendamentos">Agendamentos</button>
                 <button class="nav-btn" data-target="historico">Histórico de Intervenções</button>
+                <button class="nav-btn" data-target="consulta">Consulta por Máquina</button>
+                <button class="nav-btn" data-target="checklists">Guias de Resolução</button>
                 <button class="nav-btn" data-target="perfil">Perfil</button>
             </nav>
             <div style="padding: 24px; margin-top: auto;">
@@ -229,6 +291,89 @@
                 </div>
             </section>
 
+            <!-- Consulta View -->
+            <section id="view-consulta" class="view hidden">
+                <header class="view-header" style="display: block;">
+                    <div style="margin-bottom: 20px;">
+                        <h1>Consulta por Máquina</h1>
+                        <p>Selecione um cliente e uma máquina para ver todo o histórico de intervenções da mesma.</p>
+                    </div>
+                    <div style="display:flex; align-items:flex-start; gap: 20px; flex-wrap: wrap;">
+                        <div class="custom-search-select">
+                            <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary); display:block; margin-bottom: 6px;">1. Escreva ou Selecione o Cliente</label>
+                            <input type="text" id="filter-consulta-cliente" class="custom-search-input" placeholder="A carregar clientes..." autocomplete="off">
+                            <div id="dropdown-clientes" class="custom-search-dropdown"></div>
+                        </div>
+                        <div class="custom-search-select">
+                            <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary); display:block; margin-bottom: 6px;">2. Escreva ou Selecione a Máquina</label>
+                            <input type="text" id="filter-consulta-maquina" class="custom-search-input" placeholder="Selecione primeiro o cliente" disabled autocomplete="off">
+                            <div id="dropdown-maquinas" class="custom-search-dropdown"></div>
+                        </div>
+                    </div>
+                </header>
+                
+                <div id="consulta-loading" style="display:none; text-align:center; padding: 40px; color: var(--text-secondary);">
+                    <i class="ph ph-spinner-gap" style="font-size: 24px; animation: blinker 1s linear infinite;"></i> A carregar histórico...
+                </div>
+
+                <div id="consulta-empty" style="display:none; text-align:center; padding: 40px; color: var(--text-secondary);">
+                    <i class="ph ph-magnifying-glass" style="font-size: 32px; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
+                    Selecione uma máquina para ver o histórico ou não foram encontradas intervenções.
+                </div>
+
+                <div class="table-container" id="consulta-table-container" style="display:none;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data de Resolução</th>
+                                <th>Lavandaria</th>
+                                <th>Intervenção</th>
+                                <th>Técnico</th>
+                                <th>Relatório</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-consulta-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Checklists View -->
+            <section id="view-checklists" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Guias de Resolução</h1>
+                        <p>Consulte passos e checklists para avarias comuns.</p>
+                    </div>
+                </header>
+                
+                <div style="background:var(--surface-color); padding:20px; border-radius:12px; box-shadow:var(--shadow-sm); margin-bottom:20px;">
+                    <label for="tech-checklist-modelo" style="display:block; font-size:12px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:8px;">Pesquisar Modelo</label>
+                    
+                    <div class="custom-select-wrapper" id="wrapper-tech-checklist-modelo" style="max-width: 400px;">
+                        <div class="custom-select-trigger" id="trigger-tech-checklist-modelo">
+                            <span class="custom-select-text">Selecione ou escreva o modelo...</span>
+                            <i class="ph ph-caret-down"></i>
+                        </div>
+                        <div class="custom-select-dropdown hidden" id="dropdown-tech-checklist-modelo">
+                            <div class="custom-select-search-container">
+                                <i class="ph ph-magnifying-glass"></i>
+                                <input type="text" class="custom-select-search" id="search-tech-checklist-modelo" placeholder="Pesquisar...">
+                            </div>
+                            <div class="custom-select-options" id="options-tech-checklist-modelo">
+                                <!-- JS popula aqui -->
+                            </div>
+                        </div>
+                        <input type="hidden" id="tech-checklist-modelo">
+                    </div>
+                </div>
+
+                <div id="tech-checklists-container" style="display:flex; flex-direction:column; gap:15px;">
+                    <!-- JS popula aqui as checklists carregadas -->
+                </div>
+            </section>
+
             <!-- Perfil View -->
             <section id="view-perfil" class="view hidden">
                 <header class="view-header">
@@ -293,9 +438,10 @@
             <span class="close-btn" data-modal="modal-relatorio"
                 style="color:white; top:10px; right:20px;">&times;</span>
 
-            <div class="a4-toolbar">
+            <div class="a4-toolbar" style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button type="button" id="btn-save-draft" class="btn-a4-draft">Guardar Rascunho</button>
                 <button type="button" id="btn-submit-report" class="btn-a4-submit">Submeter ao Admin</button>
+                <button type="button" id="btn-close-report-top" class="btn-secondary" style="display:none; margin-left: auto;">Fechar Relatório</button>
             </div>
 
             <div class="a4-sheet" id="a4-report-sheet">
@@ -428,6 +574,10 @@
                 style="text-align:center; font-size:12px; color:#cbd5e1; margin-top:15px; display:none;">
                 <i class="ph ph-warning-circle"></i> Atenção: Após submeter, o relatório torna-se definitivo.
             </p>
+
+            <div id="relatorio-footer-close" style="display:none; text-align:right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <button type="button" id="btn-close-report-bottom" class="btn-primary" style="background-color: #64748b;">Fechar Relatório</button>
+            </div>
         </div>
     </div>
 

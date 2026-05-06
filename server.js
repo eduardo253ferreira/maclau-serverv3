@@ -409,6 +409,23 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 data_ultima_revisao DATE
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS checklists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                marca TEXT NOT NULL,
+                modelo TEXT NOT NULL,
+                titulo_avaria TEXT NOT NULL,
+                descricao TEXT,
+                data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS checklists_passos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                checklist_id INTEGER NOT NULL,
+                ordem INTEGER NOT NULL,
+                descricao TEXT NOT NULL,
+                FOREIGN KEY (checklist_id) REFERENCES checklists(id) ON DELETE CASCADE
+            )`);
+
             // --- MIGRATIONS ---
             const migrations = [
                 { table: 'avarias', column: 'data_hora_inicio', type: 'DATETIME' },
@@ -2308,6 +2325,65 @@ app.get('/api/tecnico/servicos/historico', authenticateJWT, isTecnico, (req, res
     });
 });
 
+// --- CONSULTA POR MÁQUINA (TÉCNICO) ---
+
+app.get('/api/tecnico/clientes', authenticateJWT, isTecnico, (req, res) => {
+    db.all(`SELECT id, nome FROM clientes ORDER BY nome ASC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/tecnico/clientes/:id/maquinas', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    db.all(`SELECT id, uuid, marca, modelo, numero_serie FROM maquinas WHERE cliente_id = ? ORDER BY marca ASC, modelo ASC`, [id], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/tecnico/maquinas/:id/historico', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params; // maquina_id (INTEGER)
+
+    db.get(`SELECT uuid FROM maquinas WHERE id = ?`, [id], (err, maquina) => {
+        if (err) return handleDBError(res, err);
+        if (!maquina) return res.status(404).json({ error: 'Máquina não encontrada' });
+
+        const uuid = maquina.uuid;
+
+        const queryAvarias = `
+            SELECT a.id, a.data_hora_fim, a.tipo_avaria, t.nome as tecnico_nome, a.relatorio, c.nome as cliente_nome, 'avaria' as tipo
+            FROM avarias a
+            LEFT JOIN tecnicos t ON a.tecnico_id = t.id
+            JOIN maquinas m ON a.maquina_id = m.uuid
+            JOIN clientes c ON m.cliente_id = c.id
+            WHERE a.maquina_id = ? AND a.estado = 'resolvida'
+        `;
+
+        const queryManutencoes = `
+            SELECT m.id, m.data_hora_fim, 'Geral' as tipo_avaria, t.nome as tecnico_nome, m.relatorio, c.nome as cliente_nome, 'manutencao' as tipo
+            FROM manutencoes m
+            JOIN manutencao_maquinas mm ON m.id = mm.manutencao_id
+            LEFT JOIN tecnicos t ON m.tecnico_id = t.id
+            JOIN clientes c ON m.cliente_id = c.id
+            WHERE mm.maquina_id = ? AND m.estado = 'resolvida'
+        `;
+
+        db.all(queryAvarias, [uuid], (err, avarias) => {
+            if (err) return handleDBError(res, err);
+
+            db.all(queryManutencoes, [id], (err, manutencoes) => {
+                if (err) return handleDBError(res, err);
+
+                const historico = [...avarias, ...manutencoes];
+                historico.sort((a, b) => new Date(b.data_hora_fim) - new Date(a.data_hora_fim));
+
+                res.json(historico);
+            });
+        });
+    });
+});
+
 app.put('/api/tecnico/password', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
     const { oldPassword, newPassword } = req.body;
@@ -2459,6 +2535,124 @@ app.delete('/api/frota/:id', authenticateJWT, isAdmin, (req, res) => {
         if (err) return handleDBError(res, err);
         res.json({ message: "Veículo removido com sucesso", id });
     });
+});
+
+// --- API: CHECKLISTS BASE DE CONHECIMENTO ---
+
+// Listar todos os modelos únicos (marca e modelo)
+app.get('/api/modelos', authenticateJWT, (req, res) => {
+    const query = `
+        SELECT DISTINCT marca, modelo 
+        FROM maquinas 
+        WHERE marca IS NOT NULL AND marca != '' AND modelo IS NOT NULL AND modelo != ''
+        ORDER BY marca ASC, modelo ASC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+// Listar checklists filtrando por marca e modelo
+app.get('/api/checklists', authenticateJWT, (req, res) => {
+    const { marca, modelo } = req.query;
+    let query = `SELECT * FROM checklists`;
+    const params = [];
+
+    if (marca && modelo) {
+        query += ` WHERE marca = ? AND modelo = ?`;
+        params.push(marca, modelo);
+    }
+    query += ` ORDER BY titulo_avaria ASC`;
+
+    db.all(query, params, (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+// Obter uma checklist específica com os seus passos
+app.get('/api/checklists/:id', authenticateJWT, (req, res) => {
+    const { id } = req.params;
+    db.get(`SELECT * FROM checklists WHERE id = ?`, [id], (err, checklist) => {
+        if (err) return handleDBError(res, err);
+        if (!checklist) return res.status(404).json({ error: 'Checklist não encontrada' });
+
+        db.all(`SELECT * FROM checklists_passos WHERE checklist_id = ? ORDER BY ordem ASC`, [id], (err, passos) => {
+            if (err) return handleDBError(res, err);
+            checklist.passos = passos;
+            res.json(checklist);
+        });
+    });
+});
+
+// Criar nova checklist (Apenas Admin)
+app.post('/api/checklists', authenticateJWT, isAdmin, (req, res) => {
+    const { marca, modelo, titulo_avaria, descricao, passos } = req.body;
+
+    if (!marca || !modelo || !titulo_avaria) {
+        return res.status(400).json({ error: 'Marca, modelo e título são obrigatórios' });
+    }
+
+    db.run(
+        `INSERT INTO checklists (marca, modelo, titulo_avaria, descricao) VALUES (?, ?, ?, ?)`,
+        [marca, modelo, titulo_avaria, descricao || ''],
+        function(err) {
+            if (err) return handleDBError(res, err);
+            
+            const checklistId = this.lastID;
+            
+            if (passos && Array.isArray(passos) && passos.length > 0) {
+                const stmt = db.prepare(`INSERT INTO checklists_passos (checklist_id, ordem, descricao) VALUES (?, ?, ?)`);
+                passos.forEach((passo, index) => {
+                    stmt.run(checklistId, index + 1, passo);
+                });
+                stmt.finalize();
+            }
+
+            res.status(201).json({ success: true, id: checklistId, message: 'Checklist criada com sucesso' });
+        }
+    );
+});
+
+// Remover checklist (Apenas Admin)
+app.delete('/api/checklists/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM checklists WHERE id = ?`, [id], function(err) {
+        if (err) return handleDBError(res, err);
+        res.json({ success: true, message: 'Checklist removida com sucesso' });
+    });
+});
+
+// Editar checklist (Apenas Admin)
+app.put('/api/checklists/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { marca, modelo, titulo_avaria, descricao, passos } = req.body;
+
+    if (!marca || !modelo || !titulo_avaria) {
+        return res.status(400).json({ error: 'Marca, modelo e título são obrigatórios' });
+    }
+
+    db.run(
+        `UPDATE checklists SET marca = ?, modelo = ?, titulo_avaria = ?, descricao = ? WHERE id = ?`,
+        [marca, modelo, titulo_avaria, descricao || '', id],
+        function(err) {
+            if (err) return handleDBError(res, err);
+            
+            db.run(`DELETE FROM checklists_passos WHERE checklist_id = ?`, [id], function(err) {
+                if (err) return handleDBError(res, err);
+                
+                if (passos && Array.isArray(passos) && passos.length > 0) {
+                    const stmt = db.prepare(`INSERT INTO checklists_passos (checklist_id, ordem, descricao) VALUES (?, ?, ?)`);
+                    passos.forEach((passo, index) => {
+                        stmt.run(id, index + 1, passo);
+                    });
+                    stmt.finalize();
+                }
+                res.json({ success: true, message: 'Checklist atualizada com sucesso' });
+            });
+        }
+    );
 });
 
 // Error Handler Global
