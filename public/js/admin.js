@@ -9,6 +9,7 @@ let lastRefreshTime = new Date();
 let calendar = null;
 let histCurrentPage = 1;
 const histItemsPerPage = 10;
+let currentFaturacaoRef = null; // Armazena { selectElement, object, oldVal }
 
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
@@ -72,12 +73,12 @@ function updateRefreshStatus() {
 function refreshActiveDashboard() {
     // Agora fazemos refresh sempre que solicitado, mesmo em background,
     // para garantir que os dados estão prontos quando o utilizador mudar de vista.
-    
+
     if (currentMainDashboard === 'avarias') loadAvarias();
     else if (currentMainDashboard === 'servicos') loadServicos();
     else if (currentMainDashboard === 'manutencoes') loadManutencoes();
     else if (currentMainDashboard === 'todas') loadTodas();
-    
+
     updateRefreshStatus();
 }
 
@@ -220,7 +221,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'historico') {
             loadHistoricoMaquinas();
             loadHistorico();
-            
+
             // Adicionar listeners para filtros se ainda não tiverem
             const filterIds = ['hist-cliente', 'hist-tipo', 'hist-maquina', 'hist-tecnico', 'hist-faturacao', 'hist-date-start', 'hist-date-end'];
             filterIds.forEach(id => {
@@ -480,16 +481,16 @@ function openFullNoteModal(note) {
     openModal('modal-view-note');
 }
 
-window.openTicketDetailsModal = function(task) {
+window.openTicketDetailsModal = function (task) {
     const content = document.getElementById('ticket-details-content');
     if (!content) return;
-    
+
     let typeLabel = '';
     let typeColor = '';
     let icon = '';
     let titleStr = '';
     let subTitleStr = '';
-    
+
     if (task._type === 'avaria') {
         typeLabel = 'Avaria';
         typeColor = 'var(--accent)';
@@ -516,7 +517,7 @@ window.openTicketDetailsModal = function(task) {
         'pausada': { label: 'Pausada', color: '#ca8a04' },
         'resolvida': { label: 'Resolvida', color: '#10b981' }
     };
-    
+
     const status = statusMap[task.estado] || { label: task.estado ? task.estado.toUpperCase() : 'AGENDADO', color: 'var(--text-secondary)' };
 
     content.innerHTML = `
@@ -644,6 +645,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+async function deleteTask(type, id, event) {
+    if (event) event.stopPropagation();
+    if (!confirm('Tem a certeza que deseja APAGAR permanentemente esta tarefa? Esta ação não pode ser revertida.')) return;
+    try {
+        let endpoint;
+        if (type === 'avaria') endpoint = `/avarias/${id}`;
+        else if (type === 'servico') endpoint = `/servicos/${id}`;
+        else if (type === 'manutencao') endpoint = `/manutencoes/${id}`;
+
+        await apiFetch(endpoint, { method: 'DELETE' });
+        showNotification('Tarefa apagada com sucesso!');
+        refreshActiveDashboard();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+
 // --- Dashboard (Avarias) ---
 async function loadAvarias() {
     try {
@@ -726,8 +745,18 @@ function createAvariaCard(a) {
         card.appendChild(btnArchive);
     }
 
-    card.onclick = () => openTicketDetailsModal({...a, _type: 'avaria'});
-    
+    if (a.estado !== 'resolvida') {
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-delete-card';
+        btnDelete.title = 'Apagar tarefa permanentemente';
+        btnDelete.innerHTML = '<i class="ph ph-trash"></i>';
+        btnDelete.style.cssText = 'position:absolute; top:10px; right:10px; border:none; background:none; color:#ef4444; cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
+        btnDelete.onclick = (e) => deleteTask('avaria', a.id, e);
+        card.appendChild(btnDelete);
+    }
+
+    card.onclick = () => openTicketDetailsModal({ ...a, _type: 'avaria' });
+
     return card;
 }
 
@@ -763,7 +792,7 @@ async function loadTodas() {
 
         allItems.forEach(item => {
             if (techFilter && item.tecnico_id != techFilter) return;
-            
+
             let card;
             if (item._type === 'avaria') card = createAvariaCard(item);
             else if (item._type === 'servico') card = createServicoCard(item);
@@ -1125,16 +1154,16 @@ async function generateQR(uuid, maquinaNome) {
         const res = await apiFetch(`/maquinas/${uuid}/qrcode`);
         const container = document.getElementById('qrcode-image-container');
         const machineNameEl = document.getElementById('print-machine-name');
-        
+
         if (machineNameEl) {
             machineNameEl.textContent = maquinaNome || '';
         }
-        
+
         if (container) {
             container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">
                                    <p style="margin-top:10px; font-size:12px; word-break: break-all;">${res.url}</p>`;
         }
-        
+
         openModal('modal-qrcode');
     } catch (e) {
         showNotification(e.message, true);
@@ -1394,7 +1423,17 @@ function createServicoCard(s) {
         card.appendChild(btnArchive);
     }
 
-    card.onclick = () => openTicketDetailsModal({...s, _type: 'servico'});
+    if (s.estado !== 'resolvida') {
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-delete-card';
+        btnDelete.title = 'Apagar serviço permanentemente';
+        btnDelete.innerHTML = '<i class="ph ph-trash"></i>';
+        btnDelete.style.cssText = 'position:absolute; top:10px; right:10px; border:none; background:none; color:#ef4444; cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
+        btnDelete.onclick = (e) => deleteTask('servico', s.id, e);
+        card.appendChild(btnDelete);
+    }
+
+    card.onclick = () => openTicketDetailsModal({ ...s, _type: 'servico' });
 
     return card;
 }
@@ -1485,8 +1524,18 @@ function createManutencaoCard(m) {
         card.appendChild(btnArchive);
     }
 
-    card.onclick = () => openTicketDetailsModal({...m, _type: 'manutencao'});
-    
+    if (m.estado !== 'resolvida') {
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-delete-card';
+        btnDelete.title = 'Apagar manutenção permanentemente';
+        btnDelete.innerHTML = '<i class="ph ph-trash"></i>';
+        btnDelete.style.cssText = 'position:absolute; top:10px; right:10px; border:none; background:none; color:#ef4444; cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
+        btnDelete.onclick = (e) => deleteTask('manutencao', m.id, e);
+        card.appendChild(btnDelete);
+    }
+
+    card.onclick = () => openTicketDetailsModal({ ...m, _type: 'manutencao' });
+
     return card;
 }
 
@@ -1700,13 +1749,17 @@ async function loadHistorico() {
                 <td class="col-client"></td>
                 <td class="col-machine"></td>
                 <td>${hoursToHHmm(a.horas_trabalho)}</td>
-                <td>
-                    <select class="select-faturacao">
-                        <option value="Por Faturar">Por Faturar</option>
-                        <option value="Faturado">Faturado</option>
-                        <option value="Oferta">Oferta</option>
-                        <option value="Garantia">Garantia</option>
-                    </select>
+                <td style="text-align: center;">
+                    <div style="display: inline-block; text-align: left;">
+                        <select class="select-faturacao">
+                            <option value="Por Faturar">Por Faturar</option>
+                            <option value="Para Faturar">Para Faturar</option>
+                            <option value="Faturado">Faturado</option>
+                            <option value="Oferta">Oferta</option>
+                            <option value="Garantia">Garantia</option>
+                        </select>
+                        <div class="numero-fatura" style="font-size: 12px; margin-top: 10px; font-weight: 700; color: black; text-align: left;">${a.numero_fatura ? '<span style="color: var(--accent);">Fatura:</span> ' + a.numero_fatura : ''}</div>
+                    </div>
                 </td>
                 <td class="col-actions">
                     <div style="display:flex; gap:5px;">${reportBtnHtml}</div>
@@ -1714,7 +1767,7 @@ async function loadHistorico() {
             `;
             tr.querySelector('.col-tech').textContent = a.tecnico_nome || 'Não Atribuído';
             tr.querySelector('.col-client').textContent = a.cliente_nome || 'Sem Cliente';
-            
+
             let badgeColor = '#ef4444'; // Vermelho para Avaria
             let typeLabel = 'AVARIA';
             if (a.type === 'servico') { badgeColor = '#3b82f6'; typeLabel = 'SERVIÇO'; }
@@ -1730,9 +1783,10 @@ async function loadHistorico() {
 
             // Apply dynamic class for modern look
             const updateStatusClass = (val) => {
-                selFat.classList.remove('status-por-faturar', 'status-faturado', 'status-oferta', 'status-garantia');
+                selFat.classList.remove('status-por-faturar', 'status-para-faturar', 'status-faturado', 'status-oferta', 'status-garantia');
                 const classMap = {
                     'Por Faturar': 'status-por-faturar',
+                    'Para Faturar': 'status-para-faturar',
                     'Faturado': 'status-faturado',
                     'Oferta': 'status-oferta',
                     'Garantia': 'status-garantia'
@@ -1752,15 +1806,37 @@ async function loadHistorico() {
                 }
 
                 updateStatusClass(newVal);
+
+                if (newVal === 'Faturado') {
+                    // Abrir modal personalizado
+                    currentFaturacaoRef = { selectElement: e.target, item: a, oldVal: oldVal };
+                    document.getElementById('faturacao-id').value = a.id;
+                    document.getElementById('faturacao-type').value = a.type;
+                    document.getElementById('faturacao-novo-estado').value = newVal;
+                    document.getElementById('input-numero-fatura').value = a.numero_fatura || '';
+                    openModal('modal-faturacao');
+                    setTimeout(() => document.getElementById('input-numero-fatura').focus(), 100);
+                    return;
+                }
+
                 try {
+                    let numero_fatura = null;
+
                     const endpoint = a.type === 'servico' ? '/servicos/' : (a.type === 'manutencao' ? '/manutencoes/' : '/avarias/');
                     await apiFetch(endpoint + a.id + '/faturacao', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ estado_faturacao: newVal })
+                        body: JSON.stringify({ estado_faturacao: newVal, numero_fatura })
                     });
                     showNotification('Faturação atualizada!');
                     a.estado_faturacao = newVal;
+                    a.numero_fatura = numero_fatura;
+
+                    // Update UI display
+                    const fatDiv = selFat.closest('td').querySelector('.numero-fatura');
+                    if (fatDiv) {
+                        fatDiv.innerHTML = numero_fatura ? '<span style="color: var(--accent);">Fatura:</span> ' + numero_fatura : '';
+                    }
                 } catch (err) {
                     showNotification(err.message, true);
                     e.target.value = oldVal;
@@ -1806,6 +1882,69 @@ async function loadHistorico() {
     }
 }
 
+// Handler para submissão da fatura (Modal Personalizado)
+const formFaturacao = document.getElementById('form-faturacao');
+if (formFaturacao) {
+    formFaturacao.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentFaturacaoRef) return;
+
+        const id = document.getElementById('faturacao-id').value;
+        const type = document.getElementById('faturacao-type').value;
+        const newVal = document.getElementById('faturacao-novo-estado').value;
+        const numero_fatura = document.getElementById('input-numero-fatura').value;
+
+        try {
+            const endpoint = type === 'servico' ? '/servicos/' : (type === 'manutencao' ? '/manutencoes/' : '/avarias/');
+            await apiFetch(endpoint + id + '/faturacao', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado_faturacao: newVal, numero_fatura })
+            });
+
+            showNotification('Faturação atualizada!');
+
+            // Atualizar o objeto local
+            currentFaturacaoRef.item.estado_faturacao = newVal;
+            currentFaturacaoRef.item.numero_fatura = numero_fatura;
+
+            // Atualizar a UI
+            const selFat = currentFaturacaoRef.selectElement;
+            const fatDiv = selFat.closest('td').querySelector('.numero-fatura');
+            if (fatDiv) {
+                fatDiv.innerHTML = numero_fatura ? '<span style="color: var(--accent);">Fatura:</span> ' + numero_fatura : '';
+            }
+
+            closeModal('modal-faturacao');
+            currentFaturacaoRef = null;
+        } catch (err) {
+            showNotification(err.message, true);
+        }
+    });
+}
+
+// Garantir que se a modal fechar sem submeter, o select volta ao estado anterior
+const closeFaturacaoBtn = document.querySelector('.close-btn[data-modal="modal-faturacao"]');
+if (closeFaturacaoBtn) {
+    closeFaturacaoBtn.addEventListener('click', () => {
+        if (currentFaturacaoRef) {
+            currentFaturacaoRef.selectElement.value = currentFaturacaoRef.oldVal;
+            // updateStatusClass logic for the specific element
+            const selFat = currentFaturacaoRef.selectElement;
+            selFat.classList.remove('status-por-faturar', 'status-para-faturar', 'status-faturado', 'status-oferta', 'status-garantia');
+            const classMap = {
+                'Por Faturar': 'status-por-faturar',
+                'Para Faturar': 'status-para-faturar',
+                'Faturado': 'status-faturado',
+                'Oferta': 'status-oferta',
+                'Garantia': 'status-garantia'
+            };
+            if (classMap[currentFaturacaoRef.oldVal]) selFat.classList.add(classMap[currentFaturacaoRef.oldVal]);
+            currentFaturacaoRef = null;
+        }
+    });
+}
+
 function viewRelatorio(texto) {
     const content = document.getElementById('view-relatorio-content');
     content.textContent = texto;
@@ -1847,7 +1986,7 @@ async function loadMachinesForReport() {
 // INIT
 window.onload = async () => {
     await ensureAuth();
-    
+
     // Carregar o dashboard correto baseado no estado inicial
     if (currentMainDashboard === 'avarias') loadAvarias();
     else if (currentMainDashboard === 'servicos') loadServicos();
@@ -2147,6 +2286,21 @@ window.onload = async () => {
 
 window.onclick = function (event) {
     if (event.target.classList.contains('modal')) {
+        const modalId = event.target.id;
+        if (modalId === 'modal-faturacao' && currentFaturacaoRef) {
+            currentFaturacaoRef.selectElement.value = currentFaturacaoRef.oldVal;
+            const selFat = currentFaturacaoRef.selectElement;
+            selFat.classList.remove('status-por-faturar', 'status-para-faturar', 'status-faturado', 'status-oferta', 'status-garantia');
+            const classMap = {
+                'Por Faturar': 'status-por-faturar',
+                'Para Faturar': 'status-para-faturar',
+                'Faturado': 'status-faturado',
+                'Oferta': 'status-oferta',
+                'Garantia': 'status-garantia'
+            };
+            if (classMap[currentFaturacaoRef.oldVal]) selFat.classList.add(classMap[currentFaturacaoRef.oldVal]);
+            currentFaturacaoRef = null;
+        }
         event.target.classList.add('hidden');
     }
 }
@@ -2241,7 +2395,7 @@ async function loadMachinesForMaintenance() {
                 div.style.gap = '10px';
                 div.style.padding = '8px';
                 div.style.borderBottom = '1px solid #edf2f7';
-                
+
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.className = 'mnt-maquina-checkbox';
@@ -2662,23 +2816,23 @@ async function loadChecklistModelos() {
     try {
         const res = await apiFetch('/modelos');
         const filterSelect = document.getElementById('filter-checklist-modelo');
-        
+
         const adminOptionsContainer = document.getElementById('options-admin-checklist-modelo');
         const adminHiddenInput = document.getElementById('admin-checklist-modelo');
         const adminSearchInput = document.getElementById('search-admin-checklist-modelo');
-        
+
         const editOptionsContainer = document.getElementById('options-edit-checklist-modelo');
         const editHiddenInput = document.getElementById('edit-checklist-modelo');
         const editSearchInput = document.getElementById('search-edit-checklist-modelo');
-        
+
         if (filterSelect) filterSelect.innerHTML = '<option value="">Todos os Modelos</option>';
         if (adminOptionsContainer) adminOptionsContainer.innerHTML = '';
         if (editOptionsContainer) editOptionsContainer.innerHTML = '';
 
         res.forEach(m => {
             const label = `${m.marca} ${m.modelo}`;
-            const optVal = JSON.stringify({marca: m.marca, modelo: m.modelo});
-            
+            const optVal = JSON.stringify({ marca: m.marca, modelo: m.modelo });
+
             if (filterSelect) {
                 const optFilter = document.createElement('option');
                 optFilter.value = optVal;
@@ -2691,7 +2845,7 @@ async function loadChecklistModelos() {
                 div.className = 'custom-select-option';
                 div.textContent = label;
                 div.dataset.value = optVal;
-                
+
                 div.onclick = () => {
                     adminHiddenInput.value = optVal;
                     if (adminSearchInput) adminSearchInput.value = label;
@@ -2705,7 +2859,7 @@ async function loadChecklistModelos() {
                 div.className = 'custom-select-option';
                 div.textContent = label;
                 div.dataset.value = optVal;
-                
+
                 div.onclick = () => {
                     editHiddenInput.value = optVal;
                     if (editSearchInput) editSearchInput.value = label;
@@ -2714,22 +2868,22 @@ async function loadChecklistModelos() {
                 editOptionsContainer.appendChild(div);
             }
         });
-        
+
         initCustomSelect('admin-checklist-modelo');
         initCustomSelect('edit-checklist-modelo');
-        
+
         // Also populate edit custom select
         const editOptionsContainerForEdit = document.getElementById('options-edit-checklist-modelo');
         if (editOptionsContainerForEdit) {
             editOptionsContainerForEdit.innerHTML = '';
             res.forEach(m => {
                 const label = `${m.marca} ${m.modelo}`;
-                const optVal = JSON.stringify({marca: m.marca, modelo: m.modelo});
+                const optVal = JSON.stringify({ marca: m.marca, modelo: m.modelo });
                 const div = document.createElement('div');
                 div.className = 'custom-select-option';
                 div.textContent = label;
                 div.dataset.value = optVal;
-                
+
                 div.onclick = () => {
                     document.getElementById('edit-checklist-modelo').value = optVal;
                     const searchInput = document.getElementById('search-edit-checklist-modelo');
@@ -2740,7 +2894,7 @@ async function loadChecklistModelos() {
             });
             initCustomSelect('edit-checklist-modelo');
         }
-        
+
     } catch (e) {
         console.error("Erro ao carregar modelos", e);
     }
@@ -2750,7 +2904,7 @@ async function loadChecklists() {
     try {
         const filterSelect = document.getElementById('filter-checklist-modelo');
         if (!filterSelect) return;
-        
+
         const filterVal = filterSelect.value;
         let url = '/checklists';
         if (filterVal) {
@@ -2758,12 +2912,12 @@ async function loadChecklists() {
             url += `?marca=${encodeURIComponent(marca)}&modelo=${encodeURIComponent(modelo)}`;
         }
         const checklists = await apiFetch(url);
-        
+
         const tbody = document.getElementById('table-checklists-body');
         if (!tbody) return;
 
         tbody.innerHTML = '';
-        if(checklists.length === 0) {
+        if (checklists.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Nenhuma checklist encontrada</td></tr>';
             return;
         }
@@ -2791,12 +2945,12 @@ async function loadChecklists() {
 
         document.querySelectorAll('.btn-delete-checklist').forEach(btn => {
             btn.onclick = async () => {
-                if(confirm("Tem a certeza que deseja eliminar esta checklist?")) {
+                if (confirm("Tem a certeza que deseja eliminar esta checklist?")) {
                     try {
                         await apiFetch(`/checklists/${btn.dataset.id}`, { method: 'DELETE' });
                         showNotification('Checklist eliminada');
                         loadChecklists();
-                    } catch(e) {
+                    } catch (e) {
                         showNotification(e.message, true);
                     }
                 }
@@ -2808,12 +2962,12 @@ async function loadChecklists() {
                 try {
                     const checklist = await apiFetch(`/checklists/${btn.dataset.id}`);
                     document.getElementById('edit-checklist-id').value = checklist.id;
-                    const optVal = JSON.stringify({marca: checklist.marca, modelo: checklist.modelo});
+                    const optVal = JSON.stringify({ marca: checklist.marca, modelo: checklist.modelo });
                     document.getElementById('edit-checklist-modelo').value = optVal;
                     document.getElementById('search-edit-checklist-modelo').value = `${checklist.marca} ${checklist.modelo}`;
                     document.getElementById('edit-checklist-titulo').value = checklist.titulo_avaria;
                     document.getElementById('edit-checklist-descricao').value = checklist.descricao || '';
-                    
+
                     const container = document.getElementById('edit-checklist-passos-container');
                     container.innerHTML = '';
                     if (checklist.passos && checklist.passos.length > 0) {
@@ -2824,7 +2978,7 @@ async function loadChecklists() {
                         addPassoRow(container, 1, '');
                     }
                     openModal('modal-edit-checklist');
-                } catch(e) {
+                } catch (e) {
                     showNotification(e.message, true);
                 }
             };
@@ -2846,12 +3000,12 @@ if (btnOpenAddChecklist) {
         const container = document.getElementById('checklist-passos-container');
         container.innerHTML = '';
         addPassoRow(container, 1, '');
-        
+
         // Se houver um filtro de modelo selecionado, preencher logo a marca e modelo no form
         const filterVal = document.getElementById('filter-checklist-modelo').value;
         const hiddenInput = document.getElementById('admin-checklist-modelo');
         const searchInput = document.getElementById('search-admin-checklist-modelo');
-        
+
         if (filterVal) {
             const { marca, modelo } = JSON.parse(filterVal);
             if (hiddenInput) hiddenInput.value = filterVal;
@@ -2869,22 +3023,22 @@ const formEditChecklist = document.getElementById('form-edit-checklist');
 if (formEditChecklist) {
     formEditChecklist.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const id = document.getElementById('edit-checklist-id').value;
         const checklistModeloInput = document.getElementById('edit-checklist-modelo').value;
         if (!checklistModeloInput) {
             return showNotification("Por favor, selecione uma máquina.", true);
         }
-        
+
         const { marca, modelo } = JSON.parse(checklistModeloInput);
         const titulo = document.getElementById('edit-checklist-titulo').value.trim();
         const descricao = document.getElementById('edit-checklist-descricao').value.trim();
-        
+
         const passosInputs = document.querySelectorAll('#edit-checklist-passos-container .passo-input');
         const passos = Array.from(passosInputs)
-                            .map(input => input.value.trim())
-                            .filter(val => val !== '');
-                            
+            .map(input => input.value.trim())
+            .filter(val => val !== '');
+
         if (passos.length === 0) {
             return showNotification("A checklist deve ter pelo menos um passo.", true);
         }
@@ -2983,7 +3137,7 @@ if (formAddChecklist) {
         const { marca, modelo } = JSON.parse(checklistModeloInput);
         const titulo_avaria = document.getElementById('checklist-titulo').value;
         const descricao = document.getElementById('checklist-descricao').value;
-        
+
         const passosInputs = document.querySelectorAll('#checklist-passos-container .passo-input');
         const passos = Array.from(passosInputs).map(i => i.value).filter(v => v.trim() !== '');
 
@@ -3011,9 +3165,9 @@ function openEditChecklistModal(checklist) {
     document.getElementById('edit-checklist-id').value = checklist.id;
     document.getElementById('edit-checklist-titulo').value = checklist.titulo_avaria || '';
     document.getElementById('edit-checklist-descricao').value = checklist.descricao || '';
-    
+
     // Fill custom select
-    const filterVal = JSON.stringify({marca: checklist.marca, modelo: checklist.modelo});
+    const filterVal = JSON.stringify({ marca: checklist.marca, modelo: checklist.modelo });
     const hiddenInput = document.getElementById('edit-checklist-modelo');
     const searchInput = document.getElementById('search-edit-checklist-modelo');
     if (hiddenInput) hiddenInput.value = filterVal;
@@ -3022,7 +3176,7 @@ function openEditChecklistModal(checklist) {
     // Fill Passos
     const container = document.getElementById('edit-checklist-passos-container');
     container.innerHTML = '';
-    
+
     if (checklist.passos && checklist.passos.length > 0) {
         checklist.passos.forEach((p, index) => {
             const div = document.createElement('div');
@@ -3053,9 +3207,9 @@ function openEditChecklistModal(checklist) {
         `;
         container.appendChild(div);
     }
-    
+
     updateEditPassosNumbers();
-    
+
     openModal('modal-edit-checklist');
 }
 
@@ -3067,7 +3221,7 @@ function initCustomSelect(id) {
     const dropdown = document.getElementById(`dropdown-${id}`);
     const search = document.getElementById(`search-${id}`);
     const optionsContainer = document.getElementById(`options-${id}`);
-    
+
     if (!dropdown) return;
 
     if (trigger) {
@@ -3075,7 +3229,7 @@ function initCustomSelect(id) {
             e.stopPropagation();
             dropdown.classList.toggle('hidden');
             if (!dropdown.classList.contains('hidden')) {
-                if(search) search.focus();
+                if (search) search.focus();
             }
         };
     } else if (search) {
