@@ -153,24 +153,6 @@ app.get('/tecnico.html', authorizeHTML('tecnico'), (req, res, next) => {
     });
 });
 
-app.get('/outros.html', authorizeHTML('admin'), (req, res, next) => {
-    res.sendFile('outros.html', { root: path.join(__dirname, 'public') }, err => {
-        if (err) next(err);
-    });
-});
-
-app.get('/desenho.html', authorizeHTML('colaborador'), (req, res, next) => {
-    res.sendFile('desenho.html', { root: path.join(__dirname, 'public') }, err => {
-        if (err) next(err);
-    });
-});
-
-app.get('/corte.html', authorizeHTML('tecnico_laser'), (req, res, next) => {
-    res.sendFile('corte.html', { root: path.join(__dirname, 'public') }, err => {
-        if (err) next(err);
-    });
-});
-
 // 🔒 SEGURANÇA: Rota protegida para servir fotos dos relatórios
 app.get('/uploads/reports/:filename', (req, res) => {
     const token = req.cookies.maclau_token || req.query.token;
@@ -294,7 +276,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 maquina_id TEXT NOT NULL,
                 tipo_avaria INTEGER NOT NULL,
                 estado TEXT DEFAULT 'pendente',
-                estado_faturacao TEXT DEFAULT 'Por Faturar', -- Por Faturar, Para Faturar, Faturado, Oferta, Garantia
+                estado_faturacao TEXT DEFAULT 'Por Faturar',
                 tecnico_id INTEGER,
                 arquivada INTEGER DEFAULT 0,
                 data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -305,7 +287,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 pecas_substituidas TEXT,
                 horas_trabalho REAL,
                 data_agendada DATETIME,
-                numero_fatura TEXT,
                 FOREIGN KEY (maquina_id) REFERENCES maquinas (uuid),
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
             )`);
@@ -336,7 +317,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 tipo_servico TEXT NOT NULL,
                 tipo_camiao TEXT NOT NULL,
                 estado TEXT DEFAULT 'pendente',
-                estado_faturacao TEXT DEFAULT 'Por Faturar', -- Por Faturar, Para Faturar, Faturado, Oferta, Garantia
+                estado_faturacao TEXT DEFAULT 'Por Faturar',
                 arquivada INTEGER DEFAULT 0,
                 data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
                 data_hora_inicio DATETIME,
@@ -350,7 +331,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 assinatura_cliente TEXT,
                 assinatura_tecnico TEXT,
                 data_agendada DATETIME,
-                numero_fatura TEXT,
                 FOREIGN KEY (cliente_id) REFERENCES clientes (id),
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
             )`);
@@ -360,7 +340,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 cliente_id INTEGER NOT NULL,
                 tecnico_id INTEGER,
                 estado TEXT DEFAULT 'pendente',
-                estado_faturacao TEXT DEFAULT 'Por Faturar', -- Por Faturar, Para Faturar, Faturado, Oferta, Garantia
+                estado_faturacao TEXT DEFAULT 'Por Faturar',
                 arquivada INTEGER DEFAULT 0,
                 data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
                 data_hora_inicio DATETIME,
@@ -374,7 +354,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 assinatura_cliente TEXT,
                 assinatura_tecnico TEXT,
                 data_agendada DATETIME,
-                numero_fatura TEXT,
                 FOREIGN KEY (cliente_id) REFERENCES clientes (id),
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
             )`);
@@ -439,39 +418,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
             )`);
 
-            db.run(`CREATE TABLE IF NOT EXISTS colaboradores (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
-            )`);
-
-            db.run(`CREATE TABLE IF NOT EXISTS tecnico_laser (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
-            )`);
-
-            db.run(`CREATE TABLE IF NOT EXISTS laser_tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cliente_nome TEXT NOT NULL,
-                descricao TEXT,
-                desenho_caminho TEXT,
-                estado TEXT DEFAULT 'pendente',
-                colaborador_id INTEGER,
-                tecnico_laser_id INTEGER,
-                data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
-                data_hora_inicio DATETIME,
-                data_hora_fim DATETIME,
-                data_hora_pausa DATETIME,
-                tempo_total_minutos INTEGER DEFAULT 0,
-                tempo_total_segundos INTEGER DEFAULT 0,
-                desenho_nome_original TEXT,
-                FOREIGN KEY (colaborador_id) REFERENCES colaboradores (id),
-                FOREIGN KEY (tecnico_laser_id) REFERENCES tecnico_laser (id)
-            )`);
-
             db.run(`CREATE TABLE IF NOT EXISTS checklists_passos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 checklist_id INTEGER NOT NULL,
@@ -499,13 +445,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 { table: 'administradores', column: 'email', type: 'TEXT' },
                 { table: 'clientes', column: 'morada', type: 'TEXT' },
                 { table: 'clientes', column: 'NIF', type: 'TEXT' },
-                { table: 'fotos_relatorio', column: 'manutencao_id', type: 'INTEGER' },
-                { table: 'laser_tasks', column: 'tempo_total_minutos', type: 'INTEGER DEFAULT 0' },
-                { table: 'laser_tasks', column: 'tempo_total_segundos', type: 'INTEGER DEFAULT 0' },
-                { table: 'laser_tasks', column: 'desenho_nome_original', type: 'TEXT' },
-                { table: 'avarias', column: 'numero_fatura', type: 'TEXT' },
-                { table: 'servicos', column: 'numero_fatura', type: 'TEXT' },
-                { table: 'manutencoes', column: 'numero_fatura', type: 'TEXT' }
+                { table: 'fotos_relatorio', column: 'manutencao_id', type: 'INTEGER' }
+                // 🔒 CORREÇÃO: removida migração de password_plain (coluna eliminada)
             ];
 
             migrations.forEach(m => {
@@ -750,27 +691,25 @@ process.on('SIGINT', () => {
 
 // Middleware de verificação JWT
 const authenticateJWT = (req, res, next) => {
-    let token = req.cookies.maclau_token; // Tentar cookie primeiro
-
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
-    } else if (req.query.token) {
-        token = req.query.token;
-    }
+        const token = authHeader.split(' ')[1];
 
-    if (!token || token === 'null' || token === 'undefined') {
-        return res.sendStatus(401);
-    }
-
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) {
-            securityLog('JWT_VERIFICATION_FAILED', { error: err.message, ip: req.ip });
-            return res.sendStatus(403);
+        if (!token || token === 'null' || token === 'undefined') {
+            return res.sendStatus(401);
         }
-        req.user = user;
-        next();
-    });
+
+        jwt.verify(token, SECRET_KEY, (err, user) => {
+            if (err) {
+                securityLog('JWT_VERIFICATION_FAILED', { error: err.message, ip: req.ip });
+                return res.sendStatus(403);
+            }
+            req.user = user;
+            next();
+        });
+    } else {
+        res.sendStatus(401);
+    }
 };
 
 // Middlewares de Autorização
@@ -795,22 +734,6 @@ const isAdminOrTecnico = (req, res, next) => {
     else {
         securityLog('UNAUTHORIZED_ACCESS', { role: req.user?.role, required: 'admin_or_tecnico', ip: req.ip });
         res.status(403).json({ error: "Acesso negado" });
-    }
-};
-
-const isColaborador = (req, res, next) => {
-    if (req.user && req.user.role === 'colaborador') next();
-    else {
-        securityLog('UNAUTHORIZED_ACCESS', { role: req.user?.role, required: 'colaborador', ip: req.ip });
-        res.status(403).json({ error: "Acesso negado: Requer conta de Colaborador (Desenho)" });
-    }
-};
-
-const isTecnicoLaser = (req, res, next) => {
-    if (req.user && req.user.role === 'tecnico_laser') next();
-    else {
-        securityLog('UNAUTHORIZED_ACCESS', { role: req.user?.role, required: 'tecnico_laser', ip: req.ip });
-        res.status(403).json({ error: "Acesso negado: Requer conta de Técnico Laser (Corte)" });
     }
 };
 
@@ -926,76 +849,11 @@ app.post('/api/auth/login', (req, res) => {
                     } else {
                         securityLog('LOGIN_FAILED_CLIENTE', { user: email, reason: 'wrong_password', ip: req.ip });
                     }
+                } else {
+                    securityLog('LOGIN_FAILED', { user: email, reason: 'user_not_found', ip: req.ip });
                 }
 
-                // 4. Tentar login como Colaborador (Desenho)
-                db.get(`SELECT id, nome, password FROM colaboradores WHERE email = ?`, [email], (err, row) => {
-                    if (err) return handleDBError(res, err);
-
-                    if (row) {
-                        const match = bcrypt.compareSync(password, row.password);
-                        if (match) {
-                            const expTime = remember ? '30d' : '8h';
-                            const maxAgeMs = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
-
-                            const accessToken = jwt.sign(
-                                { id: row.id, role: 'colaborador' },
-                                SECRET_KEY,
-                                { expiresIn: expTime, algorithm: 'HS256' }
-                            );
-
-                            res.cookie('maclau_token', accessToken, {
-                                httpOnly: true,
-                                secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
-                                sameSite: 'strict',
-                                maxAge: maxAgeMs
-                            });
-
-                            securityLog('LOGIN_SUCCESS', { user: email, role: 'colaborador', ip: req.ip });
-                            return res.json({
-                                accessToken,
-                                role: 'colaborador',
-                                redirectUrl: redirect || `desenho.html?id=${row.id}&name=${encodeURIComponent(row.nome)}`
-                            });
-                        }
-                    }
-
-                    // 5. Tentar login como Tecnico Laser (Corte)
-                    db.get(`SELECT id, nome, password FROM tecnico_laser WHERE email = ?`, [email], (err, row) => {
-                        if (err) return handleDBError(res, err);
-
-                        if (row) {
-                            const match = bcrypt.compareSync(password, row.password);
-                            if (match) {
-                                const expTime = remember ? '30d' : '8h';
-                                const maxAgeMs = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
-
-                                const accessToken = jwt.sign(
-                                    { id: row.id, role: 'tecnico_laser' },
-                                    SECRET_KEY,
-                                    { expiresIn: expTime, algorithm: 'HS256' }
-                                );
-
-                                res.cookie('maclau_token', accessToken, {
-                                    httpOnly: true,
-                                    secure: process.env.COOKIE_SECURE === 'true' || (process.env.NODE_ENV === 'production' && req.protocol === 'https'),
-                                    sameSite: 'strict',
-                                    maxAge: maxAgeMs
-                                });
-
-                                securityLog('LOGIN_SUCCESS', { user: email, role: 'tecnico_laser', ip: req.ip });
-                                return res.json({
-                                    accessToken,
-                                    role: 'tecnico_laser',
-                                    redirectUrl: redirect || `corte.html?id=${row.id}&name=${encodeURIComponent(row.nome)}`
-                                });
-                            }
-                        }
-
-                        securityLog('LOGIN_FAILED', { user: email, reason: 'user_not_found_or_wrong_pass', ip: req.ip });
-                        return res.status(401).json({ error: 'Credenciais inválidas' });
-                    });
-                });
+                return res.status(401).json({ error: 'Credenciais inválidas' });
             });
         });
     });
@@ -1241,7 +1099,7 @@ app.post('/api/maquinas/gerar-qrcode', authenticateJWT, isAdmin, async (req, res
 
 app.get('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.estado_faturacao, a.numero_fatura,
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.estado_faturacao,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_pausa) as data_hora_pausa, 
@@ -1536,33 +1394,19 @@ app.get('/api/historico/avarias', authenticateJWT, isAdmin, (req, res) => {
 // Atualizar estado de faturação de avaria
 app.put('/api/avarias/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    const { estado_faturacao, numero_fatura } = req.body;
+    const { estado_faturacao } = req.body;
 
-    const allowed = ['Por Faturar', 'Para Faturar', 'Faturado', 'Oferta', 'Garantia'];
+    const allowed = ['Por Faturar', 'Faturado', 'Oferta', 'Garantia'];
     if (!allowed.includes(estado_faturacao)) {
         return res.status(400).json({ error: "Estado de faturação inválido" });
     }
 
-    db.run(`UPDATE avarias SET estado_faturacao = ?, numero_fatura = ? WHERE id = ?`, [estado_faturacao, numero_fatura || null, id], function (err) {
+    db.run(`UPDATE avarias SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], function (err) {
         if (err) return handleDBError(res, err);
-        securityLog('AVARIA_FATURACAO_CHANGED', { avaria_id: id, novo_estado: estado_faturacao, numero_fatura });
-        res.json({ message: "Estado de faturação atualizado com sucesso", id, estado_faturacao, numero_fatura });
+        securityLog('AVARIA_FATURACAO_CHANGED', { avaria_id: id, novo_estado: estado_faturacao });
+        res.json({ message: "Estado de faturação atualizado com sucesso", id, estado_faturacao });
     });
 });
-
-// Apagar avaria (Permanente)
-app.delete('/api/avarias/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    db.serialize(() => {
-        db.run(`DELETE FROM fotos_relatorio WHERE avaria_id = ?`, [id]);
-        db.run(`DELETE FROM avarias WHERE id = ?`, [id], function(err) {
-            if (err) return handleDBError(res, err);
-            securityLog('AVARIA_DELETED', { avaria_id: id, admin_id: req.user.id });
-            res.json({ message: "Avaria removida com sucesso" });
-        });
-    });
-});
-
 
 // --- SERVIÇOS ROUTES ---
 
@@ -1700,33 +1544,18 @@ app.put('/api/servicos/:id/agendamento', authenticateJWT, isAdmin, (req, res) =>
 // 🔒 CORREÇÃO: Validação do estado de faturação de serviços
 app.put('/api/servicos/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    const { estado_faturacao, numero_fatura } = req.body;
+    const { estado_faturacao } = req.body;
 
-    const allowed = ['Por Faturar', 'Para Faturar', 'Faturado', 'Oferta', 'Garantia'];
+    const allowed = ['Por Faturar', 'Faturado', 'Oferta', 'Garantia'];
     if (!allowed.includes(estado_faturacao)) {
         return res.status(400).json({ error: "Estado de faturação inválido" });
     }
 
-    db.run(`UPDATE servicos SET estado_faturacao = ?, numero_fatura = ? WHERE id = ?`, [estado_faturacao, numero_fatura || null, id], function (err) {
+    db.run(`UPDATE servicos SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], (err) => {
         if (err) return handleDBError(res, err);
-        securityLog('SERVICO_FATURACAO_CHANGED', { servico_id: id, novo_estado: estado_faturacao, numero_fatura });
-        res.json({ message: "Estado de faturação atualizado com sucesso", id, estado_faturacao, numero_fatura });
+        res.json({ message: "Faturação atualizada" });
     });
 });
-
-// Apagar serviço (Permanente)
-app.delete('/api/servicos/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    db.serialize(() => {
-        db.run(`DELETE FROM fotos_relatorio WHERE servico_id = ?`, [id]);
-        db.run(`DELETE FROM servicos WHERE id = ?`, [id], function(err) {
-            if (err) return handleDBError(res, err);
-            securityLog('SERVICO_DELETED', { servico_id: id, admin_id: req.user.id });
-            res.json({ message: "Serviço removido com sucesso" });
-        });
-    });
-});
-
 
 app.get('/api/tecnico/servicos', authenticateJWT, isTecnico, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -1971,34 +1800,18 @@ app.put('/api/manutencoes/:id/agendamento', authenticateJWT, isAdmin, (req, res)
 // 🔒 CORREÇÃO: Validação do estado de faturação de manutenções
 app.put('/api/manutencoes/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    const { estado_faturacao, numero_fatura } = req.body;
+    const { estado_faturacao } = req.body;
 
-    const allowed = ['Por Faturar', 'Para Faturar', 'Faturado', 'Oferta', 'Garantia'];
+    const allowed = ['Por Faturar', 'Faturado', 'Oferta', 'Garantia'];
     if (!allowed.includes(estado_faturacao)) {
         return res.status(400).json({ error: "Estado de faturação inválido" });
     }
 
-    db.run(`UPDATE manutencoes SET estado_faturacao = ?, numero_fatura = ? WHERE id = ?`, [estado_faturacao, numero_fatura || null, id], function (err) {
+    db.run(`UPDATE manutencoes SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], (err) => {
         if (err) return handleDBError(res, err);
-        securityLog('MANUTENCAO_FATURACAO_CHANGED', { manutencao_id: id, novo_estado: estado_faturacao, numero_fatura });
-        res.json({ message: "Estado de faturação atualizado com sucesso", id, estado_faturacao, numero_fatura });
+        res.json({ message: "Faturação da manutenção atualizada" });
     });
 });
-
-// Apagar manutenção (Permanente)
-app.delete('/api/manutencoes/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    db.serialize(() => {
-        db.run(`DELETE FROM fotos_relatorio WHERE manutencao_id = ?`, [id]);
-        db.run(`DELETE FROM manutencao_maquinas WHERE manutencao_id = ?`, [id]);
-        db.run(`DELETE FROM manutencoes WHERE id = ?`, [id], function(err) {
-            if (err) return handleDBError(res, err);
-            securityLog('MANUTENCAO_DELETED', { manutencao_id: id, admin_id: req.user.id });
-            res.json({ message: "Manutenção removida com sucesso" });
-        });
-    });
-});
-
 
 app.get('/api/tecnico/manutencoes', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
@@ -2105,239 +1918,6 @@ app.post('/api/tecnico/manutencoes/:id/submeter-relatorio', authenticateJWT, isT
         if (err) return handleDBError(res, err);
         securityLog('RELATORIO_MANUTENCAO_SUBMETIDO', { manutencao_id: id, tecnico_id: techId });
         res.json({ message: "Relatório de manutenção submetido" });
-    });
-});
-
-// --- LASER CUTTING ROUTES ---
-
-// Manage Colaboradores (Admin)
-app.get('/api/colaboradores', authenticateJWT, isAdmin, (req, res) => {
-    db.all(`SELECT id, nome, email FROM colaboradores`, [], (err, rows) => {
-        if (err) return handleDBError(res, err);
-        res.json(rows);
-    });
-});
-
-app.post('/api/colaboradores', authenticateJWT, isAdmin, (req, res) => {
-    const { nome, email, password } = req.body;
-    if (!nome || !email || !password) return res.status(400).json({ error: "Todos os campos são obrigatórios" });
-    const hash = bcrypt.hashSync(password, 10);
-    db.run(`INSERT INTO colaboradores (nome, email, password) VALUES (?, ?, ?)`, [nome, email, hash], function(err) {
-        if (err) return handleDBError(res, err);
-        res.status(201).json({ id: this.lastID, nome, email });
-    });
-});
-
-app.put('/api/colaboradores/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    const { nome, email, password } = req.body;
-    
-    if (password) {
-        const hash = bcrypt.hashSync(password, 10);
-        db.run(`UPDATE colaboradores SET nome = ?, email = ?, password = ? WHERE id = ?`, [nome, email, hash, id], function(err) {
-            if (err) return handleDBError(res, err);
-            res.json({ message: "Colaborador atualizado" });
-        });
-    } else {
-        db.run(`UPDATE colaboradores SET nome = ?, email = ? WHERE id = ?`, [nome, email, id], function(err) {
-            if (err) return handleDBError(res, err);
-            res.json({ message: "Colaborador atualizado" });
-        });
-    }
-});
-
-app.delete('/api/colaboradores/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM colaboradores WHERE id = ?`, [id], function(err) {
-        if (err) return handleDBError(res, err);
-        res.json({ message: "Colaborador removido" });
-    });
-});
-
-
-// Manage Tecnico Laser (Admin)
-app.get('/api/tecnico-laser', authenticateJWT, isAdmin, (req, res) => {
-    db.all(`SELECT id, nome, email FROM tecnico_laser`, [], (err, rows) => {
-        if (err) return handleDBError(res, err);
-        res.json(rows);
-    });
-});
-
-app.post('/api/tecnico-laser', authenticateJWT, isAdmin, (req, res) => {
-    const { nome, email, password } = req.body;
-    if (!nome || !email || !password) return res.status(400).json({ error: "Todos os campos são obrigatórios" });
-    const hash = bcrypt.hashSync(password, 10);
-    db.run(`INSERT INTO tecnico_laser (nome, email, password) VALUES (?, ?, ?)`, [nome, email, hash], function(err) {
-        if (err) return handleDBError(res, err);
-        res.status(201).json({ id: this.lastID, nome, email });
-    });
-});
-
-app.put('/api/tecnico-laser/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    const { nome, email, password } = req.body;
-    
-    if (password) {
-        const hash = bcrypt.hashSync(password, 10);
-        db.run(`UPDATE tecnico_laser SET nome = ?, email = ?, password = ? WHERE id = ?`, [nome, email, hash, id], function(err) {
-            if (err) return handleDBError(res, err);
-            res.json({ message: "Técnico laser atualizado" });
-        });
-    } else {
-        db.run(`UPDATE tecnico_laser SET nome = ?, email = ? WHERE id = ?`, [nome, email, id], function(err) {
-            if (err) return handleDBError(res, err);
-            res.json({ message: "Técnico laser atualizado" });
-        });
-    }
-});
-
-app.delete('/api/tecnico-laser/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM tecnico_laser WHERE id = ?`, [id], function(err) {
-        if (err) return handleDBError(res, err);
-        res.json({ message: "Técnico laser removido" });
-    });
-});
-
-
-// Laser Tasks
-app.get('/api/laser/tasks', authenticateJWT, (req, res) => {
-    let query = `SELECT * FROM laser_tasks ORDER BY data_criacao DESC`;
-    let params = [];
-    
-    if (req.user.role === 'tecnico_laser') {
-        query = `SELECT * FROM laser_tasks WHERE estado IN ('em corte', 'concluido', 'pausado', 'pronto para corte') ORDER BY data_criacao DESC`;
-    }
-
-    db.all(query, params, (err, rows) => {
-        if (err) return handleDBError(res, err);
-        res.json(rows);
-    });
-});
-
-app.post('/api/laser/tasks', authenticateJWT, isAdmin, (req, res) => {
-    const { cliente_nome, descricao } = req.body;
-    if (!cliente_nome) return res.status(400).json({ error: "Nome do cliente é obrigatório" });
-
-    db.run(`INSERT INTO laser_tasks (cliente_nome, descricao, estado) VALUES (?, ?, 'pendente')`, 
-        [cliente_nome, descricao], function(err) {
-        if (err) return handleDBError(res, err);
-        res.status(201).json({ id: this.lastID, message: "Tarefa laser criada" });
-    });
-});
-
-// Update status and handle file upload for drawing
-const laserStorage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const dir = 'uploads/laser';
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'laser-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
-const uploadLaser = multer({ storage: laserStorage });
-
-app.put('/api/laser/tasks/:id/upload', authenticateJWT, isColaborador, uploadLaser.single('desenho'), (req, res) => {
-    const { id } = req.params;
-    if (!req.file) return res.status(400).json({ error: "Ficheiro de desenho é obrigatório" });
-    
-    const caminho = `/uploads/laser/${req.file.filename}`;
-    const nomeOriginal = req.file.originalname;
-    
-    db.run(`UPDATE laser_tasks SET desenho_caminho = ?, desenho_nome_original = ?, estado = 'pronto para corte', colaborador_id = ? WHERE id = ?`, 
-        [caminho, nomeOriginal, req.user.id, id], function(err) {
-        if (err) return handleDBError(res, err);
-        res.json({ message: "Desenho submetido e pronto para corte", caminho });
-    });
-});
-
-app.put('/api/laser/tasks/:id/status', authenticateJWT, (req, res) => {
-    const { id } = req.params;
-    const { estado } = req.body;
-    const role = req.user.role;
-
-    if (role === 'tecnico_laser') {
-        db.get(`SELECT estado, data_hora_inicio, tempo_total_segundos, tempo_total_minutos FROM laser_tasks WHERE id = ?`, [id], (err, task) => {
-            if (err || !task) return res.status(404).json({ error: "Tarefa não encontrada" });
-
-            let query = `UPDATE laser_tasks SET estado = ?, tecnico_laser_id = ?`;
-            let params = [estado, req.user.id];
-            let additionalSeconds = 0;
-            const nowIso = new Date().toISOString();
-
-            if (estado === 'em corte') {
-                query += `, data_hora_inicio = ?`;
-                params.splice(2, 0, nowIso); // Insert before id
-            } else if (estado === 'pausado' || estado === 'concluido') {
-                if (task.estado === 'em corte' && task.data_hora_inicio) {
-                    const start = new Date(task.data_hora_inicio);
-                    const now = new Date();
-                    additionalSeconds = Math.floor((now - start) / 1000);
-                }
-                
-                if (estado === 'pausado') {
-                    query += `, data_hora_pausa = ?`;
-                } else {
-                    query += `, data_hora_fim = ?`;
-                }
-                params.splice(2, 0, nowIso);
-
-                const totalSeconds = (task.tempo_total_segundos || 0) + additionalSeconds;
-                const totalMinutes = Math.ceil(totalSeconds / 60);
-
-                query += `, tempo_total_segundos = ?, tempo_total_minutos = ?`;
-                params.splice(3, 0, totalSeconds, totalMinutes);
-            }
-            
-            query += ` WHERE id = ?`;
-            params.push(id);
-
-            db.run(query, params, function(err) {
-                if (err) return handleDBError(res, err);
-                const totalSeconds = (task.tempo_total_segundos || 0) + additionalSeconds;
-                res.json({ 
-                    message: "Estado atualizado", 
-                    estado, 
-                    total_seconds: totalSeconds,
-                    total_minutos: Math.ceil(totalSeconds / 60)
-                });
-            });
-        });
-    } else if (role === 'admin') {
-        db.run(`UPDATE laser_tasks SET estado = ? WHERE id = ?`, [estado, id], function(err) {
-            if (err) return handleDBError(res, err);
-            res.json({ message: "Estado atualizado pelo admin", estado });
-        });
-    } else {
-        res.status(403).json({ error: "Não autorizado" });
-    }
-});
-
-app.delete('/api/laser/tasks/:id', authenticateJWT, isAdmin, (req, res) => {
-    const { id } = req.params;
-    db.run(`DELETE FROM laser_tasks WHERE id = ?`, [id], function(err) {
-        if (err) return handleDBError(res, err);
-        res.json({ message: "Tarefa removida" });
-    });
-});
-
-app.get('/uploads/laser/:filename', (req, res) => {
-    const token = req.query.token || req.headers.authorization?.split(' ')[1];
-
-    if (!token) return res.sendStatus(401);
-
-    jwt.verify(token, SECRET_KEY, (err) => {
-        if (err) return res.sendStatus(401);
-
-        const filePath = path.join(__dirname, 'uploads', 'laser', req.params.filename);
-        if (fs.existsSync(filePath)) {
-            res.download(filePath);
-        } else {
-            res.sendStatus(404);
-        }
     });
 });
 
@@ -2531,8 +2111,6 @@ app.get('/api/tecnico/agendamentos', authenticateJWT, isTecnico, (req, res) => {
     });
 });
 
-
-
 app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
     const query = `
         SELECT 'avaria' as type, a.id, 
@@ -2541,7 +2119,7 @@ app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
                a.tecnico_id, t.nome as tecnico_nome, 
                c.id as cliente_id, c.nome as cliente_nome, 
                (m.marca || ' - ' || m.modelo) as maquina_nome, m.uuid as maquina_uuid,
-               a.horas_trabalho, a.estado_faturacao, a.numero_fatura, a.relatorio, a.relatorio_submetido
+               a.horas_trabalho, a.estado_faturacao, a.relatorio, a.relatorio_submetido
         FROM avarias a
         LEFT JOIN tecnicos t ON a.tecnico_id = t.id
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
@@ -2556,7 +2134,7 @@ app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
                s.tecnico_id, t.nome as tecnico_nome, 
                c.id as cliente_id, c.nome as cliente_nome, 
                s.tipo_servico || (CASE WHEN s.tipo_camiao IS NOT NULL AND s.tipo_camiao != '' THEN ' (' || s.tipo_camiao || ')' ELSE '' END) as maquina_nome, NULL as maquina_uuid,
-               s.horas_trabalho, s.estado_faturacao, s.numero_fatura, s.relatorio, s.relatorio_submetido
+               s.horas_trabalho, s.estado_faturacao, s.relatorio, s.relatorio_submetido
         FROM servicos s
         LEFT JOIN tecnicos t ON s.tecnico_id = t.id
         LEFT JOIN clientes c ON s.cliente_id = c.id
@@ -2570,7 +2148,7 @@ app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
                mn.tecnico_id, t.nome as tecnico_nome, 
                c.id as cliente_id, c.nome as cliente_nome, 
                'Todas as Máquinas' as maquina_nome, NULL as maquina_uuid,
-               mn.horas_trabalho, mn.estado_faturacao, mn.numero_fatura, mn.relatorio, mn.relatorio_submetido
+               mn.horas_trabalho, mn.estado_faturacao, mn.relatorio, mn.relatorio_submetido
         FROM manutencoes mn
         LEFT JOIN tecnicos t ON mn.tecnico_id = t.id
         LEFT JOIN clientes c ON mn.cliente_id = c.id
