@@ -279,12 +279,15 @@
         [data-main-filter="todas"].active~.toggle-slider-main {
             transform: translateX(0);
         }
+
         [data-main-filter="avarias"].active~.toggle-slider-main {
             transform: translateX(calc(100% + 4px));
         }
+
         [data-main-filter="servicos"].active~.toggle-slider-main {
             transform: translateX(calc(200% + 8px));
         }
+
         [data-main-filter="manutencoes"].active~.toggle-slider-main {
             transform: translateX(calc(300% + 12px));
         }
@@ -331,7 +334,7 @@
                 align-items: center;
                 justify-content: center;
             }
-            
+
             .btn-report-avaria span {
                 display: none;
             }
@@ -407,12 +410,14 @@
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
         }
+
         .avaria-card:hover {
             transform: translateY(-2px);
             box-shadow: var(--shadow-md);
             border-color: var(--accent);
         }
-        .avaria-card button, 
+
+        .avaria-card button,
         .avaria-card .card-notes,
         .avaria-card a {
             cursor: pointer;
@@ -471,6 +476,11 @@
                 <button class="nav-btn" data-target="frota">
                     <i class="ph ph-truck"></i> Gestão de Frota
                 </button>
+                <a href="outros.html" class="nav-link-special"
+                    style="text-decoration:none; color:inherit; background: #fffbeb; border: 1px solid #fde68a; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0;">
+                    <i class="ph ph-plus-circle" style="color: #d97706; font-size: 20px;"></i> <strong>Outros
+                        Serviços</strong>
+                </a>
             </nav>
             <div style="padding: 24px; margin-top: auto;">
                 <button id="btn-logout" class="btn-primary w-100"
@@ -518,7 +528,8 @@
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <button class="btn-report-avaria btn-open-report-avaria"
-                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px;" title="Nova Avaria">
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px;"
+                                        title="Nova Avaria">
                                         <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Nova Avaria</span>
                                     </button>
@@ -574,7 +585,8 @@
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <button class="btn-report-avaria btn-open-report-servico"
-                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;" title="Novo Serviço">
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;"
+                                        title="Novo Serviço">
                                         <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Novo Serviço</span>
                                     </button>
@@ -628,7 +640,8 @@
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <button class="btn-report-avaria btn-open-report-manutencao"
-                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;" title="Nova Manutenção">
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;"
+                                        title="Nova Manutenção">
                                         <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Nova Manutenção</span>
                                     </button>
@@ -844,6 +857,7 @@
                             <select id="hist-faturacao">
                                 <option value="">Todos os Estados</option>
                                 <option value="Por Faturar">Por Faturar</option>
+                                <option value="Para Faturar">Para Faturar</option>
                                 <option value="Faturado">Faturado</option>
                                 <option value="Oferta">Oferta</option>
                                 <option value="Garantia">Garantia</option>
@@ -1091,10 +1105,16 @@
             <form id="form-add-checklist">
                 <div class="form-group" style="margin-bottom: 20px;">
                     <label>Máquinas *</label>
-                    <div class="custom-select-wrapper" id="wrapper-admin-checklist-modelo" style="position:relative; width: 100%;">
-                        <input type="text" id="search-admin-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
-                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
-                        <div class="custom-select-dropdown hidden" id="dropdown-admin-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                    <div class="custom-select-wrapper" id="wrapper-admin-checklist-modelo"
+                        style="position:relative; width: 100%;">
+                        <input type="text" id="search-admin-checklist-modelo" placeholder="Pesquisar máquina..."
+                            autocomplete="off"
+                            style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;"
+                            required>
+                        <i class="ph ph-caret-down"
+                            style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-admin-checklist-modelo"
+                            style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
                             <div class="custom-select-options" id="options-admin-checklist-modelo">
                                 <!-- JS popula aqui -->
                             </div>
@@ -1108,19 +1128,27 @@
                 </div>
                 <div class="form-group">
                     <label>Descrição (Opcional)</label>
-                    <textarea id="checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                    <textarea id="checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Passos de Resolução *</label>
-                    <div id="checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                    <div id="checklist-passos-container"
+                        style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
                         <div class="checklist-passo-row" style="display:flex; gap:10px; align-items:flex-start;">
-                            <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">1.</span>
-                            <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba" style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;"></textarea>
-                            <button type="button" class="btn-remove-passo btn-icon" style="color:var(--danger); display:none; margin-top:5px;"><i class="ph ph-trash"></i></button>
+                            <span class="passo-numero"
+                                style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">1.</span>
+                            <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba"
+                                style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;"></textarea>
+                            <button type="button" class="btn-remove-passo btn-icon"
+                                style="color:var(--danger); display:none; margin-top:5px;"><i
+                                    class="ph ph-trash"></i></button>
                         </div>
                     </div>
-                    <button type="button" id="btn-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
+                    <button type="button" id="btn-add-passo" class="btn-secondary w-100"
+                        style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i
+                            class="ph ph-plus"></i> Adicionar Passo</button>
                 </div>
 
                 <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Guardar Checklist</button>
@@ -1128,7 +1156,7 @@
             <datalist id="datalist-marcas-modelos"></datalist>
         </div>
     </div>
-    
+
     <!-- Modal Edit Checklist -->
     <div id="modal-edit-checklist" class="modal hidden">
         <div class="modal-content" style="max-width: 600px;">
@@ -1138,10 +1166,16 @@
                 <input type="hidden" id="edit-checklist-id">
                 <div class="form-group" style="margin-bottom: 20px;">
                     <label>Máquinas *</label>
-                    <div class="custom-select-wrapper" id="wrapper-edit-checklist-modelo" style="position:relative; width: 100%;">
-                        <input type="text" id="search-edit-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
-                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
-                        <div class="custom-select-dropdown hidden" id="dropdown-edit-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                    <div class="custom-select-wrapper" id="wrapper-edit-checklist-modelo"
+                        style="position:relative; width: 100%;">
+                        <input type="text" id="search-edit-checklist-modelo" placeholder="Pesquisar máquina..."
+                            autocomplete="off"
+                            style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;"
+                            required>
+                        <i class="ph ph-caret-down"
+                            style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-edit-checklist-modelo"
+                            style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
                             <div class="custom-select-options" id="options-edit-checklist-modelo">
                                 <!-- JS popula aqui -->
                             </div>
@@ -1155,15 +1189,20 @@
                 </div>
                 <div class="form-group">
                     <label>Descrição (Opcional)</label>
-                    <textarea id="edit-checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                    <textarea id="edit-checklist-descricao"
+                        placeholder="Breve nota ou dicas adicionais sobre o problema..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Passos de Resolução *</label>
-                    <div id="edit-checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                    <div id="edit-checklist-passos-container"
+                        style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
                         <!-- JS popula os passos aqui -->
                     </div>
-                    <button type="button" id="btn-edit-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
+                    <button type="button" id="btn-edit-add-passo" class="btn-secondary w-100"
+                        style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i
+                            class="ph ph-plus"></i> Adicionar Passo</button>
                 </div>
 
                 <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Atualizar Checklist</button>
@@ -1648,12 +1687,16 @@
                 </div>
                 <div class="form-group">
                     <label>Máquinas a Manter *</label>
-                    <div id="report-manutencao-maquinas-container" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; background: #f8fafc;">
-                        <p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>
+                    <div id="report-manutencao-maquinas-container"
+                        style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; background: #f8fafc;">
+                        <p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um
+                            cliente para carregar as máquinas.</p>
                     </div>
                     <div style="margin-top: 8px; display: flex; gap: 10px;">
-                        <button type="button" id="btn-mnt-select-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Selecionar Todas</button>
-                        <button type="button" id="btn-mnt-deselect-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Limpar Seleção</button>
+                        <button type="button" id="btn-mnt-select-all" class="btn-secondary"
+                            style="padding: 4px 8px; font-size: 12px;">Selecionar Todas</button>
+                        <button type="button" id="btn-mnt-deselect-all" class="btn-secondary"
+                            style="padding: 4px 8px; font-size: 12px;">Limpar Seleção</button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -1964,6 +2007,26 @@
             <div id="ticket-details-content">
                 <!-- JS popula aqui -->
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Inserir Fatura -->
+    <div id="modal-faturacao" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-faturacao">&times;</span>
+            <h2>Número da Fatura</h2>
+            <p style="margin-bottom: 20px; color: var(--text-secondary);">Introduza o número da fatura para esta
+                intervenção.</p>
+            <form id="form-faturacao">
+                <input type="hidden" id="faturacao-id">
+                <input type="hidden" id="faturacao-type">
+                <input type="hidden" id="faturacao-novo-estado">
+                <div class="form-group">
+                    <label>Número da Fatura (ex: FA34/26)</label>
+                    <input type="text" id="input-numero-fatura" placeholder="FA00/00" required>
+                </div>
+                <button type="submit" class="btn-primary w-100">Confirmar e Gravar</button>
+            </form>
         </div>
     </div>
 
