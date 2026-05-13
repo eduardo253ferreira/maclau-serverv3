@@ -116,43 +116,27 @@
     <div id="notification" class="notification hidden"></div>
 
     <div class="app-container">
-        <!-- Sidebar Identical to admin.html -->
-        <aside class="sidebar">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button id="btn-toggle-sidebar" class="btn-menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
             <div class="logo-container">
                 <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+                <button id="btn-close-sidebar" class="btn-close-sidebar">
+                    <i class="ph ph-x"></i>
+                </button>
             </div>
-            <nav class="sidebar-nav">
-                <a href="admin.html" class="nav-btn">
-                    <i class="ph ph-gauge"></i> Dashboards
+            <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+                <a href="admin.html" class="nav-btn active" style="background: var(--accent); color: white; display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 12px; text-decoration: none; font-weight: 700; justify-content: center; box-shadow: var(--shadow-md);">
+                    <i class="ph ph-arrow-left"></i> Voltar à Dashboard
                 </a>
-                <a href="admin.html#historico" class="nav-btn">
-                    <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
-                </a>
-                <a href="admin.html#agendamentos" class="nav-btn">
-                    <i class="ph ph-calendar-blank"></i> Agendamentos
-                </a>
-                <a href="admin.html#estatisticas" class="nav-btn">
-                    <i class="ph ph-chart-line-up"></i> Estatísticas
-                </a>
-                <a href="admin.html#clientes" class="nav-btn">
-                    <i class="ph ph-users"></i> Gestão de Clientes
-                </a>
-                <a href="admin.html#maquinas" class="nav-btn">
-                    <i class="ph ph-washing-machine"></i> Gestão de Máquinas
-                </a>
-                <a href="admin.html#tecnicos" class="nav-btn">
-                    <i class="ph ph-wrench"></i> Gestão de Técnicos
-                </a>
-                <a href="admin.html#checklists" class="nav-btn">
-                    <i class="ph ph-list-checks"></i> Gestão de Checklists
-                </a>
-                <a href="admin.html#frota" class="nav-btn">
-                    <i class="ph ph-truck"></i> Gestão de Frota
-                </a>
-                <a href="outros.html" class="nav-btn active" style="background: var(--accent); color: white;">
-                    <i class="ph ph-plus-circle"></i> Outros Serviços
-                </a>
-            </nav>
+            </div>
             <div style="padding: 24px; margin-top: auto;">
                 <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); border:none; cursor:pointer; box-shadow: none;">
                     <i class="ph ph-sign-out"></i> Sair

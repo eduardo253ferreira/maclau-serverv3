@@ -211,6 +211,18 @@
         document.getElementById('tab-pedidos').addEventListener('click', () => switchTab('pedidos'));
         document.getElementById('tab-equipa').addEventListener('click', () => switchTab('equipa'));
 
+        // Mobile Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        const btnToggle = document.getElementById('btn-toggle-sidebar');
+        const btnClose = document.getElementById('btn-close-sidebar');
+
+        if (btnToggle && sidebar) {
+            btnToggle.addEventListener('click', () => sidebar.classList.add('active'));
+        }
+        if (btnClose && sidebar) {
+            btnClose.addEventListener('click', () => sidebar.classList.remove('active'));
+        }
+
         // Modal openers
         document.getElementById('btn-open-modal-laser').addEventListener('click', () => openModal('modal-novo-laser'));
         document.getElementById('btn-open-modal-colab').addEventListener('click', () => openModal('modal-novo-colab'));

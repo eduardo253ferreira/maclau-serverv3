@@ -549,6 +549,53 @@ function renderPhotosPreview(fotos, disabled = false) {
     });
 }
 
+/**
+ * Redimensiona e comprime uma imagem antes do upload
+ * @param {File} file O ficheiro original
+ * @param {number} maxWidth Largura máxima (default 1600px)
+ * @param {number} quality Qualidade JPEG (0.1 a 1.0, default 0.7)
+ * @returns {Promise<Blob>} Promessa com a imagem comprimida
+ */
+async function compressImage(file, maxWidth = 1600, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                // Só redimensiona se for maior que o maxWidth
+                if (width > maxWidth) {
+                    height = (maxWidth / width) * height;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        // Se o blob comprimido for maior que o original (raro), usa o original
+                        if (blob.size > file.size) resolve(file);
+                        else resolve(blob);
+                    } else {
+                        reject(new Error("Erro ao comprimir imagem"));
+                    }
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = (e) => reject(e);
+        };
+        reader.onerror = (e) => reject(e);
+    });
+}
+
 async function uploadPhotos(filesList) {
     if (!filesList || filesList.length === 0) return;
     const files = Array.from(filesList); // Converter para array estático
@@ -556,18 +603,32 @@ async function uploadPhotos(filesList) {
     const id = document.getElementById('relatorio-avaria-id').value;
     const type = document.getElementById('relatorio-type').value;
     
-    // Validação de tamanho no cliente (20MB)
-    const MAX_SIZE = 20 * 1024 * 1024;
+    // Validação de tamanho no cliente (50MB) - redundante com a compressão mas boa prática
+    const MAX_SIZE = 50 * 1024 * 1024;
     for (let i = 0; i < files.length; i++) {
         if (files[i].size > MAX_SIZE) {
-            showNotification(`A foto "${files[i].name}" é demasiado grande (máx 20MB).`, true);
+            showNotification(`A foto "${files[i].name}" é demasiado grande (máx 50MB).`, true);
             return;
         }
     }
 
+    showNotification("A preparar fotos... aguarde.");
+
     const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-        formData.append('fotos', files[i]);
+    try {
+        for (let i = 0; i < files.length; i++) {
+            // Comprimir cada imagem antes de adicionar ao FormData
+            if (files[i].type.startsWith('image/')) {
+                const compressedBlob = await compressImage(files[i]);
+                formData.append('fotos', compressedBlob, files[i].name);
+            } else {
+                formData.append('fotos', files[i]);
+            }
+        }
+    } catch (err) {
+        console.error("Compression error:", err);
+        showNotification("Erro ao processar imagens.", true);
+        return;
     }
     
     if (type === 'servico') formData.append('servico_id', id);
