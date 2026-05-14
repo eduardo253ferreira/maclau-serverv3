@@ -242,6 +242,14 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'frota') loadFrota();
         if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
         if (target === 'agendamentos') initCalendar();
+        if (target === 'anotacoes') {
+            loadAnotacoes();
+            const filterCli = document.getElementById('filter-anotacoes-cliente');
+            if (filterCli && !filterCli.dataset.listenerAdded) {
+                filterCli.addEventListener('change', loadAnotacoes);
+                filterCli.dataset.listenerAdded = 'true';
+            }
+        }
     });
 });
 
@@ -929,7 +937,8 @@ async function loadClientes() {
             document.getElementById('filter-cliente-maquinas'),
             document.getElementById('report-avaria-cliente'),
             document.getElementById('report-servico-cliente'),
-            document.getElementById('report-manutencao-cliente')
+            document.getElementById('report-manutencao-cliente'),
+            document.getElementById('filter-anotacoes-cliente')
         ];
 
         selects.forEach(select => {
@@ -1872,7 +1881,42 @@ async function loadHistorico() {
                 }
 
                 btnPdf.onclick = () => window.open(`/relatorio.html?id=${a.id}&type=${a.type}`, '_blank');
+                btnPdf.style.background = '#FEE2E2';
+                btnPdf.style.color = '#DC2626';
+                btnPdf.style.border = '1px solid #FECACA';
+                btnPdf.style.borderRadius = '8px';
+                btnPdf.style.width = '32px';
+                btnPdf.style.height = '32px';
+                btnPdf.style.display = 'flex';
+                btnPdf.style.alignItems = 'center';
+                btnPdf.style.justifyContent = 'center';
+                btnPdf.style.padding = '0';
+                btnPdf.title = "Ver PDF";
+                btnPdf.innerHTML = '<i class="ph ph-file-pdf" style="font-size: 18px;"></i>';
                 colActions.appendChild(btnPdf);
+
+                // Botão de Edição para o Admin (Lápis Icon)
+                const btnEdit = document.createElement('button');
+                btnEdit.className = 'btn-status';
+                btnEdit.style.background = 'var(--accent-light)';
+                btnEdit.style.color = 'var(--accent)';
+                btnEdit.style.border = '1px solid #D1FAE5';
+                btnEdit.style.borderRadius = '8px';
+                btnEdit.style.width = '32px';
+                btnEdit.style.height = '32px';
+                btnEdit.style.display = 'flex';
+                btnEdit.style.alignItems = 'center';
+                btnEdit.style.justifyContent = 'center';
+                btnEdit.style.padding = '0';
+                btnEdit.style.cursor = 'pointer';
+                btnEdit.style.transition = 'all 0.2s';
+                btnEdit.innerHTML = '<i class="ph ph-note-pencil" style="font-size: 18px;"></i>';
+                btnEdit.title = "Editar Relatório";
+                
+                btnEdit.onclick = () => {
+                    openRelatorioModal(a.id, a.relatorio || '', a.relatorio_submetido === 1, a.pecas_substituidas, a.horas_trabalho, a.assinatura_cliente, a.type, a.assinatura_tecnico);
+                };
+                colActions.appendChild(btnEdit);
             }
 
             tbody.appendChild(tr);
@@ -2282,6 +2326,32 @@ window.onload = async () => {
             }
         });
     });
+
+    // Iniciar Signature Pads e Listeners de Relatório
+    initSignaturePad();
+
+    const btnSubmitReport = document.getElementById('btn-submit-report');
+    if (btnSubmitReport) {
+        btnSubmitReport.addEventListener('click', (e) => {
+            e.preventDefault();
+            openModal('modal-confirm-submit');
+        });
+    }
+
+    const btnConfirmSubmit = document.getElementById('btn-confirm-submit-action');
+    if (btnConfirmSubmit) {
+        btnConfirmSubmit.addEventListener('click', () => {
+            closeModal('modal-confirm-submit');
+            submitRelatorio();
+        });
+    }
+
+    const btnCancelSubmit = document.getElementById('btn-cancel-submit');
+    if (btnCancelSubmit) {
+        btnCancelSubmit.addEventListener('click', () => {
+            closeModal('modal-confirm-submit');
+        });
+    }
 };
 
 window.onclick = function (event) {
@@ -2760,12 +2830,11 @@ if (formAddClientUser) {
         const data = {
             nome: document.getElementById('client-user-nome').value,
             username: document.getElementById('client-user-username').value,
-            email: document.getElementById('client-user-email').value,
-            password: document.getElementById('client-user-password').value
+            email: document.getElementById('client-user-email').value
         };
 
         try {
-            await apiFetch(`/clientes/${clientId}/users`, {
+            const res = await apiFetch(`/clientes/${clientId}/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -2773,11 +2842,32 @@ if (formAddClientUser) {
             showNotification('Login criado com sucesso!');
             closeModal('modal-add-client-user');
             loadClientUsers(clientId);
+
+            if (res.tempPassword) {
+                document.getElementById('display-client-temp-password').textContent = res.tempPassword;
+                openModal('modal-client-user-success');
+            }
         } catch (e) {
             showNotification(e.message, true);
         }
     });
 }
+
+document.getElementById('btn-client-user-success-ok')?.addEventListener('click', () => {
+    closeModal('modal-client-user-success');
+});
+
+document.getElementById('btn-copy-client-password')?.addEventListener('click', async () => {
+    const pwd = document.getElementById('display-client-temp-password').textContent;
+    if (pwd) {
+        try {
+            await navigator.clipboard.writeText(pwd);
+            showNotification('Palavra-passe copiada!');
+        } catch (e) {
+            showNotification('Falha ao copiar', true);
+        }
+    }
+});
 
 const formEditClientUser = document.getElementById('form-edit-client-user');
 if (formEditClientUser) {
@@ -3259,3 +3349,322 @@ function initCustomSelect(id) {
         }
     });
 }
+async function openRelatorioModal(id, currentText = '', isSubmitted = false, currentPecas = '', currentHoras = '', currentSignature = '', type = 'avaria', currentSignatureTech = '') {
+    document.getElementById('relatorio-avaria-id').value = id;
+    document.getElementById('relatorio-type').value = type;
+
+    const textarea = document.getElementById('relatorio-texto');
+    const pecasArea = document.getElementById('relatorio-pecas');
+    const horasInput = document.getElementById('relatorio-horas');
+
+    try {
+        const endpoint = type === 'servico' ? `/servicos/${id}/detalhes-relatorio` : (type === 'manutencao' ? `/manutencoes/${id}/detalhes-relatorio` : `/avarias/${id}/detalhes-relatorio`);
+        const res = await apiFetch(endpoint);
+        const data = res;
+
+        // Populate Headers and Info
+        document.getElementById('a4-report-id').textContent = `ID: #${data.id.toString().padStart(5, '0')}`;
+        const dateObj = new Date(data.data_hora_fim || data.data_hora);
+        document.getElementById('a4-report-date').textContent = `Data: ${dateObj.toLocaleDateString('pt-PT')}`;
+        document.getElementById('a4-report-type').innerHTML = 'Relatório de Intervenção (Modo Admin)';
+
+        document.getElementById('a4-cliente-nome').textContent = data.cliente_nome || '---';
+        document.getElementById('a4-cliente-email').textContent = data.cliente_email || '---';
+        document.getElementById('a4-cliente-contato').textContent = data.cliente_contato || '---';
+        document.getElementById('a4-cliente-nif').textContent = data.cliente_nif || '---';
+        document.getElementById('a4-tecnico-nome').textContent = data.tecnico_nome || '---';
+        
+        const machineRow = document.getElementById('a4-machine-row');
+        const serviceRow = document.getElementById('a4-service-row');
+        const detailsTitle = document.getElementById('a4-details-title');
+
+        if (type === 'avaria') {
+            detailsTitle.innerHTML = '<i class="ph ph-wrench"></i> Máquina';
+            machineRow.style.display = 'block';
+            serviceRow.style.display = 'none';
+            document.getElementById('a4-maquina-nome').textContent = data.maquina_nome || '---';
+            document.getElementById('a4-maquina-serie').textContent = data.maquina_serie || '---';
+            document.getElementById('a4-maquina-serie-row').style.display = 'block';
+            document.getElementById('a4-tipo-avaria').textContent = data.tipo_avaria === 1 ? 'Elétrica' : (data.tipo_avaria === 3 ? 'Mecânica' : 'Outra');
+        } else if (type === 'manutencao') {
+            detailsTitle.innerHTML = '<i class="ph ph-wrench"></i> Manutenção';
+            machineRow.style.display = 'block';
+            serviceRow.style.display = 'none';
+            document.getElementById('a4-maquina-nome').textContent = "Todas as máquinas";
+            document.getElementById('a4-maquina-serie-row').style.display = 'none';
+            document.getElementById('a4-tipo-avaria').textContent = "Geral";
+        } else {
+            detailsTitle.innerHTML = '<i class="ph ph-truck"></i> Serviço';
+            machineRow.style.display = 'none';
+            serviceRow.style.display = 'block';
+            document.getElementById('a4-tipo-servico').textContent = data.tipo_servico || '---';
+            document.getElementById('a4-tipo-camiao').textContent = data.tipo_camiao || '---';
+        }
+
+        // Handle Manutenção Machines List
+        const mntSection = document.getElementById('a4-manutencao-maquinas-section');
+        const mntList = document.getElementById('a4-manutencao-maquinas-list');
+        if (mntSection && mntList) {
+            if (type === 'manutencao' && data.maquinas && data.maquinas.length > 0) {
+                mntSection.style.display = 'block';
+                mntList.innerHTML = data.maquinas.map(m => `
+                    <div style="font-size: 12px; background: #f8fafc; padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                        <i class="ph-fill ph-check-circle" style="color: #10b981; font-size: 16px;"></i>
+                        <span style="font-weight: 700;">${m.marca} ${m.modelo}</span>
+                        <span style="color: #64748b;"> - SN: ${m.numero_serie || '---'}</span>
+                    </div>
+                `).join('');
+            } else {
+                mntSection.style.display = 'none';
+            }
+        }
+
+        // Populate Editable Fields
+        textarea.value = data.relatorio || currentText || '';
+        pecasArea.value = data.pecas_substituidas || currentPecas || '';
+        horasInput.value = (data.horas_trabalho !== null && data.horas_trabalho !== undefined) ? hoursToHHmm(data.horas_trabalho) : (currentHoras || '');
+
+        // Static Horas
+        document.getElementById('a4-horas-trabalho').textContent = hoursToHHmm(data.horas_trabalho);
+
+        // Signatures
+        clearSignature();
+        clearSignatureTech();
+        
+        const sigCli = currentSignature || data.assinatura_cliente;
+        if (sigCli) {
+            const img = new Image();
+            img.onload = () => sigCtx.drawImage(img, 0, 0);
+            img.src = sigCli;
+        }
+
+        const sigTech = currentSignatureTech || data.assinatura_tecnico;
+        if (sigTech) {
+            const imgTech = new Image();
+            imgTech.onload = () => sigCtxTech.drawImage(imgTech, 0, 0);
+            imgTech.src = sigTech;
+        }
+
+        openModal('modal-relatorio');
+    } catch (e) {
+        showNotification("Erro ao carregar dados do relatório.", true);
+    }
+}
+
+async function submitRelatorio() {
+    const id = document.getElementById('relatorio-avaria-id').value;
+    const type = document.getElementById('relatorio-type').value;
+    const relatorio = document.getElementById('relatorio-texto').value;
+    const pecas_substituidas = document.getElementById('relatorio-pecas').value;
+    const horas_raw = document.getElementById('relatorio-horas').value;
+    const horas_trabalho = HHmmToHours(horas_raw);
+    
+    const canvasCli = document.getElementById('signature-pad');
+    const canvasTec = document.getElementById('signature-pad-tech');
+    
+    const assinatura_cliente = isCanvasBlank(canvasCli) ? null : canvasCli.toDataURL('image/png');
+    const assinatura_tecnico = isCanvasBlank(canvasTec) ? null : canvasTec.toDataURL('image/png');
+
+    try {
+        const endpoint = type === 'servico' ? `/admin/servicos/${id}/relatorio` : (type === 'manutencao' ? `/admin/manutencoes/${id}/relatorio` : `/admin/avarias/${id}/relatorio`);
+        await apiFetch(endpoint, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico })
+        });
+
+        showNotification("Relatório atualizado com sucesso!");
+        closeModal('modal-relatorio');
+        loadHistorico(); // Atualizar a tabela
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+// --- Signature & Helpers ---
+let sigCanvas, sigCtx, isDrawing = false;
+let sigCanvasTech, sigCtxTech, isDrawingTech = false;
+
+function initSignaturePad() {
+    sigCanvas = document.getElementById('signature-pad');
+    if (sigCanvas) {
+        sigCtx = sigCanvas.getContext('2d');
+        sigCtx.lineWidth = 2; sigCtx.lineCap = 'round'; sigCtx.strokeStyle = '#000';
+        sigCanvas.addEventListener('mousedown', (e) => { isDrawing = true; sigCtx.beginPath(); const p = getPos(e); sigCtx.moveTo(p.x, p.y); });
+        sigCanvas.addEventListener('mousemove', (e) => { if (!isDrawing) return; const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); });
+        sigCanvas.addEventListener('mouseup', () => isDrawing = false);
+        sigCanvas.addEventListener('mouseout', () => isDrawing = false);
+        // Touch
+        sigCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); isDrawing = true; sigCtx.beginPath(); const p = getPos(e); sigCtx.moveTo(p.x, p.y); }, {passive: false});
+        sigCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (!isDrawing) return; const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); }, {passive: false});
+        sigCanvas.addEventListener('touchend', () => isDrawing = false);
+
+        document.getElementById('btn-clear-signature').addEventListener('click', clearSignature);
+    }
+
+    sigCanvasTech = document.getElementById('signature-pad-tech');
+    if (sigCanvasTech) {
+        sigCtxTech = sigCanvasTech.getContext('2d');
+        sigCtxTech.lineWidth = 2; sigCtxTech.lineCap = 'round'; sigCtxTech.strokeStyle = '#000';
+        sigCanvasTech.addEventListener('mousedown', (e) => { isDrawingTech = true; sigCtxTech.beginPath(); const p = getPosTech(e); sigCtxTech.moveTo(p.x, p.y); });
+        sigCanvasTech.addEventListener('mousemove', (e) => { if (!isDrawingTech) return; const p = getPosTech(e); sigCtxTech.lineTo(p.x, p.y); sigCtxTech.stroke(); });
+        sigCanvasTech.addEventListener('mouseup', () => isDrawingTech = false);
+        sigCanvasTech.addEventListener('mouseout', () => isDrawingTech = false);
+        // Touch
+        sigCanvasTech.addEventListener('touchstart', (e) => { e.preventDefault(); isDrawingTech = true; sigCtxTech.beginPath(); const p = getPosTech(e); sigCtxTech.moveTo(p.x, p.y); }, {passive: false});
+        sigCanvasTech.addEventListener('touchmove', (e) => { e.preventDefault(); if (!isDrawingTech) return; const p = getPosTech(e); sigCtxTech.lineTo(p.x, p.y); sigCtxTech.stroke(); }, {passive: false});
+        sigCanvasTech.addEventListener('touchend', () => isDrawingTech = false);
+
+        document.getElementById('btn-clear-signature-tech').addEventListener('click', clearSignatureTech);
+    }
+}
+
+function getPos(e) {
+    const rect = sigCanvas.getBoundingClientRect();
+    const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+    const cy = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+    return { x: (cx - rect.left) * (sigCanvas.width / rect.width), y: (cy - rect.top) * (sigCanvas.height / rect.height) };
+}
+function getPosTech(e) {
+    const rect = sigCanvasTech.getBoundingClientRect();
+    const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+    const cy = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+    return { x: (cx - rect.left) * (sigCanvasTech.width / rect.width), y: (cy - rect.top) * (sigCanvasTech.height / rect.height) };
+}
+
+function clearSignature() { if (sigCtx) sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height); }
+function clearSignatureTech() { if (sigCtxTech) sigCtxTech.clearRect(0, 0, sigCanvasTech.width, sigCanvasTech.height); }
+
+function isCanvasBlank(canvas) {
+    if (!canvas) return true;
+    const blank = document.createElement('canvas');
+    blank.width = canvas.width; blank.height = canvas.height;
+    return canvas.toDataURL() === blank.toDataURL();
+}
+
+function HHmmToHours(hhmm) {
+    if (!hhmm || !hhmm.includes(':')) return null;
+    const [h, m] = hhmm.split(':').map(Number);
+    return h + (m / 60);
+}
+
+// --- Anotações / Checklist Futura ---
+async function loadAnotacoes() {
+    try {
+        const anotacoes = await apiFetch('/admin/anotacoes');
+        const containerPendentes = document.getElementById('anotacoes-pendentes-container');
+        const containerConcluidas = document.getElementById('anotacoes-concluidas-container');
+        if (!containerPendentes || !containerConcluidas) return;
+
+        containerPendentes.innerHTML = '';
+        containerConcluidas.innerHTML = '';
+
+        const filterCli = document.getElementById('filter-anotacoes-cliente')?.value;
+
+        let filtered = anotacoes;
+        if (filterCli) {
+            filtered = filtered.filter(a => a.cliente_id == filterCli);
+        }
+
+        const pendentes = filtered.filter(a => a.estado === 'pendente');
+        const conluídas = filtered.filter(a => a.estado === 'concluida');
+
+        if (pendentes.length === 0) {
+            containerPendentes.innerHTML = '<p style="text-align:center; grid-column: 1/-1; color:var(--text-secondary); padding: 20px;">Não existem anotações pendentes.</p>';
+        } else {
+            renderAnotacoesGrouped(pendentes, containerPendentes);
+        }
+
+        if (conluídas.length === 0) {
+            containerConcluidas.innerHTML = '<p style="text-align:center; grid-column: 1/-1; color:var(--text-secondary); padding: 20px;">Não existem anotações concluídas.</p>';
+        } else {
+            renderAnotacoesGrouped(conluídas, containerConcluidas, true);
+        }
+
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function renderAnotacoesGrouped(data, container, isConcluida = false) {
+    // Agrupar por cliente
+    const agrupado = {};
+    data.forEach(a => {
+        if (!agrupado[a.cliente_nome]) agrupado[a.cliente_nome] = [];
+        agrupado[a.cliente_nome].push(a);
+    });
+
+    Object.keys(agrupado).forEach(cliente => {
+        const card = document.createElement('div');
+        card.className = 'anotacoes-client-card';
+        card.style.background = 'var(--surface-color)';
+        card.style.borderRadius = '12px';
+        card.style.boxShadow = 'var(--shadow-sm)';
+        card.style.padding = '20px';
+        card.style.border = '1px solid var(--border-color)';
+
+        let itemsHtml = '';
+        agrupado[cliente].forEach(item => {
+            const dataStr = new Date(item.data_criacao).toLocaleDateString('pt-PT');
+            const maquinaStr = item.maquina_id ? `<span style="font-size:11px; color:var(--accent); font-weight:700; background:var(--accent-light); padding:2px 6px; border-radius:4px;">${escapeHTML(item.marca)} ${escapeHTML(item.modelo)}</span>` : '';
+            
+            const opacity = isConcluida ? '0.6' : '1';
+            const textDecoration = isConcluida ? 'text-decoration: line-through;' : '';
+
+            itemsHtml += `
+                <div style="display:flex; gap:12px; padding:12px; background:#f8fafc; border-radius:8px; margin-bottom:10px; align-items:flex-start; opacity: ${opacity}; transition: opacity 0.3s;">
+                    <input type="checkbox" class="btn-concluir-anotacao" data-id="${item.id}"
+                           style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary); margin-top:3px;" 
+                           ${isConcluida ? 'checked disabled' : ''}>
+                    <div style="flex:1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            ${maquinaStr}
+                            <span style="font-size:11px; color:var(--text-secondary); font-weight:600;">${dataStr}</span>
+                        </div>
+                        <p style="font-size:14px; color:var(--text-main); margin:0; line-height:1.4; white-space:pre-wrap; ${textDecoration}">${escapeHTML(item.descricao)}</p>
+                        <div style="margin-top:8px; font-size:11px; color:var(--text-secondary); display:flex; align-items:center; gap:4px;">
+                            <i class="ph ph-user-circle"></i> Técnico: ${escapeHTML(item.tecnico_nome)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        card.innerHTML = `
+            <h3 style="margin-bottom:15px; font-size:16px; display:flex; align-items:center; gap:8px; color:var(--accent);">
+                <i class="ph ph-buildings"></i> ${escapeHTML(cliente)}
+            </h3>
+            <div class="checklist-items">
+                ${itemsHtml}
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    // Vincular eventos de conclusão
+    container.querySelectorAll('.btn-concluir-anotacao').forEach(btn => {
+        btn.onclick = (e) => {
+            const id = e.target.dataset.id;
+            window.concluirAnotacao(id);
+        };
+    });
+}
+
+window.concluirAnotacao = async function(id) {
+    if (!confirm('Deseja marcar esta anotação como concluída? Ela passará para a lista de concluídas.')) {
+        loadAnotacoes(); 
+        return;
+    }
+
+    try {
+        await apiFetch(`/admin/anotacoes/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado: 'concluida' })
+        });
+        showNotification('Anotação concluída!');
+        loadAnotacoes();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+};

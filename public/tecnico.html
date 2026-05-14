@@ -7,6 +7,7 @@
     <title>Maclau - Portal do Técnico</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/admin.css"> <!-- Reusing admin styles for consistency -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style>
         /* Dashboard Toggle Slide */
         .dashboard-toggle-container {
@@ -189,9 +190,10 @@
             <nav class="sidebar-nav">
                 <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
                 <button class="nav-btn" data-target="agendamentos">Agendamentos</button>
+                <button class="nav-btn" data-target="anotacoes">Anotações Técnico</button>
                 <button class="nav-btn" data-target="historico">Histórico de Intervenções</button>
-                <button class="nav-btn" data-target="consulta">Consulta por Máquina</button>
                 <button class="nav-btn" data-target="checklists">Guias de Resolução</button>
+                <button class="nav-btn" data-target="consulta">Consulta por Máquina</button>
                 <button class="nav-btn" data-target="perfil">Perfil</button>
             </nav>
             <div style="padding: 24px; margin-top: auto;">
@@ -372,6 +374,72 @@
                     <!-- JS popula aqui as checklists carregadas -->
                 </div>
             </section>
+
+            <!-- Anotacoes View -->
+            <section id="view-anotacoes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Anotações / Intervenções Futuras</h1>
+                        <p>Registe pedidos de clientes para intervenções ou manutenções futuras.</p>
+                    </div>
+                    <button id="btn-nova-anotacao" class="btn-primary">
+                        <i class="ph ph-plus-circle"></i> Nova Anotação
+                    </button>
+                </header>
+
+                <div class="table-container" style="border: none; background: transparent; box-shadow: none;">
+                    <h2 style="margin-bottom: 25px; color: var(--accent); font-size: 1.3rem; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid var(--accent-light); padding-bottom: 15px;">
+                        <i class="ph ph-clock-counter-clockwise" style="font-size: 24px;"></i> Histórico de Notas Enviadas
+                    </h2>
+                    <div style="background: white; border-radius: 16px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Cliente</th>
+                                    <th>Máquina</th>
+                                    <th>Nota</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-anotacoes-body">
+                                <!-- JS popula aqui -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modal Nova Anotação -->
+            <div id="modal-add-anotacao" class="modal hidden">
+                <div class="modal-content" style="max-width: 500px;">
+                    <header class="modal-header">
+                        <h2>Nova Anotação</h2>
+                    </header>
+                    <form id="form-nova-anotacao">
+                        <div class="form-group">
+                            <label>Cliente *</label>
+                            <select id="anotacao-cliente" class="filter-select" required style="width: 100%;">
+                                <option value="">Selecione o Cliente</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Máquina (Opcional)</label>
+                            <select id="anotacao-maquina" class="filter-select" disabled style="width: 100%;">
+                                <option value="">Selecione primeiro o cliente</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>O que deve ser feito? *</label>
+                            <textarea id="anotacao-descricao" rows="4" required placeholder="Ex: Para a próxima visita trocar as correias da máquina..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit; font-size: 14px;"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="submit" class="btn-primary" style="flex: 2;">Enviar Anotação</button>
+                            <button type="button" id="btn-cancelar-anotacao" class="btn-secondary" style="flex: 1;">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
             <!-- Perfil View -->
             <section id="view-perfil" class="view hidden">

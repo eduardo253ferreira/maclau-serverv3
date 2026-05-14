@@ -2,6 +2,15 @@
 
 const API_BASE = '/api';
 
+window.openModal = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+};
+window.closeModal = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+};
+
 // Prioridade: URL Params (?id=X&name=Y) > localStorage
 const urlParams = new URLSearchParams(window.location.search);
 let currentTechId = urlParams.get('id') || localStorage.getItem('maclau_tech_id');
@@ -549,53 +558,6 @@ function renderPhotosPreview(fotos, disabled = false) {
     });
 }
 
-/**
- * Redimensiona e comprime uma imagem antes do upload
- * @param {File} file O ficheiro original
- * @param {number} maxWidth Largura máxima (default 1600px)
- * @param {number} quality Qualidade JPEG (0.1 a 1.0, default 0.7)
- * @returns {Promise<Blob>} Promessa com a imagem comprimida
- */
-async function compressImage(file, maxWidth = 1600, quality = 0.7) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-
-                // Só redimensiona se for maior que o maxWidth
-                if (width > maxWidth) {
-                    height = (maxWidth / width) * height;
-                    width = maxWidth;
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        // Se o blob comprimido for maior que o original (raro), usa o original
-                        if (blob.size > file.size) resolve(file);
-                        else resolve(blob);
-                    } else {
-                        reject(new Error("Erro ao comprimir imagem"));
-                    }
-                }, 'image/jpeg', quality);
-            };
-            img.onerror = (e) => reject(e);
-        };
-        reader.onerror = (e) => reject(e);
-    });
-}
-
 async function uploadPhotos(filesList) {
     if (!filesList || filesList.length === 0) return;
     const files = Array.from(filesList); // Converter para array estático
@@ -603,32 +565,18 @@ async function uploadPhotos(filesList) {
     const id = document.getElementById('relatorio-avaria-id').value;
     const type = document.getElementById('relatorio-type').value;
     
-    // Validação de tamanho no cliente (50MB) - redundante com a compressão mas boa prática
-    const MAX_SIZE = 50 * 1024 * 1024;
+    // Validação de tamanho no cliente (20MB)
+    const MAX_SIZE = 20 * 1024 * 1024;
     for (let i = 0; i < files.length; i++) {
         if (files[i].size > MAX_SIZE) {
-            showNotification(`A foto "${files[i].name}" é demasiado grande (máx 50MB).`, true);
+            showNotification(`A foto "${files[i].name}" é demasiado grande (máx 20MB).`, true);
             return;
         }
     }
 
-    showNotification("A preparar fotos... aguarde.");
-
     const formData = new FormData();
-    try {
-        for (let i = 0; i < files.length; i++) {
-            // Comprimir cada imagem antes de adicionar ao FormData
-            if (files[i].type.startsWith('image/')) {
-                const compressedBlob = await compressImage(files[i]);
-                formData.append('fotos', compressedBlob, files[i].name);
-            } else {
-                formData.append('fotos', files[i]);
-            }
-        }
-    } catch (err) {
-        console.error("Compression error:", err);
-        showNotification("Erro ao processar imagens.", true);
-        return;
+    for (let i = 0; i < files.length; i++) {
+        formData.append('fotos', files[i]);
     }
     
     if (type === 'servico') formData.append('servico_id', id);
@@ -1161,6 +1109,10 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'historico') loadHistorico();
         if (target === 'consulta') loadConsultaClientes();
         if (target === 'checklists') loadChecklistModelos();
+        if (target === 'anotacoes') {
+            loadAnotacoesClientes();
+            loadAnotacoesHist();
+        }
     });
 });
 
@@ -1507,6 +1459,22 @@ window.onload = () => {
         });
     }
 
+    // Botão Nova Anotação
+    const btnNovaAnotacao = document.getElementById('btn-nova-anotacao');
+    if (btnNovaAnotacao) {
+        btnNovaAnotacao.addEventListener('click', () => {
+            window.openModal('modal-add-anotacao');
+        });
+    }
+
+    // Botão Cancelar Anotação
+    const btnCancelarAnotacao = document.getElementById('btn-cancelar-anotacao');
+    if (btnCancelarAnotacao) {
+        btnCancelarAnotacao.addEventListener('click', () => {
+            window.closeModal('modal-add-anotacao');
+        });
+    }
+
     const formPausar = document.getElementById('form-pausar');
     if (formPausar) {
         formPausar.addEventListener('submit', async (e) => {
@@ -1558,7 +1526,129 @@ window.onload = () => {
             document.getElementById('modal-view-note').classList.add('hidden');
         });
     }
+
+    // Anotações Form Listeners
+    const anotacaoClienteSelect = document.getElementById('anotacao-cliente');
+    if (anotacaoClienteSelect) {
+        anotacaoClienteSelect.addEventListener('change', (e) => {
+            const clienteId = e.target.value;
+            if (clienteId) {
+                loadAnotacoesMaquinas(clienteId);
+            } else {
+                const maqSelect = document.getElementById('anotacao-maquina');
+                maqSelect.innerHTML = '<option value="">Selecione primeiro o cliente</option>';
+                maqSelect.disabled = true;
+            }
+        });
+    }
+
+    const formNovaAnotacao = document.getElementById('form-nova-anotacao');
+    if (formNovaAnotacao) {
+        formNovaAnotacao.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cliente_id = document.getElementById('anotacao-cliente').value;
+            const maquina_id = document.getElementById('anotacao-maquina').value;
+            const descricao = document.getElementById('anotacao-descricao').value;
+
+            try {
+                const res = await authFetch(`${API_BASE}/tecnico/anotacoes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cliente_id, maquina_id, descricao })
+                });
+
+                if (res.ok) {
+                    showNotification("Anotação enviada com sucesso!");
+                    formNovaAnotacao.reset();
+                    document.getElementById('anotacao-maquina').disabled = true;
+                    document.getElementById('anotacao-maquina').innerHTML = '<option value="">Selecione primeiro o cliente</option>';
+                    closeModal('modal-add-anotacao');
+                    loadAnotacoesHist();
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.error || "Erro ao enviar anotação");
+                }
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
 };
+
+// --- Anotações / Intervenções Futuras ---
+
+async function loadAnotacoesClientes() {
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/clientes`);
+        const clientes = await res.json();
+        const select = document.getElementById('anotacao-cliente');
+        if (!select) return;
+
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">Selecione o Cliente</option>';
+        clientes.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.nome;
+            select.appendChild(opt);
+        });
+        select.value = currentVal;
+    } catch (e) {
+        console.error("Erro ao carregar clientes para anotações", e);
+    }
+}
+
+async function loadAnotacoesMaquinas(clienteId) {
+    const select = document.getElementById('anotacao-maquina');
+    if (!select) return;
+
+    select.disabled = true;
+    select.innerHTML = '<option value="">A carregar máquinas...</option>';
+
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/clientes/${clienteId}/maquinas`);
+        const máquinas = await res.json();
+
+        select.innerHTML = '<option value="">(Opcional) Selecione a Máquina</option>';
+        máquinas.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.uuid; // Usamos uuid aqui para manter consistência com o que o server espera ou id
+            opt.textContent = `${m.marca} ${m.modelo} (SN: ${m.numero_serie || 'N/A'})`;
+            select.appendChild(opt);
+        });
+        select.disabled = false;
+    } catch (e) {
+        select.innerHTML = '<option value="">Erro ao carregar máquinas</option>';
+    }
+}
+
+async function loadAnotacoesHist() {
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/anotacoes`);
+        const anotacoes = await res.json();
+        const tbody = document.getElementById('table-anotacoes-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        anotacoes.forEach(a => {
+            const tr = document.createElement('tr');
+            
+            const statusLabel = a.estado === 'pendente' ? 'Pendente' : 'Concluída';
+            const statusStyle = a.estado === 'pendente' ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success); font-weight: bold;';
+
+            tr.innerHTML = `
+                <td>${new Date(a.data_criacao).toLocaleString('pt-PT')}</td>
+                <td>${escapeHTML(a.cliente_nome)}</td>
+                <td>${a.maquina_id ? `${escapeHTML(a.marca)} ${escapeHTML(a.modelo)}` : '---'}</td>
+                <td style="font-size: 13px; max-width: 300px; white-space: pre-wrap;">${escapeHTML(a.descricao)}</td>
+                <td style="${statusStyle}">${statusLabel}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error("Erro ao carregar histórico de anotações", e);
+    }
+}
 
 function escapeJS(str) {
     if (!str) return '';

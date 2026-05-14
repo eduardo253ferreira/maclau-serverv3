@@ -125,20 +125,20 @@
         </div>
 
         <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
+        <aside class="sidebar">
             <div class="logo-container">
                 <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
                 <button id="btn-close-sidebar" class="btn-close-sidebar">
                     <i class="ph ph-x"></i>
                 </button>
             </div>
-            <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
-                <a href="admin.html" class="nav-btn active" style="background: var(--accent); color: white; display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 12px; text-decoration: none; font-weight: 700; justify-content: center; box-shadow: var(--shadow-md);">
+            <nav class="sidebar-nav">
+                <a href="admin.html" class="nav-btn active" style="background: var(--accent); color: white; text-decoration: none;">
                     <i class="ph ph-arrow-left"></i> Voltar à Dashboard
                 </a>
-            </div>
+            </nav>
             <div style="padding: 24px; margin-top: auto;">
-                <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); border:none; cursor:pointer; box-shadow: none;">
+                <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); border:none; cursor:pointer; box-shadow: none; display: flex; align-items: center; justify-content: center; gap: 8px;">
                     <i class="ph ph-sign-out"></i> Sair
                 </button>
             </div>

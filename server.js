@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) {
             cb(null, true);
@@ -108,8 +108,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 // Middleware de Proteção para ficheiros HTML específicos
@@ -215,7 +214,7 @@ const apiLimiter = rateLimit({
 
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 15,
     message: { error: "Demasiadas tentativas de login. Tente novamente após 15 minutos." },
     skipSuccessfulRequests: true,
 });
@@ -481,6 +480,18 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 FOREIGN KEY (checklist_id) REFERENCES checklists(id) ON DELETE CASCADE
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS anotacoes_tecnicos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tecnico_id INTEGER NOT NULL,
+                cliente_id INTEGER NOT NULL,
+                maquina_id TEXT,
+                descricao TEXT NOT NULL,
+                estado TEXT DEFAULT 'pendente',
+                data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (tecnico_id) REFERENCES tecnicos(id) ON DELETE CASCADE,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+            )`);
+
             // --- MIGRATIONS ---
             const migrations = [
                 { table: 'avarias', column: 'data_hora_inicio', type: 'DATETIME' },
@@ -680,6 +691,50 @@ async function sendFrotaAlertEmail(adminEmails, vehicle, isToday = false) {
         console.log(`[EMAIL] Alerta de frota enviado para: ${adminEmails.join(', ')}`);
     } catch (error) {
         console.error('[EMAIL ERROR FROTA]', error);
+    }
+}
+
+// Helper para enviar credenciais de acesso ao cliente
+async function sendClientCredentialsEmail(email, nome, username, password) {
+    if (!process.env.SMTP_HOST || !email) return;
+
+    const mailOptions = {
+        from: process.env.EMAIL_FROM || 'Maclau <noreply@maclau.pt>',
+        to: email,
+        subject: `Bem-vindo à Maclau - As suas credenciais de acesso`,
+        html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 30px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <img src="cid:logo" alt="Maclau Logo" style="max-width: 150px; height: auto;">
+                </div>
+                <h1 style="color: #2D5A27; font-size: 24px; margin-bottom: 20px;">Olá, ${nome}!</h1>
+                <p style="font-size: 16px; color: #64748B; margin-bottom: 24px;">A sua conta de cliente Maclau foi criada com sucesso.</p>
+                
+                <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 24px; border-top: 4px solid #2D5A27;">
+                    <p style="margin: 0 0 10px 0; font-size: 16px;">Aqui estão as suas credenciais de acesso de modo a poder reportar avarias:</p>
+                    <p style="margin: 0 0 10px 0;"><strong>Username:</strong> ${username}</p>
+                    <p style="margin: 0;"><strong>Password:</strong> ${password}</p>
+                </div>
+
+                <p style="font-size: 14px; color: #64748B;">Recomendamos que guarde a sua password em local seguro.</p>
+                
+                <div style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; color: #94a3b8;">
+                    Este é um e-mail automático enviado pelo sistema Maclau.
+                </div>
+            </div>
+        `,
+        attachments: [{
+            filename: 'logo.png',
+            path: path.join(__dirname, 'public', 'img', 'logo.png'),
+            cid: 'logo'
+        }]
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL] Credenciais enviadas para: ${email}`);
+    } catch (error) {
+        console.error('[EMAIL ERROR CREDENTIALS]', error);
     }
 }
 
@@ -895,7 +950,7 @@ app.post('/api/auth/login', (req, res) => {
             }
 
             // 3. Tentar login como Utilizador de Cliente
-            db.get(`SELECT id, cliente_id, nome, password FROM utilizadores_cliente WHERE username = ?`, [email], (err, row) => {
+            db.get(`SELECT id, cliente_id, nome, password FROM utilizadores_cliente WHERE username = ? OR email = ?`, [email, email], (err, row) => {
                 if (err) return handleDBError(res, err);
 
                 if (row) {
@@ -1064,6 +1119,50 @@ app.delete('/api/clientes/:id', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
+// --- Admin Report Editing ---
+
+app.put('/api/admin/avarias/:id/relatorio', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
+
+    const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
+
+    db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ?`,
+        [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id], function (err) {
+            if (err) return handleDBError(res, err);
+            securityLog('ADMIN_EDIT_REPORT', { type: 'avaria', id, admin_id: req.user.id });
+            res.json({ message: "Relatório atualizado pelo administrador" });
+        });
+});
+
+app.put('/api/admin/servicos/:id/relatorio', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
+
+    const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
+
+    db.run(`UPDATE servicos SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ?`,
+        [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id], function (err) {
+            if (err) return handleDBError(res, err);
+            securityLog('ADMIN_EDIT_REPORT', { type: 'servico', id, admin_id: req.user.id });
+            res.json({ message: "Relatório atualizado pelo administrador" });
+        });
+});
+
+app.put('/api/admin/manutencoes/:id/relatorio', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
+
+    const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
+
+    db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ?`,
+        [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id], function (err) {
+            if (err) return handleDBError(res, err);
+            securityLog('ADMIN_EDIT_REPORT', { type: 'manutencao', id, admin_id: req.user.id });
+            res.json({ message: "Relatório atualizado pelo administrador" });
+        });
+});
+
 // --- CLIENT USERS MANAGEMENT ---
 
 app.get('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
@@ -1083,11 +1182,12 @@ app.post('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
     username = sanitizeString(username);
     email = sanitizeString(email);
 
-    if (!nome || !username || !password) {
-        return res.status(400).json({ error: "Nome, Username e Password são obrigatórios" });
+    if (!nome || !username) {
+        return res.status(400).json({ error: "Nome e Username são obrigatórios" });
     }
 
-    const hashedPwd = bcrypt.hashSync(password, 10);
+    const finalPassword = password || Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedPwd = bcrypt.hashSync(finalPassword, 10);
 
     // 🔒 CORREÇÃO: password_plain removida — não guardar password em texto claro
     db.run(`INSERT INTO utilizadores_cliente (cliente_id, nome, username, password, email) VALUES (?, ?, ?, ?, ?)`,
@@ -1097,8 +1197,13 @@ app.post('/api/clientes/:id/users', authenticateJWT, isAdmin, (req, res) => {
                 if (err.message.includes('UNIQUE')) return res.status(400).json({ error: "Username já existe" });
                 return handleDBError(res, err);
             }
+
+            if (email) {
+                sendClientCredentialsEmail(email, nome, username, finalPassword);
+            }
+
             // Mostrar a password temporária uma única vez na resposta (para o admin partilhar com o utilizador)
-            res.status(201).json({ id: this.lastID, message: "Utilizador criado com sucesso", tempPassword: password });
+            res.status(201).json({ id: this.lastID, message: "Utilizador criado com sucesso", tempPassword: finalPassword });
         });
 });
 
@@ -1556,7 +1661,7 @@ app.delete('/api/avarias/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     db.serialize(() => {
         db.run(`DELETE FROM fotos_relatorio WHERE avaria_id = ?`, [id]);
-        db.run(`DELETE FROM avarias WHERE id = ?`, [id], function(err) {
+        db.run(`DELETE FROM avarias WHERE id = ?`, [id], function (err) {
             if (err) return handleDBError(res, err);
             securityLog('AVARIA_DELETED', { avaria_id: id, admin_id: req.user.id });
             res.json({ message: "Avaria removida com sucesso" });
@@ -1720,7 +1825,7 @@ app.delete('/api/servicos/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     db.serialize(() => {
         db.run(`DELETE FROM fotos_relatorio WHERE servico_id = ?`, [id]);
-        db.run(`DELETE FROM servicos WHERE id = ?`, [id], function(err) {
+        db.run(`DELETE FROM servicos WHERE id = ?`, [id], function (err) {
             if (err) return handleDBError(res, err);
             securityLog('SERVICO_DELETED', { servico_id: id, admin_id: req.user.id });
             res.json({ message: "Serviço removido com sucesso" });
@@ -1746,8 +1851,6 @@ app.get('/api/tecnico/servicos', authenticateJWT, isTecnico, (req, res) => {
     `;
     db.all(query, [techId], (err, rows) => {
         if (err) return handleDBError(res, err);
-        console.log(`[DEBUG] /api/tecnico/servicos rows:`, rows.length);
-        if (rows.length > 0) console.log(`[DEBUG] First row cliente_morada:`, rows[0].cliente_morada);
         res.json(rows);
     });
 });
@@ -1992,7 +2095,7 @@ app.delete('/api/manutencoes/:id', authenticateJWT, isAdmin, (req, res) => {
     db.serialize(() => {
         db.run(`DELETE FROM fotos_relatorio WHERE manutencao_id = ?`, [id]);
         db.run(`DELETE FROM manutencao_maquinas WHERE manutencao_id = ?`, [id]);
-        db.run(`DELETE FROM manutencoes WHERE id = ?`, [id], function(err) {
+        db.run(`DELETE FROM manutencoes WHERE id = ?`, [id], function (err) {
             if (err) return handleDBError(res, err);
             securityLog('MANUTENCAO_DELETED', { manutencao_id: id, admin_id: req.user.id });
             res.json({ message: "Manutenção removida com sucesso" });
@@ -2123,7 +2226,7 @@ app.post('/api/colaboradores', authenticateJWT, isAdmin, (req, res) => {
     const { nome, email, password } = req.body;
     if (!nome || !email || !password) return res.status(400).json({ error: "Todos os campos são obrigatórios" });
     const hash = bcrypt.hashSync(password, 10);
-    db.run(`INSERT INTO colaboradores (nome, email, password) VALUES (?, ?, ?)`, [nome, email, hash], function(err) {
+    db.run(`INSERT INTO colaboradores (nome, email, password) VALUES (?, ?, ?)`, [nome, email, hash], function (err) {
         if (err) return handleDBError(res, err);
         res.status(201).json({ id: this.lastID, nome, email });
     });
@@ -2132,15 +2235,15 @@ app.post('/api/colaboradores', authenticateJWT, isAdmin, (req, res) => {
 app.put('/api/colaboradores/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { nome, email, password } = req.body;
-    
+
     if (password) {
         const hash = bcrypt.hashSync(password, 10);
-        db.run(`UPDATE colaboradores SET nome = ?, email = ?, password = ? WHERE id = ?`, [nome, email, hash, id], function(err) {
+        db.run(`UPDATE colaboradores SET nome = ?, email = ?, password = ? WHERE id = ?`, [nome, email, hash, id], function (err) {
             if (err) return handleDBError(res, err);
             res.json({ message: "Colaborador atualizado" });
         });
     } else {
-        db.run(`UPDATE colaboradores SET nome = ?, email = ? WHERE id = ?`, [nome, email, id], function(err) {
+        db.run(`UPDATE colaboradores SET nome = ?, email = ? WHERE id = ?`, [nome, email, id], function (err) {
             if (err) return handleDBError(res, err);
             res.json({ message: "Colaborador atualizado" });
         });
@@ -2149,7 +2252,7 @@ app.put('/api/colaboradores/:id', authenticateJWT, isAdmin, (req, res) => {
 
 app.delete('/api/colaboradores/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    db.run(`DELETE FROM colaboradores WHERE id = ?`, [id], function(err) {
+    db.run(`DELETE FROM colaboradores WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ message: "Colaborador removido" });
     });
@@ -2168,7 +2271,7 @@ app.post('/api/tecnico-laser', authenticateJWT, isAdmin, (req, res) => {
     const { nome, email, password } = req.body;
     if (!nome || !email || !password) return res.status(400).json({ error: "Todos os campos são obrigatórios" });
     const hash = bcrypt.hashSync(password, 10);
-    db.run(`INSERT INTO tecnico_laser (nome, email, password) VALUES (?, ?, ?)`, [nome, email, hash], function(err) {
+    db.run(`INSERT INTO tecnico_laser (nome, email, password) VALUES (?, ?, ?)`, [nome, email, hash], function (err) {
         if (err) return handleDBError(res, err);
         res.status(201).json({ id: this.lastID, nome, email });
     });
@@ -2177,15 +2280,15 @@ app.post('/api/tecnico-laser', authenticateJWT, isAdmin, (req, res) => {
 app.put('/api/tecnico-laser/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { nome, email, password } = req.body;
-    
+
     if (password) {
         const hash = bcrypt.hashSync(password, 10);
-        db.run(`UPDATE tecnico_laser SET nome = ?, email = ?, password = ? WHERE id = ?`, [nome, email, hash, id], function(err) {
+        db.run(`UPDATE tecnico_laser SET nome = ?, email = ?, password = ? WHERE id = ?`, [nome, email, hash, id], function (err) {
             if (err) return handleDBError(res, err);
             res.json({ message: "Técnico laser atualizado" });
         });
     } else {
-        db.run(`UPDATE tecnico_laser SET nome = ?, email = ? WHERE id = ?`, [nome, email, id], function(err) {
+        db.run(`UPDATE tecnico_laser SET nome = ?, email = ? WHERE id = ?`, [nome, email, id], function (err) {
             if (err) return handleDBError(res, err);
             res.json({ message: "Técnico laser atualizado" });
         });
@@ -2194,7 +2297,7 @@ app.put('/api/tecnico-laser/:id', authenticateJWT, isAdmin, (req, res) => {
 
 app.delete('/api/tecnico-laser/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    db.run(`DELETE FROM tecnico_laser WHERE id = ?`, [id], function(err) {
+    db.run(`DELETE FROM tecnico_laser WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ message: "Técnico laser removido" });
     });
@@ -2205,7 +2308,7 @@ app.delete('/api/tecnico-laser/:id', authenticateJWT, isAdmin, (req, res) => {
 app.get('/api/laser/tasks', authenticateJWT, (req, res) => {
     let query = `SELECT * FROM laser_tasks ORDER BY data_criacao DESC`;
     let params = [];
-    
+
     if (req.user.role === 'tecnico_laser') {
         query = `SELECT * FROM laser_tasks WHERE estado IN ('em corte', 'concluido', 'pausado', 'pronto para corte') ORDER BY data_criacao DESC`;
     }
@@ -2220,11 +2323,11 @@ app.post('/api/laser/tasks', authenticateJWT, isAdmin, (req, res) => {
     const { cliente_nome, descricao } = req.body;
     if (!cliente_nome) return res.status(400).json({ error: "Nome do cliente é obrigatório" });
 
-    db.run(`INSERT INTO laser_tasks (cliente_nome, descricao, estado) VALUES (?, ?, 'pendente')`, 
-        [cliente_nome, descricao], function(err) {
-        if (err) return handleDBError(res, err);
-        res.status(201).json({ id: this.lastID, message: "Tarefa laser criada" });
-    });
+    db.run(`INSERT INTO laser_tasks (cliente_nome, descricao, estado) VALUES (?, ?, 'pendente')`,
+        [cliente_nome, descricao], function (err) {
+            if (err) return handleDBError(res, err);
+            res.status(201).json({ id: this.lastID, message: "Tarefa laser criada" });
+        });
 });
 
 // Update status and handle file upload for drawing
@@ -2244,15 +2347,15 @@ const uploadLaser = multer({ storage: laserStorage });
 app.put('/api/laser/tasks/:id/upload', authenticateJWT, isColaborador, uploadLaser.single('desenho'), (req, res) => {
     const { id } = req.params;
     if (!req.file) return res.status(400).json({ error: "Ficheiro de desenho é obrigatório" });
-    
+
     const caminho = `/uploads/laser/${req.file.filename}`;
     const nomeOriginal = req.file.originalname;
-    
-    db.run(`UPDATE laser_tasks SET desenho_caminho = ?, desenho_nome_original = ?, estado = 'pronto para corte', colaborador_id = ? WHERE id = ?`, 
-        [caminho, nomeOriginal, req.user.id, id], function(err) {
-        if (err) return handleDBError(res, err);
-        res.json({ message: "Desenho submetido e pronto para corte", caminho });
-    });
+
+    db.run(`UPDATE laser_tasks SET desenho_caminho = ?, desenho_nome_original = ?, estado = 'pronto para corte', colaborador_id = ? WHERE id = ?`,
+        [caminho, nomeOriginal, req.user.id, id], function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Desenho submetido e pronto para corte", caminho });
+        });
 });
 
 app.put('/api/laser/tasks/:id/status', authenticateJWT, (req, res) => {
@@ -2278,7 +2381,7 @@ app.put('/api/laser/tasks/:id/status', authenticateJWT, (req, res) => {
                     const now = new Date();
                     additionalSeconds = Math.floor((now - start) / 1000);
                 }
-                
+
                 if (estado === 'pausado') {
                     query += `, data_hora_pausa = ?`;
                 } else {
@@ -2292,23 +2395,23 @@ app.put('/api/laser/tasks/:id/status', authenticateJWT, (req, res) => {
                 query += `, tempo_total_segundos = ?, tempo_total_minutos = ?`;
                 params.splice(3, 0, totalSeconds, totalMinutes);
             }
-            
+
             query += ` WHERE id = ?`;
             params.push(id);
 
-            db.run(query, params, function(err) {
+            db.run(query, params, function (err) {
                 if (err) return handleDBError(res, err);
                 const totalSeconds = (task.tempo_total_segundos || 0) + additionalSeconds;
-                res.json({ 
-                    message: "Estado atualizado", 
-                    estado, 
+                res.json({
+                    message: "Estado atualizado",
+                    estado,
                     total_seconds: totalSeconds,
                     total_minutos: Math.ceil(totalSeconds / 60)
                 });
             });
         });
     } else if (role === 'admin') {
-        db.run(`UPDATE laser_tasks SET estado = ? WHERE id = ?`, [estado, id], function(err) {
+        db.run(`UPDATE laser_tasks SET estado = ? WHERE id = ?`, [estado, id], function (err) {
             if (err) return handleDBError(res, err);
             res.json({ message: "Estado atualizado pelo admin", estado });
         });
@@ -2319,7 +2422,7 @@ app.put('/api/laser/tasks/:id/status', authenticateJWT, (req, res) => {
 
 app.delete('/api/laser/tasks/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    db.run(`DELETE FROM laser_tasks WHERE id = ?`, [id], function(err) {
+    db.run(`DELETE FROM laser_tasks WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ message: "Tarefa removida" });
     });
@@ -2347,7 +2450,7 @@ app.post('/api/tecnico/upload-fotos', authenticateJWT, isTecnico, (req, res, nex
     upload.array('fotos', 10)(req, res, (err) => {
         if (err instanceof multer.MulterError) {
             if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ error: "Uma das fotos é demasiado grande. O limite é de 50MB." });
+                return res.status(400).json({ error: "Uma das fotos é demasiado grande. O limite é de 20MB." });
             }
             if (err.code === 'LIMIT_UNEXPECTED_FILE') {
                 return res.status(400).json({ error: "Limite de 10 fotos excedido." });
@@ -3020,11 +3123,11 @@ app.post('/api/checklists', authenticateJWT, isAdmin, (req, res) => {
     db.run(
         `INSERT INTO checklists (marca, modelo, titulo_avaria, descricao) VALUES (?, ?, ?, ?)`,
         [marca, modelo, titulo_avaria, descricao || ''],
-        function(err) {
+        function (err) {
             if (err) return handleDBError(res, err);
-            
+
             const checklistId = this.lastID;
-            
+
             if (passos && Array.isArray(passos) && passos.length > 0) {
                 const stmt = db.prepare(`INSERT INTO checklists_passos (checklist_id, ordem, descricao) VALUES (?, ?, ?)`);
                 passos.forEach((passo, index) => {
@@ -3041,7 +3144,7 @@ app.post('/api/checklists', authenticateJWT, isAdmin, (req, res) => {
 // Remover checklist (Apenas Admin)
 app.delete('/api/checklists/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    db.run(`DELETE FROM checklists WHERE id = ?`, [id], function(err) {
+    db.run(`DELETE FROM checklists WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ success: true, message: 'Checklist removida com sucesso' });
     });
@@ -3059,12 +3162,12 @@ app.put('/api/checklists/:id', authenticateJWT, isAdmin, (req, res) => {
     db.run(
         `UPDATE checklists SET marca = ?, modelo = ?, titulo_avaria = ?, descricao = ? WHERE id = ?`,
         [marca, modelo, titulo_avaria, descricao || '', id],
-        function(err) {
+        function (err) {
             if (err) return handleDBError(res, err);
-            
-            db.run(`DELETE FROM checklists_passos WHERE checklist_id = ?`, [id], function(err) {
+
+            db.run(`DELETE FROM checklists_passos WHERE checklist_id = ?`, [id], function (err) {
                 if (err) return handleDBError(res, err);
-                
+
                 if (passos && Array.isArray(passos) && passos.length > 0) {
                     const stmt = db.prepare(`INSERT INTO checklists_passos (checklist_id, ordem, descricao) VALUES (?, ?, ?)`);
                     passos.forEach((passo, index) => {
@@ -3076,6 +3179,73 @@ app.put('/api/checklists/:id', authenticateJWT, isAdmin, (req, res) => {
             });
         }
     );
+});
+
+// --- ANOTAÇÕES / CHECKLIST FUTURA ---
+
+// Técnico: Criar nova anotação
+app.post('/api/tecnico/anotacoes', authenticateJWT, isTecnico, (req, res) => {
+    const tecnico_id = req.user.id;
+    const { cliente_id, maquina_id, descricao } = req.body;
+
+    if (!cliente_id || !descricao) {
+        return res.status(400).json({ error: "Cliente e descrição são obrigatórios." });
+    }
+
+    db.run(
+        `INSERT INTO anotacoes_tecnicos (tecnico_id, cliente_id, maquina_id, descricao) VALUES (?, ?, ?, ?)`,
+        [tecnico_id, cliente_id, maquina_id || null, descricao],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            res.status(201).json({ success: true, id: this.lastID });
+        }
+    );
+});
+
+// Técnico: Obter histórico de anotações
+app.get('/api/tecnico/anotacoes', authenticateJWT, isTecnico, (req, res) => {
+    const tecnico_id = req.user.id;
+    
+    const query = `
+        SELECT a.*, c.nome as cliente_nome, m.marca, m.modelo
+        FROM anotacoes_tecnicos a
+        JOIN clientes c ON a.cliente_id = c.id
+        LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+        WHERE a.tecnico_id = ?
+        ORDER BY a.data_criacao DESC
+    `;
+    
+    db.all(query, [tecnico_id], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+// Admin: Obter todas as anotações
+app.get('/api/admin/anotacoes', authenticateJWT, isAdmin, (req, res) => {
+    const query = `
+        SELECT a.*, c.nome as cliente_nome, t.nome as tecnico_nome, m.marca, m.modelo
+        FROM anotacoes_tecnicos a
+        JOIN clientes c ON a.cliente_id = c.id
+        JOIN tecnicos t ON a.tecnico_id = t.id
+        LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+        ORDER BY c.nome ASC, a.data_criacao DESC
+    `;
+    
+    db.all(query, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+// Admin: Marcar anotação como concluída
+app.put('/api/admin/anotacoes/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    
+    db.run(`UPDATE anotacoes_tecnicos SET estado = 'concluida' WHERE id = ?`, [id], function(err) {
+        if (err) return handleDBError(res, err);
+        res.json({ success: true });
+    });
 });
 
 // Error Handler Global

@@ -279,15 +279,12 @@
         [data-main-filter="todas"].active~.toggle-slider-main {
             transform: translateX(0);
         }
-
         [data-main-filter="avarias"].active~.toggle-slider-main {
             transform: translateX(calc(100% + 4px));
         }
-
         [data-main-filter="servicos"].active~.toggle-slider-main {
             transform: translateX(calc(200% + 8px));
         }
-
         [data-main-filter="manutencoes"].active~.toggle-slider-main {
             transform: translateX(calc(300% + 12px));
         }
@@ -334,7 +331,7 @@
                 align-items: center;
                 justify-content: center;
             }
-
+            
             .btn-report-avaria span {
                 display: none;
             }
@@ -410,14 +407,12 @@
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
         }
-
         .avaria-card:hover {
             transform: translateY(-2px);
             box-shadow: var(--shadow-md);
             border-color: var(--accent);
         }
-
-        .avaria-card button,
+        .avaria-card button, 
         .avaria-card .card-notes,
         .avaria-card a {
             cursor: pointer;
@@ -458,8 +453,8 @@
                 <button class="nav-btn" data-target="agendamentos">
                     <i class="ph ph-calendar-blank"></i> Agendamentos
                 </button>
-                <button class="nav-btn" data-target="estatisticas">
-                    <i class="ph ph-chart-line-up"></i> Estatísticas
+                <button class="nav-btn" data-target="anotacoes">
+                    <i class="ph ph-note"></i> Anotações Técnico
                 </button>
                 <button class="nav-btn" data-target="clientes">
                     <i class="ph ph-users"></i> Gestão de Clientes
@@ -473,13 +468,14 @@
                 <button class="nav-btn" data-target="checklists">
                     <i class="ph ph-list-checks"></i> Gestão de Checklists
                 </button>
+                <button class="nav-btn" data-target="estatisticas">
+                    <i class="ph ph-chart-line-up"></i> Estatísticas
+                </button>
                 <button class="nav-btn" data-target="frota">
                     <i class="ph ph-truck"></i> Gestão de Frota
                 </button>
-                <a href="outros.html" class="nav-link-special"
-                    style="text-decoration:none; color:inherit; background: #fffbeb; border: 1px solid #fde68a; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0;">
-                    <i class="ph ph-plus-circle" style="color: #d97706; font-size: 20px;"></i> <strong>Outros
-                        Serviços</strong>
+                <a href="outros.html" class="nav-link-special" style="text-decoration:none; color:inherit; background: #fffbeb; border: 1px solid #fde68a; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0;">
+                    <i class="ph ph-plus-circle" style="color: #d97706; font-size: 20px;"></i> <strong>Outros Serviços</strong>
                 </a>
             </nav>
             <div style="padding: 24px; margin-top: auto;">
@@ -528,8 +524,7 @@
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <button class="btn-report-avaria btn-open-report-avaria"
-                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px;"
-                                        title="Nova Avaria">
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px;" title="Nova Avaria">
                                         <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Nova Avaria</span>
                                     </button>
@@ -585,8 +580,7 @@
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <button class="btn-report-avaria btn-open-report-servico"
-                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;"
-                                        title="Novo Serviço">
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;" title="Novo Serviço">
                                         <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Novo Serviço</span>
                                     </button>
@@ -640,8 +634,7 @@
                                 <h3><span class="status-dot red"></span>Pendentes</h3>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <button class="btn-report-avaria btn-open-report-manutencao"
-                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;"
-                                        title="Nova Manutenção">
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;" title="Nova Manutenção">
                                         <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
                                         <span>Nova Manutenção</span>
                                     </button>
@@ -800,6 +793,42 @@
                 <div
                     style="background:var(--surface-color); padding:20px; border-radius:12px; position: relative; height: 400px; width: 100%;">
                     <canvas id="statsChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Anotacoes View -->
+            <section id="view-anotacoes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Anotações dos Técnicos</h1>
+                        <p>Notas e pedidos de clientes enviados pelos técnicos.</p>
+                    </div>
+                    <div class="header-actions">
+                        <div class="filter-group">
+                            <label for="filter-anotacoes-cliente" class="filter-label">Pesquisar por Cliente:</label>
+                            <select id="filter-anotacoes-cliente" class="filter-select" style="min-width: 250px;">
+                                <option value="">Todos os Clientes</option>
+                            </select>
+                        </div>
+                    </div>
+                </header>
+
+                <div id="anotacoes-pendentes-wrapper" style="max-width: 1000px; margin-top: 20px;">
+                    <h2 style="margin-bottom: 20px; color: var(--danger); font-size: 1.2rem; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #fee2e2; padding-bottom: 10px;">
+                        <i class="ph ph-clock"></i> Notas Pendentes
+                    </h2>
+                    <div id="anotacoes-pendentes-container" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 50px;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
+
+                <div id="anotacoes-concluidas-wrapper" style="max-width: 1000px;">
+                    <h2 style="margin-bottom: 20px; color: var(--success); font-size: 1.2rem; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #dcfce7; padding-bottom: 10px;">
+                        <i class="ph ph-check-circle"></i> Notas Concluídas
+                    </h2>
+                    <div id="anotacoes-concluidas-container" style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- JS popula aqui -->
+                    </div>
                 </div>
             </section>
 
@@ -1105,16 +1134,10 @@
             <form id="form-add-checklist">
                 <div class="form-group" style="margin-bottom: 20px;">
                     <label>Máquinas *</label>
-                    <div class="custom-select-wrapper" id="wrapper-admin-checklist-modelo"
-                        style="position:relative; width: 100%;">
-                        <input type="text" id="search-admin-checklist-modelo" placeholder="Pesquisar máquina..."
-                            autocomplete="off"
-                            style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;"
-                            required>
-                        <i class="ph ph-caret-down"
-                            style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
-                        <div class="custom-select-dropdown hidden" id="dropdown-admin-checklist-modelo"
-                            style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                    <div class="custom-select-wrapper" id="wrapper-admin-checklist-modelo" style="position:relative; width: 100%;">
+                        <input type="text" id="search-admin-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
+                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-admin-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
                             <div class="custom-select-options" id="options-admin-checklist-modelo">
                                 <!-- JS popula aqui -->
                             </div>
@@ -1128,27 +1151,19 @@
                 </div>
                 <div class="form-group">
                     <label>Descrição (Opcional)</label>
-                    <textarea id="checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..."
-                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                    <textarea id="checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
-
+                
                 <div class="form-group">
                     <label>Passos de Resolução *</label>
-                    <div id="checklist-passos-container"
-                        style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                    <div id="checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
                         <div class="checklist-passo-row" style="display:flex; gap:10px; align-items:flex-start;">
-                            <span class="passo-numero"
-                                style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">1.</span>
-                            <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba"
-                                style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;"></textarea>
-                            <button type="button" class="btn-remove-passo btn-icon"
-                                style="color:var(--danger); display:none; margin-top:5px;"><i
-                                    class="ph ph-trash"></i></button>
+                            <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">1.</span>
+                            <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba" style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;"></textarea>
+                            <button type="button" class="btn-remove-passo btn-icon" style="color:var(--danger); display:none; margin-top:5px;"><i class="ph ph-trash"></i></button>
                         </div>
                     </div>
-                    <button type="button" id="btn-add-passo" class="btn-secondary w-100"
-                        style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i
-                            class="ph ph-plus"></i> Adicionar Passo</button>
+                    <button type="button" id="btn-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
                 </div>
 
                 <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Guardar Checklist</button>
@@ -1156,7 +1171,7 @@
             <datalist id="datalist-marcas-modelos"></datalist>
         </div>
     </div>
-
+    
     <!-- Modal Edit Checklist -->
     <div id="modal-edit-checklist" class="modal hidden">
         <div class="modal-content" style="max-width: 600px;">
@@ -1166,16 +1181,10 @@
                 <input type="hidden" id="edit-checklist-id">
                 <div class="form-group" style="margin-bottom: 20px;">
                     <label>Máquinas *</label>
-                    <div class="custom-select-wrapper" id="wrapper-edit-checklist-modelo"
-                        style="position:relative; width: 100%;">
-                        <input type="text" id="search-edit-checklist-modelo" placeholder="Pesquisar máquina..."
-                            autocomplete="off"
-                            style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;"
-                            required>
-                        <i class="ph ph-caret-down"
-                            style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
-                        <div class="custom-select-dropdown hidden" id="dropdown-edit-checklist-modelo"
-                            style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                    <div class="custom-select-wrapper" id="wrapper-edit-checklist-modelo" style="position:relative; width: 100%;">
+                        <input type="text" id="search-edit-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
+                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-edit-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
                             <div class="custom-select-options" id="options-edit-checklist-modelo">
                                 <!-- JS popula aqui -->
                             </div>
@@ -1189,20 +1198,15 @@
                 </div>
                 <div class="form-group">
                     <label>Descrição (Opcional)</label>
-                    <textarea id="edit-checklist-descricao"
-                        placeholder="Breve nota ou dicas adicionais sobre o problema..."
-                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                    <textarea id="edit-checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
-
+                
                 <div class="form-group">
                     <label>Passos de Resolução *</label>
-                    <div id="edit-checklist-passos-container"
-                        style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                    <div id="edit-checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
                         <!-- JS popula os passos aqui -->
                     </div>
-                    <button type="button" id="btn-edit-add-passo" class="btn-secondary w-100"
-                        style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i
-                            class="ph ph-plus"></i> Adicionar Passo</button>
+                    <button type="button" id="btn-edit-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
                 </div>
 
                 <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Atualizar Checklist</button>
@@ -1687,16 +1691,12 @@
                 </div>
                 <div class="form-group">
                     <label>Máquinas a Manter *</label>
-                    <div id="report-manutencao-maquinas-container"
-                        style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; background: #f8fafc;">
-                        <p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um
-                            cliente para carregar as máquinas.</p>
+                    <div id="report-manutencao-maquinas-container" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; background: #f8fafc;">
+                        <p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>
                     </div>
                     <div style="margin-top: 8px; display: flex; gap: 10px;">
-                        <button type="button" id="btn-mnt-select-all" class="btn-secondary"
-                            style="padding: 4px 8px; font-size: 12px;">Selecionar Todas</button>
-                        <button type="button" id="btn-mnt-deselect-all" class="btn-secondary"
-                            style="padding: 4px 8px; font-size: 12px;">Limpar Seleção</button>
+                        <button type="button" id="btn-mnt-select-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Selecionar Todas</button>
+                        <button type="button" id="btn-mnt-deselect-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Limpar Seleção</button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -1953,17 +1953,33 @@
                     <label>Email (opcional)</label>
                     <input type="email" id="client-user-email" placeholder="Ex: tech@lavandaria.com">
                 </div>
-                <div class="form-group">
-                    <label>Palavra-passe *</label>
-                    <div class="password-wrapper">
-                        <input type="password" id="client-user-password" required placeholder="Crie uma senha segura">
-                        <button type="button" class="btn-toggle-password" data-target="client-user-password">
-                            <i class="ph ph-eye"></i>
-                        </button>
-                    </div>
-                </div>
                 <button type="submit" class="btn-primary w-100">Criar Acesso</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Client User Success (With Password Copy) -->
+    <div id="modal-client-user-success" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-client-user-success">&times;</span>
+            <div style="font-size: 50px; color: var(--success); margin-bottom: 20px;">
+                <i class="ph ph-check-circle"></i>
+            </div>
+            <h2>Acesso Criado!</h2>
+            <p>O login para o cliente foi criado com sucesso. Por favor, forneça as credenciais abaixo:</p>
+
+            <div style="background: var(--bg-main); padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px dashed var(--accent);">
+                <p style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">Palavra-Passe Gerada</p>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                    <span id="display-client-temp-password" style="font-family: monospace; font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 2px;"></span>
+                    <button id="btn-copy-client-password" class="btn-icon" title="Copiar Password" style="width: 44px; height: 44px; font-size: 20px;">
+                        <i class="ph ph-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <p style="font-size: 13px; color: var(--danger); font-weight: 600;">Atenção: Esta palavra-passe não voltará a ser exibida. Contudo, pode alterá-la mais tarde na edição.</p>
+            <button id="btn-client-user-success-ok" class="btn-primary w-100" style="margin-top: 24px;">Concluído</button>
         </div>
     </div>
 
@@ -2015,8 +2031,7 @@
         <div class="modal-content">
             <span class="close-btn" data-modal="modal-faturacao">&times;</span>
             <h2>Número da Fatura</h2>
-            <p style="margin-bottom: 20px; color: var(--text-secondary);">Introduza o número da fatura para esta
-                intervenção.</p>
+            <p style="margin-bottom: 20px; color: var(--text-secondary);">Introduza o número da fatura para esta intervenção.</p>
             <form id="form-faturacao">
                 <input type="hidden" id="faturacao-id">
                 <input type="hidden" id="faturacao-type">
@@ -2027,6 +2042,151 @@
                 </div>
                 <button type="submit" class="btn-primary w-100">Confirmar e Gravar</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Relatorio (Interativo A4) -->
+    <div id="modal-relatorio" class="modal hidden">
+        <div class="modal-content report-modal-content">
+            <span class="close-btn" data-modal="modal-relatorio"
+                style="color:white; top:10px; right:20px;">&times;</span>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 12px 20px; border-radius: 12px;">
+                <h3 style="color: white; margin: 0; font-size: 16px; display: flex; align-items: center; gap: 10px;">
+                    <i class="ph ph-note-pencil"></i> Edição de Relatório
+                </h3>
+                <div class="a4-toolbar" id="relatorio-toolbar" style="display: flex; gap: 10px; margin: 0; background: transparent; padding: 0; position: static;">
+                    <button type="button" id="btn-save-draft" class="btn-a4-draft" style="display:none;">Guardar Rascunho</button>
+                    <button type="button" id="btn-submit-report" class="btn-a4-submit" style="background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                        <i class="ph ph-check-circle"></i> Guardar Alterações
+                    </button>
+                </div>
+            </div>
+
+            <!-- PDF Viewer for Viewing (Non-editable) -->
+            <div id="pdf-viewer-container" class="hidden" style="width: 100%; height: calc(90vh - 100px); background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <iframe id="pdf-iframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+
+            <div class="a4-sheet" id="a4-report-sheet">
+                <header class="a4-header">
+                    <div class="a4-logo-section" style="max-width: 180px; text-align: center;">
+                        <img src="img/logo.png" alt="Maclau Logo" style="width: 100%; height: auto; margin-bottom: 2px;">
+                        <p style="font-size: 10px; line-height: 1.2;">Assistência Técnica Especializada</p>
+                        <p style="font-size: 10px; line-height: 1.2;">Manutenção Industrial e Comercial</p>
+                    </div>
+                    <div class="a4-id-section">
+                        <h2 id="a4-report-type">Relatório de Intervenção</h2>
+                        <p id="a4-report-id">ID: #00000</p>
+                        <p id="a4-report-date">Data: --/--/----</p>
+                    </div>
+                </header>
+
+                <div class="a4-grid">
+                    <div class="a4-section">
+                        <h3><i class="ph ph-user"></i> Cliente</h3>
+                        <div class="a4-info-box">
+                            <p><strong>Nome:</strong> <span id="a4-cliente-nome">---</span></p>
+                            <p><strong>Email:</strong> <span id="a4-cliente-email">---</span></p>
+                            <p><strong>Contacto:</strong> <span id="a4-cliente-contato">---</span></p>
+                            <p><strong>NIF:</strong> <span id="a4-cliente-nif">---</span></p>
+                        </div>
+                    </div>
+                    <div class="a4-section">
+                        <h3 id="a4-details-title"><i class="ph ph-wrench"></i> Máquina</h3>
+                        <div class="a4-info-box">
+                            <p><strong>Técnico:</strong> <span id="a4-tecnico-nome">---</span></p>
+                            <div id="a4-machine-row">
+                                <p><strong>Máquina:</strong> <span id="a4-maquina-nome">---</span></p>
+                                <p id="a4-maquina-serie-row"><strong>Nº de Série:</strong> <span id="a4-maquina-serie">---</span></p>
+                                <p><strong>Tipo:</strong> <span id="a4-tipo-avaria">---</span></p>
+                            </div>
+                            <div id="a4-service-row" style="display:none;">
+                                <p><strong>Serviço:</strong> <span id="a4-tipo-servico">---</span></p>
+                                <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
+                            </div>
+                            <p><strong>Horas de Trabalho:</strong> <span id="a4-horas-trabalho">---</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="a4-manutencao-maquinas-section" class="a4-editable-section" style="display:none; margin-top: 20px;">
+                    <h3 style="font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ph-bold ph-washing-machine" style="color: var(--accent);"></i> Máquinas Intervencionadas
+                    </h3>
+                    <div id="a4-manutencao-maquinas-list" style="margin-top: 5px;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3><i class="ph ph-clipboard-text"></i> Descrição da Intervenção</h3>
+                    <div class="a4-editable-area">
+                        <textarea id="relatorio-texto" rows="8" placeholder="Descreva aqui o trabalho que realizou..." style="width: 100%; min-height: 150px; border: none; background: transparent; font-family: inherit; font-size: 15px; resize: vertical; outline: none; color: #1e293b; line-height: 1.6;"></textarea>
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3><i class="ph ph-package"></i> Peças Substituídas</h3>
+                    <div class="a4-editable-area" style="min-height: 60px;">
+                        <textarea id="relatorio-pecas" rows="4" placeholder="Liste as peças utilizadas..." style="width: 100%; min-height: 80px; border: none; background: transparent; font-family: inherit; font-size: 15px; resize: vertical; outline: none; color: #1e293b; line-height: 1.6;"></textarea>
+                    </div>
+                </div>
+
+                <div id="a4-time-input-section" class="a4-grid" style="margin-bottom: 20px;">
+                    <div class="a4-section">
+                        <h3><i class="ph ph-clock"></i> Tempo de Trabalho</h3>
+                        <div class="form-group" style="margin:0;">
+                            <input type="text" id="relatorio-horas" placeholder="HH:mm" style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="a4-signature-grid">
+                    <div class="a4-signature-block">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:10px; color:#64748b; font-weight:700;">ASSINATURA DO TÉCNICO</span>
+                            <button type="button" id="btn-clear-signature-tech" style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer;"><i class="ph ph-eraser"></i> Limpar</button>
+                        </div>
+                        <div style="border:1px solid #e2e8f0; border-radius:4px; background:#f8fafc; touch-action:none;">
+                            <canvas id="signature-pad-tech" width="400" height="150" style="width:100%; height:auto; display:block; touch-action:none;"></canvas>
+                        </div>
+                        <div class="a4-signature-line">Técnico Responsável</div>
+                    </div>
+                    <div class="a4-signature-block">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:10px; color:#64748b; font-weight:700;">ASSINATURA DO CLIENTE</span>
+                            <button type="button" id="btn-clear-signature" style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer;"><i class="ph ph-eraser"></i> Limpar</button>
+                        </div>
+                        <div style="border:1px solid #e2e8f0; border-radius:4px; background:#f8fafc; touch-action:none;">
+                            <canvas id="signature-pad" width="400" height="150" style="width:100%; height:auto; display:block; touch-action:none;"></canvas>
+                        </div>
+                        <div class="a4-signature-line" style="margin-top:10px;">Assinatura do Cliente</div>
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" id="relatorio-avaria-id">
+            <input type="hidden" id="relatorio-type" value="avaria">
+            
+            <div id="relatorio-warning" style="text-align:center; font-size:12px; color:#cbd5e1; margin-top:15px;">
+                <i class="ph ph-info"></i> Modo de Edição de Administrador: Alterações são salvas diretamente.
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Confirmação Edição Admin -->
+    <div id="modal-confirm-submit" class="modal hidden" style="z-index: 10001;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px;">
+            <i class="ph ph-warning-circle" style="font-size: 48px; color: #f59e0b; margin-bottom: 20px;"></i>
+            <h2 style="margin-bottom: 10px;">Salvar Alterações?</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.5;">
+                Tem a certeza que deseja atualizar este relatório? Esta ação substituirá a versão anterior.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" id="btn-cancel-submit" class="btn-secondary" style="flex: 1;">Cancelar</button>
+                <button type="button" id="btn-confirm-submit-action" class="btn-primary" style="flex: 1; background: var(--accent);">Salvar</button>
+            </div>
         </div>
     </div>
 
