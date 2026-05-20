@@ -132,14 +132,23 @@ function HHmmToHours(hhmm) {
 function initGlobalTimer() {
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
-        const state = getTimerState();
-        if (!state.taskId || !state.startTime) return;
-        
-        const el = document.getElementById(`timer-${state.taskType}-${state.taskId}`);
-        if (el) {
-            const currentMs = state.accumulatedMs + (Date.now() - state.startTime);
-            el.textContent = formatDuration(currentMs);
-        }
+        const timerElements = document.querySelectorAll('[id^="timer-"]');
+        timerElements.forEach(el => {
+            const idParts = el.id.split('-'); // e.g. ["timer", "avaria", "12"]
+            if (idParts.length < 3) return;
+            const taskType = idParts[1];
+            const taskId = parseInt(idParts[2]);
+            
+            const task = allPendingTasks.find(t => t.id === taskId && t._type === taskType);
+            if (task && task.estado === 'em resolução' && task.data_hora_inicio) {
+                const startTimeMs = new Date(task.data_hora_inicio).getTime();
+                if (!isNaN(startTimeMs)) {
+                    const accumulatedMs = (task.tempo_acumulado || 0) * 1000;
+                    const totalMs = accumulatedMs + (Date.now() - startTimeMs);
+                    el.textContent = formatDuration(totalMs >= 0 ? totalMs : 0);
+                }
+            }
+        });
     }, 1000);
 }
 
@@ -349,7 +358,7 @@ window.renderPendingTasks = function() {
             </div>
             <h3 class="task-machine-name" style="margin-bottom:5px;">${escapeHTML(titleStr)}</h3>
             <p class="task-client-name" style="font-size:14px; color:var(--text-secondary); font-weight:600;">${task._type === 'manutencao' ? 'Todas as Máquinas' : escapeHTML(task.cliente_nome || 'Serviço Externo')}</p>
-            ${task.cliente_morada ? `<div style="font-size:13px; color:var(--accent); margin-top:2px;"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.cliente_morada)}" target="_blank" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:4px;"><i class="ph ph-map-pin"></i> ${escapeHTML(task.cliente_morada)}</a></div>` : ''}
+            ${task.cliente_morada ? `<div style="font-size:13px; color:var(--accent); margin-top:2px;"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(task.cliente_morada)}" target="_blank" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:4px;" onclick="event.stopPropagation();"><i class="ph ph-map-pin"></i> ${escapeHTML(task.cliente_morada)}</a></div>` : ''}
             ${agendadoHtml}
             <div style="font-size:12px; color:var(--text-secondary); margin-top:${task.data_agendada ? '4px' : '10px'};">Reportado em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
             ${task.notas ? `<div class="admin-note-btn" style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent); cursor:pointer; transition:background 0.2s;"><strong style="color:var(--text-main);">Notas do Admin:</strong><div style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-top:4px;">${escapeHTML(task.notas)}</div></div>` : ''}
@@ -387,7 +396,8 @@ window.renderPendingTasks = function() {
             btnPausar.style.backgroundColor = '#e2e8f0';
             btnPausar.style.color = '#475569';
             btnPausar.innerHTML = '<i class="ph ph-pause"></i> Pausar';
-            btnPausar.onclick = () => {
+            btnPausar.onclick = (e) => {
+                e.stopPropagation();
                 document.getElementById('pausar-avaria-id').value = task.id;
                 document.getElementById('pausar-type').value = task._type;
                 document.getElementById('pausar-motivo').value = '';
@@ -411,6 +421,7 @@ window.renderPendingTasks = function() {
 
         container.appendChild(div);
     });
+    initGlobalTimer();
 }
 
 async function updateStatus(id, newStatus, currentText = '', type = 'avaria') {
@@ -458,13 +469,14 @@ window.deletePhoto = async function(photoId) {
         const currentText = document.getElementById('relatorio-texto').value;
         const currentPecas = document.getElementById('relatorio-pecas').value;
         const currentHoras = document.getElementById('relatorio-horas').value;
+        const currentDeslocacoes = document.getElementById('relatorio-deslocacoes')?.value || '';
         
         const canvasCli = document.getElementById('signature-pad');
         const canvasTec = document.getElementById('signature-pad-tech');
         const currentSig = isCanvasBlank(canvasCli) ? '' : canvasCli.toDataURL('image/png');
         const currentSigTech = isCanvasBlank(canvasTec) ? '' : canvasTec.toDataURL('image/png');
 
-        openRelatorioModal(id, false, currentText, false, currentPecas, currentHoras, currentSig, type, currentSigTech);
+        openRelatorioModal(id, false, currentText, false, currentPecas, currentHoras, currentSig, type, currentSigTech, currentDeslocacoes);
     } catch (err) {
         showNotification(err.message, true);
     }
@@ -607,13 +619,14 @@ async function uploadPhotos(filesList) {
         const currentText = document.getElementById('relatorio-texto').value;
         const currentPecas = document.getElementById('relatorio-pecas').value;
         const currentHoras = document.getElementById('relatorio-horas').value;
+        const currentDeslocacoes = document.getElementById('relatorio-deslocacoes')?.value || '';
         
         const canvasCli = document.getElementById('signature-pad');
         const canvasTec = document.getElementById('signature-pad-tech');
         const currentSig = isCanvasBlank(canvasCli) ? '' : canvasCli.toDataURL('image/png');
         const currentSigTech = isCanvasBlank(canvasTec) ? '' : canvasTec.toDataURL('image/png');
 
-        openRelatorioModal(id, false, currentText, false, currentPecas, currentHoras, currentSig, type, currentSigTech);
+        openRelatorioModal(id, false, currentText, false, currentPecas, currentHoras, currentSig, type, currentSigTech, currentDeslocacoes);
         
     } catch (err) {
         console.error("Upload Error:", err);
@@ -621,7 +634,7 @@ async function uploadPhotos(filesList) {
     }
 }
 
-async function openRelatorioModal(id, isStatusChange = false, currentText = '', isSubmitted = false, currentPecas = '', currentHoras = '', currentSignature = '', type = 'avaria', currentSignatureTech = '') {
+async function openRelatorioModal(id, isStatusChange = false, currentText = '', isSubmitted = false, currentPecas = '', currentHoras = '', currentSignature = '', type = 'avaria', currentSignatureTech = '', currentDeslocacoes = '') {
     document.getElementById('relatorio-avaria-id').value = id;
     document.getElementById('relatorio-type').value = type;
     document.getElementById('relatorio-status-change').value = isStatusChange ? '1' : '0';
@@ -736,6 +749,20 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         }
         horasInput.value = hoursVal;
 
+        const deslocacoesInput = document.getElementById('relatorio-deslocacoes');
+        if (deslocacoesInput) {
+            if (currentDeslocacoes !== undefined && currentDeslocacoes !== null && currentDeslocacoes !== '') {
+                deslocacoesInput.value = currentDeslocacoes;
+            } else {
+                deslocacoesInput.value = (data.deslocacoes !== null && data.deslocacoes !== undefined) ? data.deslocacoes : 1;
+            }
+        }
+
+        const staticDeslocacoes = document.getElementById('a4-deslocacoes');
+        if (staticDeslocacoes) {
+            staticDeslocacoes.textContent = (data.deslocacoes !== null && data.deslocacoes !== undefined) ? data.deslocacoes : 1;
+        }
+
         // Populate Static Horas for viewing
         const staticHoras = document.getElementById('a4-horas-trabalho');
         if (staticHoras) staticHoras.textContent = hoursToHHmm(data.horas_trabalho);
@@ -763,6 +790,7 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         textarea.disabled = disabled;
         pecasArea.disabled = disabled;
         horasInput.disabled = disabled;
+        if (deslocacoesInput) deslocacoesInput.disabled = disabled;
         btnSubmit.style.display = disabled ? 'none' : 'block';
         btnSave.style.display = disabled ? 'none' : 'block';
         warning.style.display = disabled ? 'none' : 'block';
@@ -838,6 +866,8 @@ async function saveRelatorioDraft() {
     const pecas_substituidas = document.getElementById('relatorio-pecas').value;
     const horas_raw = document.getElementById('relatorio-horas').value;
     const horas_trabalho = HHmmToHours(horas_raw);
+    const deslocacoesInput = document.getElementById('relatorio-deslocacoes');
+    const deslocacoes = deslocacoesInput ? parseInt(deslocacoesInput.value) || 0 : 1;
     const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
     
     const canvasCli = document.getElementById('signature-pad');
@@ -853,7 +883,7 @@ async function saveRelatorioDraft() {
         const res = await authFetch(endpoint, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico })
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes })
         });
 
         if (res.ok) {
@@ -894,6 +924,8 @@ async function submitRelatorio() {
             const pecas_substituidas = document.getElementById('relatorio-pecas').value;
             const horas_raw = document.getElementById('relatorio-horas').value;
             const horas_trabalho = HHmmToHours(horas_raw);
+            const deslocacoesInput = document.getElementById('relatorio-deslocacoes');
+            const deslocacoes = deslocacoesInput ? parseInt(deslocacoesInput.value) || 0 : 1;
             const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
             
             const canvasCli = document.getElementById('signature-pad');
@@ -907,7 +939,7 @@ async function submitRelatorio() {
             await authFetch(draftEndpoint, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico })
+                body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes })
             });
 
             // 2. Submeter
@@ -1065,7 +1097,7 @@ window.renderHistorico = function () {
             btn.style.color = '#854d0e';
             btn.innerHTML = '<i class="ph ph-pencil-line"></i> Editar';
 
-            btn.onclick = () => openReportFromHistory(a.id);
+            btn.onclick = () => openReportFromHistory(a.id, a._type);
             colReport.appendChild(btn);
         }
 
@@ -1655,10 +1687,10 @@ function escapeJS(str) {
     return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 }
 
-window.openReportFromHistory = function (id) {
-    const item = historicoData.find(a => a.id === id);
+window.openReportFromHistory = function (id, type) {
+    const item = historicoData.find(a => a.id === id && a._type === type);
     if (!item) return;
-    openRelatorioModal(item.id, false, item.relatorio, item.relatorio_submetido === 1, item.pecas_substituidas, item.horas_trabalho, item.assinatura_cliente, item._type, item.assinatura_tecnico);
+    openRelatorioModal(item.id, false, item.relatorio, item.relatorio_submetido === 1, item.pecas_substituidas, item.horas_trabalho, item.assinatura_cliente, item._type, item.assinatura_tecnico, item.deslocacoes);
 };
 
 window.openFullNoteModal = function(encodedNote) {

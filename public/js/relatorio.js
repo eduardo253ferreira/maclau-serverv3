@@ -91,10 +91,12 @@ function renderReport(data) {
 
     const html = `
         <header>
-            <div class="logo-section" style="max-width: 180px; text-align: center;">
-                <img src="/img/logo.png" alt="Maclau Logo" style="width: 100%; height: auto; margin-bottom: 2px;">
-                <p style="font-size: 10px; line-height: 1.2;">Assistência Técnica Especializada</p>
-                <p style="font-size: 10px; line-height: 1.2;">Manutenção Industrial e Comercial</p>
+            <div class="logo-section" style="max-width: 480px; text-align: left; display: flex; align-items: center; gap: 15px;">
+                <img src="/img/logo.png" alt="Maclau Logo" style="width: 80px; height: auto; flex-shrink: 0; margin: 0;">
+                <div>
+                    <p style="font-size: 11px; line-height: 1.3; font-weight: 700; color: #1e293b; margin: 0;">MACLAU – Indústria e Comércio de Máquinas Industriais, Unipessoal Lda.</p>
+                    <!-- <p style="font-size: 10px; line-height: 1.3; color: #64748b; margin: 0; margin-top: 2px;">Sistema de Gestão da Qualidade – ISO 9001:2015</p> -->
+                </div>
             </div>
             <div class="report-meta">
                 <h2 style="font-size: 18px;">${data.relatorio_submetido === 1 ? 'Relatório de Intervenção' : '<span style="color: #ca8a04;">Relatório (Rascunho)</span>'}</h2>
@@ -117,6 +119,7 @@ function renderReport(data) {
                 <p><strong>Técnico:</strong> ${data.tecnico_nome}</p>
                 ${interventionInfo}
                 <p><strong>Horas de Trabalho:</strong> ${hoursToHHmm(data.horas_trabalho)}</p>
+                <p><strong>Deslocações:</strong> ${data.deslocacoes !== null && data.deslocacoes !== undefined ? data.deslocacoes : 1}</p>
             </div>
         </div>
 
@@ -162,10 +165,12 @@ function renderReport(data) {
         ${data.fotos && data.fotos.length > 0 ? `
         <div style="page-break-before: always; padding-top: 20px;">
             <div class="header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); padding-bottom: 20px; margin-bottom: 30px;">
-                <div class="logo-section" style="max-width: 180px; text-align: center;">
-                    <img src="/img/logo.png" alt="Maclau Logo" style="width: 100%; height: auto; margin-bottom: 2px;">
-                    <p style="font-size: 10px; line-height: 1.2;">Assistência Técnica Especializada</p>
-                    <p style="font-size: 10px; line-height: 1.2;">Manutenção Industrial e Comercial</p>
+                <div class="logo-section" style="max-width: 480px; text-align: left; display: flex; align-items: center; gap: 15px;">
+                    <img src="/img/logo.png" alt="Maclau Logo" style="width: 80px; height: auto; flex-shrink: 0; margin: 0;">
+                    <div>
+                        <p style="font-size: 11px; line-height: 1.3; font-weight: 700; color: #1e293b; margin: 0;">MACLAU – Indústria e Comércio de Máquinas Industriais, Unipessoal Lda.</p>
+                        <!-- <p style="font-size: 10px; line-height: 1.3; color: #64748b; margin: 0; margin-top: 2px;">Sistema de Gestão da Qualidade – ISO 9001:2015</p> -->
+                    </div>
                 </div>
                 <div class="report-meta" style="text-align: right;">
                     <h2 style="font-size: 18px;">Fotos da Intervenção</h2>

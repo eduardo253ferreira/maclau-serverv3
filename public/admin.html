@@ -444,36 +444,80 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <button class="nav-btn active" data-target="dashboard">
-                    <i class="ph ph-gauge"></i> Dashboards
-                </button>
-                <button class="nav-btn" data-target="historico">
-                    <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
-                </button>
-                <button class="nav-btn" data-target="agendamentos">
-                    <i class="ph ph-calendar-blank"></i> Agendamentos
-                </button>
-                <button class="nav-btn" data-target="anotacoes">
-                    <i class="ph ph-note"></i> Anotações Técnico
-                </button>
-                <button class="nav-btn" data-target="clientes">
-                    <i class="ph ph-users"></i> Gestão de Clientes
-                </button>
-                <button class="nav-btn" data-target="maquinas">
-                    <i class="ph ph-washing-machine"></i> Gestão de Máquinas
-                </button>
-                <button class="nav-btn" data-target="tecnicos">
-                    <i class="ph ph-wrench"></i> Gestão de Técnicos
-                </button>
-                <button class="nav-btn" data-target="checklists">
-                    <i class="ph ph-list-checks"></i> Gestão de Checklists
-                </button>
+                <!-- Avarias Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-warning"></i> Avarias
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn active" data-target="dashboard">
+                            <i class="ph ph-gauge"></i> Dashboard
+                        </button>
+                        <button class="nav-btn" data-target="historico">
+                            <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
+                        </button>
+                        <button class="nav-btn" data-target="agendamentos">
+                            <i class="ph ph-calendar-blank"></i> Agendamentos
+                        </button>
+                        <button class="nav-btn" data-target="anotacoes">
+                            <i class="ph ph-note"></i> Anotações Técnico
+                        </button>
+                        <button class="nav-btn" data-target="manutencoes-recorrentes">
+                            <i class="ph ph-arrow-clockwise"></i> Manutenções Recorrentes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clientes Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-users"></i> Clientes
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn" data-target="clientes">
+                            <i class="ph ph-users"></i> Gestão de Clientes
+                        </button>
+                        <button class="nav-btn" data-target="maquinas">
+                            <i class="ph ph-washing-machine"></i> Gestão de Máquinas
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Staff Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-identification-card"></i> Staff
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn" data-target="tecnicos">
+                            <i class="ph ph-wrench"></i> Gestão de Técnicos
+                        </button>
+                        <button class="nav-btn" data-target="checklists">
+                            <i class="ph ph-list-checks"></i> Gestão de Checklists
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Estatísticas -->
                 <button class="nav-btn" data-target="estatisticas">
                     <i class="ph ph-chart-line-up"></i> Estatísticas
                 </button>
+
+                <!-- Gestão de Frota -->
                 <button class="nav-btn" data-target="frota">
                     <i class="ph ph-truck"></i> Gestão de Frota
                 </button>
+
+                <!-- Outros Serviços -->
                 <a href="outros.html" class="nav-link-special" style="text-decoration:none; color:inherit; background: #fffbeb; border: 1px solid #fde68a; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0;">
                     <i class="ph ph-plus-circle" style="color: #d97706; font-size: 20px;"></i> <strong>Outros Serviços</strong>
                 </a>
@@ -946,6 +990,41 @@
                 </div>
             </section>
 
+            <!-- Manutenções Recorrentes View -->
+            <section id="view-manutencoes-recorrentes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Manutenções Recorrentes</h1>
+                        <p>Gerir parametrização e agendamento automático de manutenções preventivas periódicas por cliente.</p>
+                    </div>
+                </header>
+
+                <div class="search-filter-wrapper">
+                    <div class="search-input-group">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search-recorrente" placeholder="Pesquisar por cliente (nome, telefone, email, morada, NIF)...">
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Lavandaria</th>
+                                <th>Estado Agendador</th>
+                                <th>Frequência</th>
+                                <th>Data Inicial / Próxima</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-recorrentes-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Clientes View -->
             <section id="view-clientes" class="view hidden">
                 <header class="view-header flex-header">
@@ -955,6 +1034,14 @@
                     </div>
                     <button id="btn-open-add-client" class="btn-primary">+ Novo Cliente</button>
                 </header>
+
+                <div class="search-filter-wrapper">
+                    <div class="search-input-group">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search-client" placeholder="Pesquisar por cliente (nome, telefone, email, morada, NIF)...">
+                    </div>
+                </div>
+
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
@@ -1321,6 +1408,44 @@
         </div>
     </div>
 
+    <!-- Modal Edit Recorrente -->
+    <div id="modal-edit-recorrente" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-recorrente">&times;</span>
+            <h2>Configurar Manutenção Automática</h2>
+            <p>Defina se este cliente tem agendamentos automáticos periódicos.</p>
+            <form id="form-edit-recorrente">
+                <input type="hidden" id="recorrente-client-id">
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-weight: 700;">Cliente</label>
+                    <input type="text" id="recorrente-client-nome" readonly style="background: #f1f5f9; cursor: not-allowed; font-weight: 600;">
+                </div>
+
+                <div class="form-group flex-row-align" style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">
+                    <input type="checkbox" id="recorrente-manutencao-automatica" style="width: auto; margin: 0;">
+                    <label for="recorrente-manutencao-automatica" style="margin: 0; cursor: pointer; font-weight: 600;">Agendar Manutenções Automáticas</label>
+                </div>
+
+                <div id="recorrente-periodo-wrapper" style="display: none; border-left: 3px solid var(--primary-color); padding-left: 12px; margin-bottom: 15px;">
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label>Frequência da Manutenção</label>
+                        <select id="recorrente-manutencao-periodo" style="width: 100%;">
+                            <option value="mensal">Mensal</option>
+                            <option value="trimestral">Trimestral</option>
+                            <option value="semestral">Semestral</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Data da Primeira Manutenção *</label>
+                        <input type="date" id="recorrente-manutencao-data-inicio">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar Configuração</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal Edit Maquina -->
     <div id="modal-edit-maquina" class="modal hidden">
         <div class="modal-content">
@@ -1412,10 +1537,12 @@
                 <input type="hidden" id="atribuir-avaria-id">
                 <input type="hidden" id="atribuir-type" value="avaria">
                 <div class="form-group">
-                    <label>Técnico</label>
-                    <select id="atribuir-tecnico-select" required>
-                        <!-- Populated by JS -->
-                    </select>
+                    <label>Técnicos</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="atribuir-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="btn-primary w-100">Confirmar Atribuição</button>
             </form>
@@ -1570,6 +1697,11 @@
                         style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Email</label>
                     <div id="view-cliente-email" style="font-weight: 600; color: var(--accent);"></div>
                 </div>
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Manutenção Automática</label>
+                    <div id="view-cliente-manutencao" style="font-weight: 600;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1610,11 +1742,12 @@
                         style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
                 <div class="form-group">
-                    <label>Atribuir Técnico (Opcional)</label>
-                    <select id="report-avaria-tecnico">
-                        <option value="">-- Não Atribuir Agora --</option>
-                        <!-- Populated by JS -->
-                    </select>
+                    <label>Atribuir Técnico(s) (Opcional)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="report-avaria-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Data/Hora Agendada (Opcional)</label>
@@ -1660,11 +1793,12 @@
                         style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
                 <div class="form-group">
-                    <label>Atribuir Técnico (Opcional)</label>
-                    <select id="report-servico-tecnico">
-                        <option value="">-- Não Atribuir Agora --</option>
-                        <!-- Populated by JS -->
-                    </select>
+                    <label>Atribuir Técnico(s) (Opcional)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="report-servico-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Data/Hora Agendada (Opcional)</label>
@@ -1705,11 +1839,12 @@
                         style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
                 </div>
                 <div class="form-group">
-                    <label>Atribuir Técnico (Opcional)</label>
-                    <select id="report-manutencao-tecnico">
-                        <option value="">-- Não Atribuir Agora --</option>
-                        <!-- Populated by JS -->
-                    </select>
+                    <label>Atribuir Técnico(s) (Opcional)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="report-manutencao-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Data/Hora Agendada (Opcional)</label>
@@ -1826,11 +1961,12 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Técnico</label>
-                    <select id="edit-agendamento-tecnico">
-                        <option value="">-- Não Atribuir / Remover --</option>
-                        <!-- Populated by JS -->
-                    </select>
+                    <label>Técnico(s)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="edit-agendamento-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -2070,10 +2206,12 @@
 
             <div class="a4-sheet" id="a4-report-sheet">
                 <header class="a4-header">
-                    <div class="a4-logo-section" style="max-width: 180px; text-align: center;">
-                        <img src="img/logo.png" alt="Maclau Logo" style="width: 100%; height: auto; margin-bottom: 2px;">
-                        <p style="font-size: 10px; line-height: 1.2;">Assistência Técnica Especializada</p>
-                        <p style="font-size: 10px; line-height: 1.2;">Manutenção Industrial e Comercial</p>
+                    <div class="a4-logo-section" style="max-width: 480px; text-align: left; display: flex; align-items: center; gap: 15px;">
+                        <img src="img/logo.png" alt="Maclau Logo" style="width: 80px; height: auto; flex-shrink: 0; margin: 0;">
+                        <div>
+                            <p style="font-size: 11px; line-height: 1.3; font-weight: 700; color: #1e293b; margin: 0;">MACLAU – Indústria e Comércio de Máquinas Industriais, Unipessoal Lda.</p>
+                            <!-- <p style="font-size: 10px; line-height: 1.3; color: #64748b; margin: 0; margin-top: 2px;">Sistema de Gestão da Qualidade – ISO 9001:2015</p> -->
+                        </div>
                     </div>
                     <div class="a4-id-section">
                         <h2 id="a4-report-type">Relatório de Intervenção</h2>
@@ -2106,6 +2244,7 @@
                                 <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
                             </div>
                             <p><strong>Horas de Trabalho:</strong> <span id="a4-horas-trabalho">---</span></p>
+                            <p><strong>Deslocações:</strong> <span id="a4-deslocacoes">---</span></p>
                         </div>
                     </div>
                 </div>
@@ -2137,7 +2276,13 @@
                     <div class="a4-section">
                         <h3><i class="ph ph-clock"></i> Tempo de Trabalho</h3>
                         <div class="form-group" style="margin:0;">
-                            <input type="text" id="relatorio-horas" placeholder="HH:mm" style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1;">
+                            <input type="text" id="relatorio-horas" placeholder="HH:mm" style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1; width: 100%;">
+                        </div>
+                    </div>
+                    <div class="a4-section">
+                        <h3><i class="ph ph-map-pin"></i> Deslocações</h3>
+                        <div class="form-group" style="margin:0;">
+                            <input type="number" id="relatorio-deslocacoes" min="0" placeholder="1" value="1" style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1; width: 100%;">
                         </div>
                     </div>
                 </div>
