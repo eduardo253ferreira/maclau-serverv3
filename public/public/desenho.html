@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Desenho Laser</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif !important; }
+        
+        .laser-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .laser-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+
+        .task-description-box {
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 12px;
+            border-left: 4px solid var(--accent);
+            margin-bottom: 20px;
+        }
+
+        .task-description-box h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .task-description-box p {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .upload-area-mini {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            padding: 15px 20px;
+            background: #f8fafc;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+
+        .upload-area-mini:hover {
+            border-color: var(--accent);
+            background: var(--accent-light);
+        }
+
+        .history-item {
+            background: white;
+            padding: 20px 24px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            border-color: var(--accent);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .history-info h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .history-info p { margin: 5px 0 0 0; font-size: 13px; color: var(--text-secondary); }
+
+        .btn-download-mini {
+            padding: 10px 20px;
+            background: var(--accent-light);
+            color: var(--accent);
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-download-mini:hover {
+            background: var(--accent);
+            color: white;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div id="notification" class="notification hidden"></div>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+            </div>
+            <div style="padding: 24px; border-bottom: 1px solid var(--border);">
+                <h3 id="user-name" style="color: var(--accent); margin:0; font-size: 18px; font-weight: 700;">Carregando...</h3>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Portal de Desenho Laser</p>
+            </div>
+            <nav class="sidebar-nav">
+                <button id="tab-tasks" class="nav-btn active">
+                    <i class="ph ph-briefcase"></i> Minhas Tarefas
+                </button>
+                <button id="tab-history" class="nav-btn">
+                    <i class="ph ph-clock-counter-clockwise"></i> Histórico
+                </button>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); border:none; box-shadow:none; cursor:pointer;">
+                    <i class="ph ph-sign-out"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <main class="content-area">
+            <header class="view-header">
+                <h1 id="view-title">Tarefas de Desenho</h1>
+                <p id="view-desc">Submeta os desenhos para as tarefas de corte a laser.</p>
+            </header>
+
+            <section id="section-tasks">
+                <div id="task-list">
+                    <!-- JS popula aqui -->
+                </div>
+            </section>
+
+            <section id="section-history" class="hidden">
+                <div id="history-list">
+                    <!-- JS popula aqui -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/desenho.js?v=3"></script>
+</body>
+</html>

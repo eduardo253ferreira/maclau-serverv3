@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Outros Serviços</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif !important;
+        }
+
+        .laser-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .laser-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+
+        .laser-card h3 {
+            font-size: 18px;
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        .laser-card p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-pendente { background: #fee2e2; color: #b91c1c; }
+        .status-em-corte { background: #fef3c7; color: #92400e; }
+        .status-concluido { background: #dcfce7; color: #15803d; }
+        .status-pausado { background: #f1f5f9; color: #475569; }
+        .status-pronto-para-corte { background: #e0f2fe; color: #0369a1; }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 12px;
+            width: fit-content;
+        }
+
+        .tab-btn {
+            padding: 10px 24px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: var(--accent);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .equipa-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .equipa-grid { grid-template-columns: 1fr; }
+            .laser-card { flex-direction: column; align-items: flex-start; gap: 20px; }
+            .laser-card .actions { width: 100%; display: flex; justify-content: space-between; }
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title i { color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div id="notification" class="notification hidden"></div>
+
+    <div class="app-container">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button id="btn-toggle-sidebar" class="btn-menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+                <button id="btn-close-sidebar" class="btn-close-sidebar">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="admin.html" class="nav-btn active" style="background: var(--accent); color: white; text-decoration: none;">
+                    <i class="ph ph-arrow-left"></i> Voltar à Dashboard
+                </a>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); border:none; cursor:pointer; box-shadow: none; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="ph ph-sign-out"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <main class="content-area">
+            <header class="view-header flex-header">
+                <div>
+                    <h1>Corte a Laser e Outros Serviços</h1>
+                    <p>Gestão centralizada de pedidos especiais e serviços externos.</p>
+                </div>
+                <button id="btn-open-modal-laser" class="btn-primary">
+                    <i class="ph ph-plus"></i> Novo Pedido Laser
+                </button>
+            </header>
+
+            <div class="tabs">
+                <button id="tab-pedidos" class="tab-btn active">Pedidos Laser</button>
+                <button id="tab-equipa" class="tab-btn">Gestão da Equipa Laser</button>
+            </div>
+
+            <section id="section-pedidos">
+                <div id="laser-list">
+                    <!-- JS popula aqui -->
+                </div>
+            </section>
+
+            <section id="section-equipa" class="hidden">
+                <div class="equipa-grid">
+                    <div>
+                        <h3 class="section-title"><i class="ph ph-pencil-line"></i> Colaboradores (Desenho)</h3>
+                        <button id="btn-open-modal-colab" class="btn-secondary w-100" style="margin-bottom: 20px;">
+                            <i class="ph ph-plus"></i> Adicionar Colaborador
+                        </button>
+                        <div id="colab-list"></div>
+                    </div>
+                    <div>
+                        <h3 class="section-title"><i class="ph ph-lightning"></i> Técnicos Laser (Corte)</h3>
+                        <button id="btn-open-modal-tech" class="btn-secondary w-100" style="margin-bottom: 20px;">
+                            <i class="ph ph-plus"></i> Adicionar Técnico
+                        </button>
+                        <div id="tech-laser-list"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals (Updated Styles) -->
+    <div id="modal-novo-laser" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-close="modal-novo-laser">&times;</span>
+            <h2>Novo Pedido de Corte a Laser</h2>
+            <form id="form-novo-laser">
+                <div class="form-group">
+                    <label>Nome do Cliente</label>
+                    <input type="text" id="laser-cliente" required placeholder="Ex: João Unipessoal Lda">
+                </div>
+                <div class="form-group">
+                    <label>Descrição do Trabalho</label>
+                    <textarea id="laser-descricao" rows="4" required placeholder="Descreva o que é necessário cortar..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit;"></textarea>
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Evento Laser</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-novo-colab" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-close="modal-novo-colab">&times;</span>
+            <h2>Novo Colaborador (Desenho)</h2>
+            <form id="form-novo-colab">
+                <div class="form-group"><label>Nome</label><input type="text" id="colab-nome" required></div>
+                <div class="form-group"><label>Email (Login)</label><input type="email" id="colab-email" required></div>
+                <div class="form-group"><label>Password</label><input type="password" id="colab-pass" required></div>
+                <button type="submit" class="btn-primary w-100">Criar Colaborador</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-novo-tech-laser" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-close="modal-novo-tech-laser">&times;</span>
+            <h2>Novo Técnico Laser (Corte)</h2>
+            <form id="form-novo-tech-laser">
+                <div class="form-group"><label>Nome</label><input type="text" id="tech-laser-nome" required></div>
+                <div class="form-group"><label>Email (Login)</label><input type="email" id="tech-laser-email" required></div>
+                <div class="form-group"><label>Password</label><input type="password" id="tech-laser-pass" required></div>
+                <button type="submit" class="btn-primary w-100">Criar Técnico</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-edit-colab" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-close="modal-edit-colab">&times;</span>
+            <h2>Editar Colaborador</h2>
+            <form id="form-edit-colab">
+                <input type="hidden" id="edit-colab-id">
+                <div class="form-group"><label>Nome</label><input type="text" id="edit-colab-nome" required></div>
+                <div class="form-group"><label>Email</label><input type="email" id="edit-colab-email" required></div>
+                <div class="form-group"><label>Nova Password (deixe em branco para manter)</label><input type="password" id="edit-colab-pass"></div>
+                <button type="submit" class="btn-primary w-100">Atualizar Colaborador</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-edit-tech-laser" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-close="modal-edit-tech-laser">&times;</span>
+            <h2>Editar Técnico Laser</h2>
+            <form id="form-edit-tech-laser">
+                <input type="hidden" id="edit-tech-laser-id">
+                <div class="form-group"><label>Nome</label><input type="text" id="edit-tech-laser-nome" required></div>
+                <div class="form-group"><label>Email</label><input type="email" id="edit-tech-laser-email" required></div>
+                <div class="form-group"><label>Nova Password (deixe em branco para manter)</label><input type="password" id="edit-tech-laser-pass"></div>
+                <button type="submit" class="btn-primary w-100">Atualizar Técnico</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/outros.js?v=3"></script>
+</body>
+</html>

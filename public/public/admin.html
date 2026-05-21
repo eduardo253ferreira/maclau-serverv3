@@ -1,0 +1,2344 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FullCalendar -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+    <style>
+        #calendar {
+            max-height: 700px;
+            font-size: 0.85rem;
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .fc .fc-toolbar {
+            margin-bottom: 20px !important;
+        }
+
+        .fc .fc-toolbar-title {
+            font-size: 1.25rem !important;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .fc .fc-button {
+            padding: 8px 16px !important;
+            font-size: 0.85rem !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+            text-transform: capitalize;
+            transition: all 0.2s ease !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 6px !important;
+        }
+
+        .fc .fc-button-primary {
+            background-color: var(--accent) !important;
+            border-color: var(--accent) !important;
+            box-shadow: 0 2px 4px rgba(45, 90, 39, 0.1);
+        }
+
+        .fc .fc-button-primary:hover {
+            background-color: var(--accent-hover) !important;
+            border-color: var(--accent-hover) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(45, 90, 39, 0.2);
+        }
+
+        .fc .fc-button-primary:not(:disabled).fc-button-active,
+        .fc .fc-button-primary:not(:disabled):active {
+            background-color: var(--accent-hover) !important;
+            border-color: var(--accent-hover) !important;
+        }
+
+        /* Fix Navigation Icons using Phosphor */
+        .fc .fc-button .fc-icon {
+            font-size: 1.2rem !important;
+            vertical-align: middle !important;
+            text-transform: none !important;
+        }
+
+        .fc-icon-chevron-left:before {
+            font-family: "Phosphor" !important;
+            content: "\e138" !important;
+            /* ph-caret-left */
+            font-weight: normal;
+        }
+
+        .fc-icon-chevron-right:before {
+            font-family: "Phosphor" !important;
+            content: "\e13a" !important;
+            /* ph-caret-right */
+            font-weight: normal;
+        }
+
+        .fc .fc-daygrid-event {
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-weight: 600;
+            margin-top: 2px;
+            border: none !important;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .fc .fc-daygrid-day-number {
+            padding: 8px !important;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .fc .fc-col-header-cell-cushion {
+            font-weight: 700;
+            color: var(--text-primary);
+            padding: 10px 0 !important;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        /* Mobile Specific Improvements for Calendar */
+        @media (max-width: 768px) {
+            #calendar {
+                padding: 12px;
+                border-radius: 12px;
+                max-height: calc(100vh - 250px);
+                font-size: 0.75rem;
+            }
+
+            .fc .fc-toolbar {
+                flex-direction: column !important;
+                gap: 12px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .fc .fc-toolbar-chunk {
+                display: flex;
+                justify-content: center;
+                width: 100%;
+            }
+
+            .fc .fc-toolbar-title {
+                font-size: 1.1rem !important;
+                text-align: center;
+            }
+
+            .fc .fc-button {
+                padding: 6px 12px !important;
+                font-size: 0.75rem !important;
+                flex: 1;
+                max-width: fit-content;
+            }
+
+            .fc .fc-daygrid-day-number {
+                padding: 4px !important;
+                font-size: 0.75rem;
+            }
+
+            .fc .fc-col-header-cell-cushion {
+                font-size: 0.65rem;
+                padding: 5px 0 !important;
+            }
+
+            .fc .fc-daygrid-event {
+                padding: 1px 4px;
+                font-size: 0.7rem;
+            }
+
+            /* Choice Modal Grid Mobile */
+            .choice-modal-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .choice-card {
+                padding: 20px;
+            }
+        }
+
+        /* Calendar Tooltip */
+        .fc-event-tooltip {
+            position: absolute;
+            z-index: 10000;
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            border: 1px solid var(--border);
+            max-width: 250px;
+            pointer-events: none;
+            font-size: 0.8rem;
+            color: var(--text-primary);
+            line-height: 1.4;
+            display: none;
+        }
+
+        .fc-event-tooltip strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--accent);
+            font-size: 0.85rem;
+        }
+
+        .choice-modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .choice-card {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .choice-card:hover {
+            border-color: var(--accent);
+            background: var(--accent-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .choice-card i {
+            font-size: 2.5rem;
+            color: var(--accent);
+        }
+
+        .choice-card span {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-main);
+        }
+    </style>
+    <style>
+        /* Dashboard Toggle Slide */
+        .dashboard-toggle-container {
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .dashboard-toggle {
+            display: flex;
+            position: relative;
+            gap: 4px;
+        }
+
+        .toggle-btn-main {
+            background: transparent;
+            border: none;
+            padding: 8px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            z-index: 2;
+            min-width: 120px;
+        }
+
+        .toggle-btn-main.active {
+            color: var(--accent);
+        }
+
+        .toggle-slider-main {
+            position: absolute;
+            height: 100%;
+            width: calc(25% - 3px);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+        }
+
+        [data-main-filter="todas"].active~.toggle-slider-main {
+            transform: translateX(0);
+        }
+        [data-main-filter="avarias"].active~.toggle-slider-main {
+            transform: translateX(calc(100% + 4px));
+        }
+        [data-main-filter="servicos"].active~.toggle-slider-main {
+            transform: translateX(calc(200% + 8px));
+        }
+        [data-main-filter="manutencoes"].active~.toggle-slider-main {
+            transform: translateX(calc(300% + 12px));
+        }
+
+        @media (max-width: 768px) {
+            .view-header.flex-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .dashboard-toggle-container {
+                width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 4px;
+            }
+
+            .dashboard-toggle {
+                width: max-content;
+                min-width: 100%;
+                display: flex;
+            }
+
+            .toggle-btn-main {
+                flex: 1;
+                font-size: 13px;
+                padding: 10px 16px;
+                white-space: nowrap;
+            }
+
+            .column-header h3 {
+                font-size: 13px;
+                gap: 8px;
+            }
+
+            .btn-report-avaria {
+                width: 36px !important;
+                height: 36px !important;
+                padding: 0 !important;
+                min-width: 0 !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .btn-report-avaria span {
+                display: none;
+            }
+
+            .date-range-filter span {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .btn-report-avaria span {
+                display: none;
+            }
+
+            .btn-report-avaria {
+                padding: 0 !important;
+                width: 38px !important;
+                height: 38px !important;
+                min-width: 38px !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+
+            .btn-report-avaria i {
+                font-size: 20px !important;
+                margin: 0 !important;
+            }
+
+            /* Fix for Resolvidas column header */
+            .column-header {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 12px !important;
+            }
+
+            .col-header-actions {
+                width: 100% !important;
+                display: flex !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                gap: 5px !important;
+            }
+
+            .date-range-filter {
+                display: flex !important;
+                align-items: center !important;
+                gap: 5px !important;
+                flex: 1;
+            }
+
+            .date-range-filter input[type="date"] {
+                width: 40% !important;
+                min-width: 90px;
+            }
+        }
+
+        .col-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .date-range-filter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Clickable avaria card */
+        .avaria-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .avaria-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+        .avaria-card button, 
+        .avaria-card .card-notes,
+        .avaria-card a {
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Notificação global -->
+    <div id="notification" class="notification hidden"></div>
+
+    <div class="app-container">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button id="btn-toggle-sidebar" class="btn-menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+                <button id="btn-close-sidebar" class="btn-close-sidebar">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <!-- Avarias Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-warning"></i> Avarias
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn active" data-target="dashboard">
+                            <i class="ph ph-gauge"></i> Dashboard
+                        </button>
+                        <button class="nav-btn" data-target="historico">
+                            <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
+                        </button>
+                        <button class="nav-btn" data-target="agendamentos">
+                            <i class="ph ph-calendar-blank"></i> Agendamentos
+                        </button>
+                        <button class="nav-btn" data-target="anotacoes">
+                            <i class="ph ph-note"></i> Anotações Técnico
+                        </button>
+                        <button class="nav-btn" data-target="manutencoes-recorrentes">
+                            <i class="ph ph-arrow-clockwise"></i> Manutenções Recorrentes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clientes Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-users"></i> Clientes
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn" data-target="clientes">
+                            <i class="ph ph-users"></i> Gestão de Clientes
+                        </button>
+                        <button class="nav-btn" data-target="maquinas">
+                            <i class="ph ph-washing-machine"></i> Gestão de Máquinas
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Staff Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-identification-card"></i> Staff
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn" data-target="tecnicos">
+                            <i class="ph ph-wrench"></i> Gestão de Técnicos
+                        </button>
+                        <button class="nav-btn" data-target="checklists">
+                            <i class="ph ph-list-checks"></i> Gestão de Checklists
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Estatísticas -->
+                <button class="nav-btn" data-target="estatisticas">
+                    <i class="ph ph-chart-line-up"></i> Estatísticas
+                </button>
+
+                <!-- Gestão de Frota -->
+                <button class="nav-btn" data-target="frota">
+                    <i class="ph ph-truck"></i> Gestão de Frota
+                </button>
+
+                <!-- Outros Serviços -->
+                <a href="outros.html" class="nav-link-special" style="text-decoration:none; color:inherit; background: #fffbeb; border: 1px solid #fde68a; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0;">
+                    <i class="ph ph-plus-circle" style="color: #d97706; font-size: 20px;"></i> <strong>Outros Serviços</strong>
+                </a>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100"
+                    style="background:var(--danger); box-shadow:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="ph ph-sign-out" style="font-size:18px;"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content-area">
+
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                <header class="view-header flex-header" style="flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h1>Monitorização</h1>
+                        <p>Gestão centralizada de avarias e serviços técnicos.</p>
+                        <div class="dashboard-toggle-container">
+                            <div class="dashboard-toggle">
+                                <button class="toggle-btn-main active" data-main-filter="todas">Todas</button>
+                                <button class="toggle-btn-main" data-main-filter="avarias">Avarias</button>
+                                <button class="toggle-btn-main" data-main-filter="servicos">Serviços</button>
+                                <button class="toggle-btn-main" data-main-filter="manutencoes">Manutenções</button>
+                                <div class="toggle-slider-main"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <div class="filter-group">
+                            <label for="filter-tech-dashboard" class="filter-label">Filtrar Técnico:</label>
+                            <select id="filter-tech-dashboard" class="filter-select">
+                                <option value="">Todos</option>
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+                    </div>
+                </header>
+                <!-- Board Avarias Wrapper -->
+                <div id="wrapper-board-avarias" class="hidden">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <button class="btn-report-avaria btn-open-report-avaria"
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px;" title="Nova Avaria">
+                                        <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
+                                        <span>Nova Avaria</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+
+                        <!-- Resolvidas -->
+                        <div class="board-column" id="col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidas</h3>
+                                <div class="col-header-actions">
+                                    <div class="date-range-filter">
+                                        <input type="date" id="filter-date-start"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="De">
+                                        <span style="font-size:12px;">Até</span>
+                                        <input type="date" id="filter-date-end"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="Até">
+                                    </div>
+                                    <button class="btn-toggle-col" data-col="col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Board Servicos Wrapper -->
+                <div id="wrapper-board-servicos" class="hidden">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="srv-col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <button class="btn-report-avaria btn-open-report-servico"
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;" title="Novo Serviço">
+                                        <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
+                                        <span>Novo Serviço</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="srv-col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="srv-col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="srv-col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Resolvidos -->
+                        <div class="board-column" id="srv-col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidos</h3>
+                                <div class="col-header-actions">
+                                    <div class="date-range-filter">
+                                        <input type="date" id="filter-srv-date-start"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="De">
+                                        <span style="font-size:12px;">Até</span>
+                                        <input type="date" id="filter-srv-date-end"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="Até">
+                                    </div>
+                                    <button class="btn-toggle-col" data-col="srv-col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Board Manutencoes Wrapper -->
+                <div id="wrapper-board-manutencoes" class="hidden">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="mnt-col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <button class="btn-report-avaria btn-open-report-manutencao"
+                                        style="border-radius: 20px; padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;" title="Nova Manutenção">
+                                        <i class="ph ph-plus" style="font-size: 16px; animation: none;"></i>
+                                        <span>Nova Manutenção</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="mnt-col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="mnt-col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="mnt-col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Resolvidas -->
+                        <div class="board-column" id="mnt-col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidas</h3>
+                                <div class="col-header-actions">
+                                    <div class="date-range-filter">
+                                        <input type="date" id="filter-mnt-date-start"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="De">
+                                        <span style="font-size:12px;">Até</span>
+                                        <input type="date" id="filter-mnt-date-end"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="Até">
+                                    </div>
+                                    <button class="btn-toggle-col" data-col="mnt-col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Board Todas Wrapper -->
+                <div id="wrapper-board-todas">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="all-col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <button class="btn-report-avaria btn-open-report-avaria" title="Nova Avaria"
+                                        style="border-radius: 20px; padding: 4px 10px; font-size: 11px;">
+                                        <i class="ph ph-plus" style="font-size: 14px; animation: none;"></i>
+                                        <span>Avaria</span>
+                                    </button>
+                                    <button class="btn-report-avaria btn-open-report-servico" title="Novo Serviço"
+                                        style="border-radius: 20px; padding: 4px 10px; font-size: 11px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: none;">
+                                        <i class="ph ph-plus" style="font-size: 14px; animation: none;"></i>
+                                        <span>Serviço</span>
+                                    </button>
+                                    <button class="btn-report-avaria btn-open-report-manutencao" title="Nova Manutenção"
+                                        style="border-radius: 20px; padding: 4px 10px; font-size: 11px; background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); box-shadow: none;">
+                                        <i class="ph ph-plus" style="font-size: 14px; animation: none;"></i>
+                                        <span>Manut.</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="all-col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="all-col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="all-col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Resolvidas -->
+                        <div class="board-column" id="all-col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidas</h3>
+                                <div class="col-header-actions">
+                                    <div class="date-range-filter">
+                                        <input type="date" id="filter-all-date-start"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="De">
+                                        <span style="font-size:12px;">Até</span>
+                                        <input type="date" id="filter-all-date-end"
+                                            style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                            title="Até">
+                                    </div>
+                                    <button class="btn-toggle-col" data-col="all-col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Agendamentos View -->
+            <section id="view-agendamentos" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Agendamentos</h1>
+                        <p>Planeie intervenções futuras e visualize a ocupação da equipa.</p>
+                    </div>
+                </header>
+
+                <div
+                    style="background:var(--surface-color); padding:20px; border-radius:12px; box-shadow:var(--shadow-sm);">
+                    <div id="calendar"></div>
+                </div>
+            </section>
+
+            <!-- Estatísticas View -->
+            <section id="view-estatisticas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Estatísticas</h1>
+                        <p>Métricas das avarias resolvidas.</p>
+                    </div>
+                </header>
+
+                <div
+                    style="background:var(--surface-color); padding:20px; border-radius:12px; margin-bottom:20px; display:flex; gap:20px; align-items:center;">
+                    <div class="form-group" style="margin:0;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Agrupar
+                            por</label>
+                        <select id="stats-agrupamento"
+                            style="padding:8px; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="dia">Dia</option>
+                            <option value="semana">Semana</option>
+                            <option value="mes">Mês</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Filtrar
+                            Técnico</label>
+                        <select id="stats-tecnico"
+                            style="padding:8px; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                </div>
+
+                <div
+                    style="background:var(--surface-color); padding:20px; border-radius:12px; position: relative; height: 400px; width: 100%;">
+                    <canvas id="statsChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Anotacoes View -->
+            <section id="view-anotacoes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Anotações dos Técnicos</h1>
+                        <p>Notas e pedidos de clientes enviados pelos técnicos.</p>
+                    </div>
+                    <div class="header-actions">
+                        <div class="filter-group">
+                            <label for="filter-anotacoes-cliente" class="filter-label">Pesquisar por Cliente:</label>
+                            <select id="filter-anotacoes-cliente" class="filter-select" style="min-width: 250px;">
+                                <option value="">Todos os Clientes</option>
+                            </select>
+                        </div>
+                    </div>
+                </header>
+
+                <div id="anotacoes-pendentes-wrapper" style="max-width: 1000px; margin-top: 20px;">
+                    <h2 style="margin-bottom: 20px; color: var(--danger); font-size: 1.2rem; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #fee2e2; padding-bottom: 10px;">
+                        <i class="ph ph-clock"></i> Notas Pendentes
+                    </h2>
+                    <div id="anotacoes-pendentes-container" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 50px;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
+
+                <div id="anotacoes-concluidas-wrapper" style="max-width: 1000px;">
+                    <h2 style="margin-bottom: 20px; color: var(--success); font-size: 1.2rem; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #dcfce7; padding-bottom: 10px;">
+                        <i class="ph ph-check-circle"></i> Notas Concluídas
+                    </h2>
+                    <div id="anotacoes-concluidas-container" style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Histórico View -->
+            <section id="view-historico" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Histórico de Intervenções</h1>
+                        <p>Registo de todas as intervenções concluídas.</p>
+                    </div>
+                </header>
+
+                <div class="filter-dropdown-wrapper" style="display: flex; gap: 10px; align-items: center;">
+                    <button id="btn-filter-toggle" class="btn-filter-main">
+                        <i class="ph ph-funnel"></i>
+                        <span>Filtrar Resultados</span>
+                        <div id="active-filters-count" style="display:none;">0</div>
+                    </button>
+
+                    <button id="btn-clear-hist-filters" class="btn-filter-main" title="Limpar Filtros"
+                        style="display: none; padding: 10px; background: #fee2e2; border-color: #fecaca; color: #ef4444; box-shadow: none;">
+                        <i class="ph ph-trash-simple"></i>
+                    </button>
+
+                    <div id="filter-menu" class="filter-menu">
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-buildings"></i> Lavandaria</label>
+                            <select id="hist-cliente">
+                                <option value="">Todas as Lavandarias</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-tag"></i> Tipo</label>
+                            <select id="hist-tipo">
+                                <option value="">Todos os Tipos</option>
+                                <option value="avaria">Avarias</option>
+                                <option value="servico">Serviços</option>
+                                <option value="manutencao">Manutenções</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-wrench"></i> Máquina</label>
+                            <select id="hist-maquina">
+                                <option value="">Todas (Selecione Lavandaria)</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-user"></i> Técnico</label>
+                            <select id="hist-tecnico">
+                                <option value="">Todos os Técnicos</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-coins"></i> Faturação</label>
+                            <select id="hist-faturacao">
+                                <option value="">Todos os Estados</option>
+                                <option value="Por Faturar">Por Faturar</option>
+                                <option value="Para Faturar">Para Faturar</option>
+                                <option value="Faturado">Faturado</option>
+                                <option value="Oferta">Oferta</option>
+                                <option value="Garantia">Garantia</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-calendar"></i> Intervalo de Datas</label>
+                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 5px;">
+                                <div style="flex: 1;">
+                                    <span
+                                        style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 2px;">Início</span>
+                                    <input type="date" id="hist-date-start"
+                                        style="padding: 6px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; width: 100%;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <span
+                                        style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 2px;">Fim</span>
+                                    <input type="date" id="hist-date-end"
+                                        style="padding: 6px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; width: 100%;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data Resolução</th>
+                                <th>Técnico</th>
+                                <th>Lavandaria</th>
+                                <th>Intervenção</th>
+                                <th>Horas Trabalho (M)</th>
+                                <th>Faturação</th>
+                                <th>Relatório</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-historico-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-container"
+                    style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 20px; padding-bottom: 20px;">
+                    <button id="btn-prev-page" class="btn-filter-main"
+                        style="padding: 8px 12px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="ph ph-caret-left"></i>
+                    </button>
+                    <span id="hist-page-info" style="font-weight: 700; font-size: 14px; color: var(--accent);">Página
+                        1</span>
+                    <button id="btn-next-page" class="btn-filter-main"
+                        style="padding: 8px 12px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="ph ph-caret-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Manutenções Recorrentes View -->
+            <section id="view-manutencoes-recorrentes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Manutenções Recorrentes</h1>
+                        <p>Gerir parametrização e agendamento automático de manutenções preventivas periódicas por cliente.</p>
+                    </div>
+                </header>
+
+                <div class="search-filter-wrapper">
+                    <div class="search-input-group">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search-recorrente" placeholder="Pesquisar por cliente (nome, telefone, email, morada, NIF)...">
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Lavandaria</th>
+                                <th>Estado Agendador</th>
+                                <th>Frequência</th>
+                                <th>Data Inicial / Próxima</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-recorrentes-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Clientes View -->
+            <section id="view-clientes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Clientes</h1>
+                        <p>Lista de lavandarias.</p>
+                    </div>
+                    <button id="btn-open-add-client" class="btn-primary">+ Novo Cliente</button>
+                </header>
+
+                <div class="search-filter-wrapper">
+                    <div class="search-input-group">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search-client" placeholder="Pesquisar por cliente (nome, telefone, email, morada, NIF)...">
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Contactos</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-clientes-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Client Users View -->
+            <section id="view-client-users" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <button id="btn-back-to-clients" class="btn-secondary">
+                            <i class="ph ph-arrow-left"></i> Voltar aos Clientes
+                        </button>
+                        <h1 id="client-users-title" style="margin-top: 15px;">Logins do Cliente: ---</h1>
+                        <p>Ficha de acessos para os técnicos desta lavandaria.</p>
+                    </div>
+                    <button id="btn-open-add-client-user" class="btn-primary">+ Novo Login</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Password</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-client-users-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Máquinas View -->
+            <section id="view-maquinas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Máquinas</h1>
+                        <p>Atribua máquinas a clientes e gere QR Codes.</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <label for="filter-cliente-maquinas" class="filter-label">Filtrar Cliente:</label>
+                        <select id="filter-cliente-maquinas" class="filter-select">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <button id="btn-open-add-maquina" class="btn-primary">+ Nova Máquina</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Máquina</th>
+                                <th>Nº Série</th>
+                                <th>Cliente</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-maquinas-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Técnicos View -->
+            <section id="view-tecnicos" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Técnicos</h1>
+                        <p>Gira a sua equipa de manutenção.</p>
+                    </div>
+                    <button id="btn-open-add-tecnico" class="btn-primary">+ Novo Técnico</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Especialidade</th>
+                                <th>Contacto</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-tecnicos-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Frota View -->
+            <section id="view-frota" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Gestão de Frota</h1>
+                        <p>Controle todos os seus veículos.</p>
+                    </div>
+                    <button id="btn-open-add-frota" class="btn-primary">+ Novo Veículo</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Marca</th>
+                                <th>Modelo</th>
+                                <th>Ano</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-frota-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Checklists View -->
+            <section id="view-checklists" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Gestão de Checklists</h1>
+                        <p>Crie guiões de resolução passo a passo para as avarias mais comuns.</p>
+                    </div>
+                    <button id="btn-open-add-checklist" class="btn-primary">+ Nova Checklist</button>
+                </header>
+                <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 20px;">
+                    <label for="filter-checklist-modelo" class="filter-label">Filtrar por Modelo:</label>
+                    <select id="filter-checklist-modelo" class="filter-select">
+                        <option value="">Todos os Modelos</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Marca</th>
+                                <th>Modelo</th>
+                                <th>Avaria (Problema)</th>
+                                <th>Passos</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-checklists-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div> <!-- .app-container -->
+
+    <!-- Modals -->
+    <!-- Modal Add Checklist -->
+    <div id="modal-add-checklist" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-add-checklist">&times;</span>
+            <h2>Nova Checklist de Resolução</h2>
+            <form id="form-add-checklist">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label>Máquinas *</label>
+                    <div class="custom-select-wrapper" id="wrapper-admin-checklist-modelo" style="position:relative; width: 100%;">
+                        <input type="text" id="search-admin-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
+                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-admin-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                            <div class="custom-select-options" id="options-admin-checklist-modelo">
+                                <!-- JS popula aqui -->
+                            </div>
+                        </div>
+                        <input type="hidden" id="admin-checklist-modelo">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Título da Avaria *</label>
+                    <input type="text" id="checklist-titulo" required placeholder="Ex: Erro E20 - Não escoa água">
+                </div>
+                <div class="form-group">
+                    <label>Descrição (Opcional)</label>
+                    <textarea id="checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Passos de Resolução *</label>
+                    <div id="checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                        <div class="checklist-passo-row" style="display:flex; gap:10px; align-items:flex-start;">
+                            <span class="passo-numero" style="font-weight:bold; color:var(--text-secondary); width:20px; padding-top:10px;">1.</span>
+                            <textarea class="passo-input" required placeholder="Ex: Verificar filtro da bomba" style="flex:1; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-family: inherit; font-size: 14px;"></textarea>
+                            <button type="button" class="btn-remove-passo btn-icon" style="color:var(--danger); display:none; margin-top:5px;"><i class="ph ph-trash"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
+                </div>
+
+                <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Guardar Checklist</button>
+            </form>
+            <datalist id="datalist-marcas-modelos"></datalist>
+        </div>
+    </div>
+    
+    <!-- Modal Edit Checklist -->
+    <div id="modal-edit-checklist" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-edit-checklist">&times;</span>
+            <h2>Editar Checklist de Resolução</h2>
+            <form id="form-edit-checklist">
+                <input type="hidden" id="edit-checklist-id">
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label>Máquinas *</label>
+                    <div class="custom-select-wrapper" id="wrapper-edit-checklist-modelo" style="position:relative; width: 100%;">
+                        <input type="text" id="search-edit-checklist-modelo" placeholder="Pesquisar máquina..." autocomplete="off" style="width:100%; padding:12px; border:1px solid var(--border-color); border-radius:8px; font-size:14px; background:#fff; outline:none; box-sizing: border-box;" required>
+                        <i class="ph ph-caret-down" style="position:absolute; right:12px; top:14px; color:var(--text-secondary); pointer-events:none;"></i>
+                        <div class="custom-select-dropdown hidden" id="dropdown-edit-checklist-modelo" style="position:absolute; width:100%; background:var(--surface-color); border:1px solid var(--border-color); border-radius:8px; margin-top:5px; z-index:100; box-shadow:var(--shadow-sm);">
+                            <div class="custom-select-options" id="options-edit-checklist-modelo">
+                                <!-- JS popula aqui -->
+                            </div>
+                        </div>
+                        <input type="hidden" id="edit-checklist-modelo">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Título da Avaria *</label>
+                    <input type="text" id="edit-checklist-titulo" required placeholder="Ex: Erro E20 - Não escoa água">
+                </div>
+                <div class="form-group">
+                    <label>Descrição (Opcional)</label>
+                    <textarea id="edit-checklist-descricao" placeholder="Breve nota ou dicas adicionais sobre o problema..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Passos de Resolução *</label>
+                    <div id="edit-checklist-passos-container" style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:10px; display:flex; flex-direction:column; gap:10px;">
+                        <!-- JS popula os passos aqui -->
+                    </div>
+                    <button type="button" id="btn-edit-add-passo" class="btn-secondary w-100" style="border:1px dashed var(--primary); color:var(--primary); background:transparent;"><i class="ph ph-plus"></i> Adicionar Passo</button>
+                </div>
+
+                <button type="submit" class="btn-primary w-100" style="margin-top:15px;">Atualizar Checklist</button>
+            </form>
+        </div>
+    </div>
+    <!-- Modal Add Cliente -->
+    <div id="modal-add-client" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-client">&times;</span>
+            <h2>Adicionar Cliente</h2>
+            <form id="form-add-client">
+                <div class="form-group">
+                    <label>Nome da Lavandaria *</label>
+                    <input type="text" id="client-nome" required placeholder="Ex: Lavandaria Central">
+                </div>
+                <div class="form-group">
+                    <label>Telefone (opcional)</label>
+                    <input type="text" id="client-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos" placeholder="Ex: 910000000">
+                </div>
+                <div class="form-group">
+                    <label>Email (opcional)</label>
+                    <input type="email" id="client-email" placeholder="Ex: email@exemplo.pt">
+                </div>
+                <div class="form-group">
+                    <label>Morada (opcional)</label>
+                    <input type="text" id="client-morada" placeholder="Ex: Rua das Flores, 123">
+                </div>
+                <div class="form-group">
+                    <label>NIF (opcional)</label>
+                    <input type="text" id="client-nif" pattern="[0-9]{9}"
+                        title="O NIF deve ter exatamente 9 dígitos numéricos" placeholder="Ex: 123456789">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Add Maquina -->
+    <div id="modal-add-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-maquina">&times;</span>
+            <h2>Nova Máquina</h2>
+            <form id="form-add-maquina">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="maquina-cliente_id" required>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Marca *</label>
+                    <input type="text" id="maquina-marca" required placeholder="Ex: Fagor">
+                </div>
+                <div class="form-group">
+                    <label>Modelo *</label>
+                    <input type="text" id="maquina-modelo" required placeholder="Ex: LN-11">
+                </div>
+                <div class="form-group">
+                    <label>Número de Série</label>
+                    <input type="text" id="maquina-numero-serie" placeholder="Ex: SN-123456789">
+                </div>
+                <div class="form-group">
+                    <label>Data de Instalação</label>
+                    <input type="date" id="maquina-data-instalacao">
+                </div>
+                <div class="form-group">
+                    <label>Início da Garantia</label>
+                    <input type="date" id="maquina-data-inicio-garantia">
+                </div>
+                <div class="form-group">
+                    <label>Fim da Garantia</label>
+                    <input type="date" id="maquina-data-fim-garantia">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Cliente -->
+    <div id="modal-edit-client" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-client">&times;</span>
+            <h2>Editar Cliente</h2>
+            <form id="form-edit-client">
+                <input type="hidden" id="edit-client-id">
+                <div class="form-group">
+                    <label>Nome da Lavandaria *</label>
+                    <input type="text" id="edit-client-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="edit-client-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-client-email">
+                </div>
+                <div class="form-group">
+                    <label>Morada</label>
+                    <input type="text" id="edit-client-morada">
+                </div>
+                <div class="form-group">
+                    <label>NIF</label>
+                    <input type="text" id="edit-client-nif" pattern="[0-9]{9}"
+                        title="O NIF deve ter exatamente 9 dígitos numéricos">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Recorrente -->
+    <div id="modal-edit-recorrente" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-recorrente">&times;</span>
+            <h2>Configurar Manutenção Automática</h2>
+            <p>Defina se este cliente tem agendamentos automáticos periódicos.</p>
+            <form id="form-edit-recorrente">
+                <input type="hidden" id="recorrente-client-id">
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="font-weight: 700;">Cliente</label>
+                    <input type="text" id="recorrente-client-nome" readonly style="background: #f1f5f9; cursor: not-allowed; font-weight: 600;">
+                </div>
+
+                <div class="form-group flex-row-align" style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">
+                    <input type="checkbox" id="recorrente-manutencao-automatica" style="width: auto; margin: 0;">
+                    <label for="recorrente-manutencao-automatica" style="margin: 0; cursor: pointer; font-weight: 600;">Agendar Manutenções Automáticas</label>
+                </div>
+
+                <div id="recorrente-periodo-wrapper" style="display: none; border-left: 3px solid var(--primary-color); padding-left: 12px; margin-bottom: 15px;">
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label>Frequência da Manutenção</label>
+                        <select id="recorrente-manutencao-periodo" style="width: 100%;">
+                            <option value="mensal">Mensal</option>
+                            <option value="trimestral">Trimestral</option>
+                            <option value="semestral">Semestral</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Data da Primeira Manutenção *</label>
+                        <input type="date" id="recorrente-manutencao-data-inicio">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar Configuração</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Maquina -->
+    <div id="modal-edit-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-maquina">&times;</span>
+            <h2>Editar Máquina</h2>
+            <form id="form-edit-maquina">
+                <input type="hidden" id="edit-maquina-id">
+                <div class="form-group">
+                    <label>Selecionar Cliente * (Apenas para visualização)</label>
+                    <select id="edit-maquina-cliente_id" required disabled>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Marca *</label>
+                    <input type="text" id="edit-maquina-marca" required>
+                </div>
+                <div class="form-group">
+                    <label>Modelo *</label>
+                    <input type="text" id="edit-maquina-modelo" required>
+                </div>
+                <div class="form-group">
+                    <label>Número de Série</label>
+                    <input type="text" id="edit-maquina-numero-serie">
+                </div>
+                <div class="form-group">
+                    <label>Data de Instalação</label>
+                    <input type="date" id="edit-maquina-data-instalacao">
+                </div>
+                <div class="form-group">
+                    <label>Início da Garantia</label>
+                    <input type="date" id="edit-maquina-data-inicio-garantia">
+                </div>
+                <div class="form-group">
+                    <label>Fim da Garantia</label>
+                    <input type="date" id="edit-maquina-data-fim-garantia">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal QR Code -->
+    <div id="modal-qrcode" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-qrcode">&times;</span>
+            <img src="img/logo.png" alt="Maclau Logo" id="print-maclau-logo"
+                style="display:none; max-width: 150px; margin: 0 auto 10px auto;">
+            <h4 id="print-machine-name" class="print-only-text" style="display:none; margin: 2px 0 4px 0; color: #555;">
+            </h4>
+            <h2>QR Code da Máquina</h2>
+            <p>Imprima e cole este código na máquina.</p>
+            <div id="qrcode-image-container" style="margin: 4px 0;"></div>
+            <p id="print-contact-info" class="print-only-text"
+                style="display:none; margin-top: 4px; font-size: 14px; font-weight: 600; color: #333;">Contacto Avarias:
+                937538378 - assistencia@maclau.pt</p>
+            <button id="btn-print-qr" class="btn-primary w-100">Imprimir</button>
+        </div>
+    </div>
+
+    <!-- Modal Status Avaria -->
+    <div id="modal-status-avaria" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-status-avaria">&times;</span>
+            <h2>Atualizar Estado da Avaria</h2>
+            <p>Selecione o novo estado da avaria para esta máquina.</p>
+            <form id="form-status-avaria">
+                <input type="hidden" id="status-avaria-id">
+                <div class="form-group">
+                    <label>Estado da Avaria</label>
+                    <select id="status-avaria-select" required>
+                        <option value="pendente">Pendente</option>
+                        <option value="em resolução">Em Resolução</option>
+                        <option value="resolvida">Resolvida</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar Estado</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Atribuir Técnico -->
+    <div id="modal-atribuir-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-atribuir-tecnico">&times;</span>
+            <h2>Atribuir Técnico</h2>
+            <p>Selecione o técnico responsável por esta avaria.</p>
+            <form id="form-atribuir-tecnico">
+                <input type="hidden" id="atribuir-avaria-id">
+                <input type="hidden" id="atribuir-type" value="avaria">
+                <div class="form-group">
+                    <label>Técnicos</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="atribuir-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary w-100">Confirmar Atribuição</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Add Técnico -->
+    <div id="modal-add-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-tecnico">&times;</span>
+            <h2>Adicionar Técnico</h2>
+            <form id="form-add-tecnico">
+                <div class="form-group">
+                    <label>Nome Completo *</label>
+                    <input type="text" id="tecnico-nome" required placeholder="Ex: João Silva">
+                </div>
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" id="tecnico-especialidade" placeholder="Ex: Elétrica">
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="tecnico-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos" placeholder="Ex: 910000000">
+                </div>
+                <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" id="tecnico-email" required placeholder="Ex: joao@maclau.pt">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Tech Success (With Password Copy) -->
+    <div id="modal-tech-success" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-tech-success">&times;</span>
+            <div style="font-size: 50px; color: var(--success); margin-bottom: 20px;">
+                <i class="ph ph-check-circle"></i>
+            </div>
+            <h2>Técnico Adicionado!</h2>
+            <p>O técnico foi criado com sucesso. Por favor, entregue as credenciais abaixo:</p>
+
+            <div
+                style="background: var(--bg-main); padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px dashed var(--accent);">
+                <p
+                    style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">
+                    Palavra-Passe Temporária</p>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                    <span id="display-temp-password"
+                        style="font-family: monospace; font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 2px;"></span>
+                    <button id="btn-copy-password" class="btn-icon" title="Copiar Password"
+                        style="width: 44px; height: 44px; font-size: 20px;">
+                        <i class="ph ph-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <p style="font-size: 13px; color: var(--danger); font-weight: 600;">Atenção: Esta palavra-passe não voltará
+                a ser exibida.</p>
+            <button id="btn-tech-success-ok" class="btn-primary w-100" style="margin-top: 24px;">Concluído</button>
+        </div>
+    </div>
+
+    <!-- Modal Edit Técnico -->
+    <div id="modal-edit-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-tecnico">&times;</span>
+            <h2>Editar Técnico</h2>
+            <form id="form-edit-tecnico">
+                <input type="hidden" id="edit-tecnico-id">
+                <div class="form-group">
+                    <label>Nome Completo *</label>
+                    <input type="text" id="edit-tecnico-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" id="edit-tecnico-especialidade">
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="edit-tecnico-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-tecnico-email">
+                </div>
+                <div class="form-group">
+                    <label>Palavra-passe (Opcional, deixe em branco para não alterar)</label>
+                    <input type="text" id="edit-tecnico-password" placeholder="Nova palavra-passe">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal View Maquina -->
+    <div id="modal-view-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-view-maquina">&times;</span>
+            <h2>Detalhes da Máquina</h2>
+            <div style="margin-bottom: 12px;"><strong>Cliente:</strong> <span id="view-maquina-cliente"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Marca:</strong> <span id="view-maquina-marca"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Modelo:</strong> <span id="view-maquina-modelo"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Nº Série:</strong> <span id="view-maquina-serie"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Data de Instalação:</strong> <span
+                    id="view-maquina-instalacao"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Início Garantia:</strong> <span
+                    id="view-maquina-iniciogarantia"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Fim Garantia:</strong> <span id="view-maquina-fimgarantia"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ver Info Cliente -->
+    <div id="modal-view-cliente" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-view-cliente">&times;</span>
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+                <div
+                    style="width: 40px; height: 40px; background: var(--accent-light); color: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                    <i class="ph ph-buildings"></i>
+                </div>
+                <h2 id="view-cliente-nome" style="margin: 0;"></h2>
+            </div>
+
+            <div class="detalhe-info-grid" style="display: grid; grid-template-columns: 1fr; gap: 15px;">
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Morada
+                        Completa</label>
+                    <div id="view-cliente-morada"
+                        style="font-weight: 500; font-size: 14px; background: #f8fafc; padding: 10px; border-radius: 6px; min-height: 40px;">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="info-item">
+                        <label
+                            style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">NIF</label>
+                        <div id="view-cliente-nif" style="font-weight: 600;"></div>
+                    </div>
+                    <div class="info-item">
+                        <label
+                            style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Telefone</label>
+                        <div id="view-cliente-telefone" style="font-weight: 600;"></div>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Email</label>
+                    <div id="view-cliente-email" style="font-weight: 600; color: var(--accent);"></div>
+                </div>
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Manutenção Automática</label>
+                    <div id="view-cliente-manutencao" style="font-weight: 600;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Reportar Avaria (Admin Manual) -->
+    <div id="modal-report-avaria" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-report-avaria">&times;</span>
+            <h2>Reportar Avaria</h2>
+            <p>Utilize este formulário quando um cliente ligar a reportar um problema.</p>
+            <form id="form-report-avaria">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-avaria-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Selecionar Máquina *</label>
+                    <select id="report-avaria-maquina" required disabled>
+                        <option value="">Selecione o Cliente primeiro</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Avaria *</label>
+                    <select id="report-avaria-tipo" required>
+                        <option value="1">⚡ Avaria Elétrica</option>
+                        <option value="3">⚙️ Avaria Mecânica</option>
+                        <option value="2">❓ Avaria Desconhecida</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas / Descrição do Problema</label>
+                    <textarea id="report-avaria-notas" rows="3"
+                        placeholder="Ex: O cliente diz que a máquina faz um barulho estranho ao centrifugar..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico(s) (Opcional)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="report-avaria-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Data/Hora Agendada (Opcional)</label>
+                    <input type="datetime-local" id="report-avaria-agendada">
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Reporte</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Reportar Serviço (Admin Manual) -->
+    <div id="modal-report-servico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-report-servico">&times;</span>
+            <h2>Reportar Serviço</h2>
+            <p>Registe um novo serviço de instalação ou transporte.</p>
+            <form id="form-report-servico">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-servico-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Serviço *</label>
+                    <select id="report-servico-tipo" required>
+                        <option value="Transporte">Transporte</option>
+                        <option value="Instalação">Instalação</option>
+                        <option value="Transporte/Instalação">Transporte/Instalação</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Camião *</label>
+                    <select id="report-servico-camiao" required>
+                        <option value="Camião da Empresa Pessoal">Camião da Empresa Pessoal</option>
+                        <option value="Empresa Particular">Empresa Particular</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas Adicionais</label>
+                    <textarea id="report-servico-notas" rows="3" placeholder="Detalhes sobre o serviço..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico(s) (Opcional)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="report-servico-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Data/Hora Agendada (Opcional)</label>
+                    <input type="datetime-local" id="report-servico-agendada">
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Serviço</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Reportar Manutenção (Admin Manual) -->
+    <div id="modal-report-manutencao" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-report-manutencao">&times;</span>
+            <h2>Reportar Manutenção</h2>
+            <p>Registe uma nova manutenção geral para todas as máquinas do cliente.</p>
+            <form id="form-report-manutencao">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-manutencao-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Máquinas a Manter *</label>
+                    <div id="report-manutencao-maquinas-container" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; background: #f8fafc;">
+                        <p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>
+                    </div>
+                    <div style="margin-top: 8px; display: flex; gap: 10px;">
+                        <button type="button" id="btn-mnt-select-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Selecionar Todas</button>
+                        <button type="button" id="btn-mnt-deselect-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Limpar Seleção</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notas Adicionais</label>
+                    <textarea id="report-manutencao-notas" rows="3" placeholder="Detalhes sobre a manutenção..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico(s) (Opcional)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="report-manutencao-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Data/Hora Agendada (Opcional)</label>
+                    <input type="datetime-local" id="report-manutencao-agendada">
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Manutenção</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Ver Nota Completa -->
+    <div id="modal-view-note" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-view-note">&times;</span>
+            <h2>Nota Completa</h2>
+            <div id="full-note-content"
+                style="margin-top: 20px; white-space: pre-wrap; font-size: 15px; line-height: 1.6; color: var(--text-primary); background: var(--bg-main); padding: 15px; border-radius: 10px; border-left: 4px solid var(--accent);">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Escolha Agendamento -->
+    <div id="modal-escolha-agendamento" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-escolha-agendamento">&times;</span>
+            <h2>Agendar Intervenção</h2>
+            <p id="escolha-data-label" style="font-weight: 600; color: var(--accent);"></p>
+            <p>Selecione o tipo de intervenção que deseja agendar:</p>
+
+            <div class="choice-modal-grid">
+                <div class="choice-card" id="choice-avaria">
+                    <i class="ph ph-wrench"></i>
+                    <span>Nova Avaria</span>
+                </div>
+                <div class="choice-card" id="choice-servico">
+                    <i class="ph ph-truck"></i>
+                    <span>Novo Serviço</span>
+                </div>
+                <div class="choice-card" id="choice-manutencao">
+                    <i class="ph ph-shield-check"></i>
+                    <span>Nova Manutenção</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalhes Agendamento -->
+    <div id="modal-detalhe-agendamento" class="modal hidden">
+        <div class="modal-content" style="max-width: 550px;">
+            <span class="close-btn" data-modal="modal-detalhe-agendamento">&times;</span>
+            <div id="detalhe-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                <span id="detalhe-badge"
+                    style="padding: 4px 12px; border-radius: 6px; font-weight: 700; font-size: 13px; text-transform: uppercase;"></span>
+                <h2 id="detalhe-title" style="margin: 0;"></h2>
+            </div>
+
+            <div class="detalhe-info-grid"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Cliente</label>
+                    <div id="detalhe-cliente" style="font-weight: 600;"></div>
+                </div>
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Técnico
+                        Atribuído</label>
+                    <div id="detalhe-tecnico" style="font-weight: 600;"></div>
+                </div>
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Data
+                        e Hora</label>
+                    <div id="detalhe-data" style="font-weight: 600;"></div>
+                </div>
+                <div class="info-item">
+                    <label
+                        style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Estado</label>
+                    <div id="detalhe-estado" style="font-weight: 600; text-transform: capitalize;"></div>
+                </div>
+            </div>
+
+            <div class="info-item" style="margin-bottom: 20px;">
+                <label
+                    style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Notas
+                    Adicionais</label>
+                <div id="detalhe-notas"
+                    style="background: #f1f5f9; padding: 15px; border-radius: 8px; font-size: 14px; min-height: 50px; white-space: pre-wrap;">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-edit-agendamento" class="btn-secondary w-100"
+                    style="background-color: #f1f5f9; border: 1px solid #cbd5e1; color: #475569;"><i
+                        class="ph ph-pencil-simple"></i> Editar</button>
+                <button id="btn-fechar-detalhe" class="btn-primary w-100">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Agendamento -->
+    <div id="modal-edit-agendamento" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-edit-agendamento">&times;</span>
+            <h2>Editar Agendamento</h2>
+            <form id="form-edit-agendamento">
+                <input type="hidden" id="edit-agendamento-id">
+                <input type="hidden" id="edit-agendamento-type">
+
+                <div class="form-group">
+                    <label>Data/Hora Agendada</label>
+                    <input type="datetime-local" id="edit-agendamento-data">
+                </div>
+
+                <div class="form-group">
+                    <label>Técnico(s)</label>
+                    <div class="checkbox-container-wrapper" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; max-height: 150px; overflow-y: auto; background: var(--bg-card);">
+                        <div id="edit-agendamento-tecnicos-checkboxes" class="checkbox-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Notas / Descrição</label>
+                    <textarea id="edit-agendamento-notas" rows="4"
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+
+                <button type="submit" class="btn-primary w-100">Guardar Alterações</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="calendar-tooltip" class="fc-event-tooltip"></div>
+
+    <!-- Modal Add Frota -->
+    <div id="modal-add-frota" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-frota">&times;</span>
+            <h2>Novo Veículo</h2>
+            <form id="form-add-frota">
+                <div class="form-group">
+                    <label>Marca *</label>
+                    <input type="text" id="frota-marca" required placeholder="Ex: Mercedes-Benz">
+                </div>
+                <div class="form-group">
+                    <label>Modelo *</label>
+                    <input type="text" id="frota-modelo" required placeholder="Ex: Sprinter">
+                </div>
+                <div class="form-group">
+                    <label>Ano</label>
+                    <input type="number" id="frota-ano" placeholder="Ex: 2022">
+                </div>
+                <div class="form-group">
+                    <label>Data próxima inspeção</label>
+                    <input type="date" id="frota-data-proxima-inspecao">
+                </div>
+                <div class="form-group">
+                    <label>Próxima Revisão (KMs)</label>
+                    <input type="number" id="frota-proxima-revisao-kms" placeholder="Ex: 50000">
+                </div>
+                <div class="form-group">
+                    <label>Data da Última Revisão</label>
+                    <input type="date" id="frota-data-ultima-revisao">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Frota -->
+    <div id="modal-edit-frota" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-frota">&times;</span>
+            <h2>Editar Veículo</h2>
+            <form id="form-edit-frota">
+                <input type="hidden" id="edit-frota-id">
+                <div class="form-group">
+                    <label>Marca *</label>
+                    <input type="text" id="edit-frota-marca" required>
+                </div>
+                <div class="form-group">
+                    <label>Modelo *</label>
+                    <input type="text" id="edit-frota-modelo" required>
+                </div>
+                <div class="form-group">
+                    <label>Ano</label>
+                    <input type="number" id="edit-frota-ano">
+                </div>
+                <div class="form-group">
+                    <label>Data próxima inspeção</label>
+                    <input type="date" id="edit-frota-data-proxima-inspecao">
+                </div>
+                <div class="form-group">
+                    <label>Próxima Revisão (KMs)</label>
+                    <input type="number" id="edit-frota-proxima-revisao-kms">
+                </div>
+                <div class="form-group">
+                    <label>Data da Última Revisão</label>
+                    <input type="date" id="edit-frota-data-ultima-revisao">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal View Frota -->
+    <div id="modal-view-frota" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-view-frota">&times;</span>
+            <h2>Detalhes do Veículo</h2>
+            <div class="view-info">
+                <p><strong>Marca:</strong> <span id="view-frota-marca"></span></p>
+                <p><strong>Modelo:</strong> <span id="view-frota-modelo"></span></p>
+                <p><strong>Ano:</strong> <span id="view-frota-ano"></span></p>
+                <p><strong>Data próxima inspeção:</strong> <span id="view-frota-data-proxima-inspecao"></span></p>
+                <p><strong>Próxima Revisão (KMs):</strong> <span id="view-frota-proxima-revisao-kms"></span></p>
+                <p><strong>Data da Última Revisão:</strong> <span id="view-frota-data-ultima-revisao"></span></p>
+            </div>
+            <button id="btn-close-view-frota" class="btn-primary w-100" style="margin-top: 20px;">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Modal Add Client User -->
+    <div id="modal-add-client-user" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-client-user">&times;</span>
+            <h2>Adicionar Login de Cliente</h2>
+            <form id="form-add-client-user">
+                <input type="hidden" id="add-client-user-client-id">
+                <div class="form-group">
+                    <label>Nome do Técnico/Utilizador *</label>
+                    <input type="text" id="client-user-nome" required placeholder="Ex: Operador 1">
+                </div>
+                <div class="form-group">
+                    <label>Username (Login) *</label>
+                    <input type="text" id="client-user-username" required placeholder="Ex: lavandaria_central_1">
+                </div>
+                <div class="form-group">
+                    <label>Email (opcional)</label>
+                    <input type="email" id="client-user-email" placeholder="Ex: tech@lavandaria.com">
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Acesso</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Client User Success (With Password Copy) -->
+    <div id="modal-client-user-success" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-client-user-success">&times;</span>
+            <div style="font-size: 50px; color: var(--success); margin-bottom: 20px;">
+                <i class="ph ph-check-circle"></i>
+            </div>
+            <h2>Acesso Criado!</h2>
+            <p>O login para o cliente foi criado com sucesso. Por favor, forneça as credenciais abaixo:</p>
+
+            <div style="background: var(--bg-main); padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px dashed var(--accent);">
+                <p style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">Palavra-Passe Gerada</p>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                    <span id="display-client-temp-password" style="font-family: monospace; font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 2px;"></span>
+                    <button id="btn-copy-client-password" class="btn-icon" title="Copiar Password" style="width: 44px; height: 44px; font-size: 20px;">
+                        <i class="ph ph-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <p style="font-size: 13px; color: var(--danger); font-weight: 600;">Atenção: Esta palavra-passe não voltará a ser exibida. Contudo, pode alterá-la mais tarde na edição.</p>
+            <button id="btn-client-user-success-ok" class="btn-primary w-100" style="margin-top: 24px;">Concluído</button>
+        </div>
+    </div>
+
+    <!-- Modal Edit Client User -->
+    <div id="modal-edit-client-user" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-client-user">&times;</span>
+            <h2>Editar Login de Cliente</h2>
+            <form id="form-edit-client-user">
+                <input type="hidden" id="edit-client-user-id">
+                <div class="form-group">
+                    <label>Nome do Técnico/Utilizador *</label>
+                    <input type="text" id="edit-client-user-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Username (Login) *</label>
+                    <input type="text" id="edit-client-user-username" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-client-user-email">
+                </div>
+                <div class="form-group">
+                    <label>Palavra-passe (apague e escreva nova para mudar)</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="edit-client-user-password">
+                        <button type="button" class="btn-toggle-password" data-target="edit-client-user-password">
+                            <i class="ph ph-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar Acesso</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Ticket Details -->
+    <div id="modal-ticket-details" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-ticket-details">&times;</span>
+            <div id="ticket-details-content">
+                <!-- JS popula aqui -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Inserir Fatura -->
+    <div id="modal-faturacao" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-faturacao">&times;</span>
+            <h2>Número da Fatura</h2>
+            <p style="margin-bottom: 20px; color: var(--text-secondary);">Introduza o número da fatura para esta intervenção.</p>
+            <form id="form-faturacao">
+                <input type="hidden" id="faturacao-id">
+                <input type="hidden" id="faturacao-type">
+                <input type="hidden" id="faturacao-novo-estado">
+                <div class="form-group">
+                    <label>Número da Fatura (ex: FA34/26)</label>
+                    <input type="text" id="input-numero-fatura" placeholder="FA00/00" required>
+                </div>
+                <button type="submit" class="btn-primary w-100">Confirmar e Gravar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Relatorio (Interativo A4) -->
+    <div id="modal-relatorio" class="modal hidden">
+        <div class="modal-content report-modal-content">
+            <span class="close-btn report-close-btn" data-modal="modal-relatorio">&times;</span>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 12px 20px; border-radius: 12px;">
+                <h3 style="color: white; margin: 0; font-size: 16px; display: flex; align-items: center; gap: 10px;">
+                    <i class="ph ph-note-pencil"></i> Edição de Relatório
+                </h3>
+                <div class="a4-toolbar" id="relatorio-toolbar" style="display: flex; gap: 10px; margin: 0; background: transparent; padding: 0; position: static;">
+                    <button type="button" id="btn-save-draft" class="btn-a4-draft" style="display:none;">Guardar Rascunho</button>
+                    <button type="button" id="btn-submit-report" class="btn-a4-submit" style="background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                        <i class="ph ph-check-circle"></i> Guardar Alterações
+                    </button>
+                </div>
+            </div>
+
+            <!-- PDF Viewer for Viewing (Non-editable) -->
+            <div id="pdf-viewer-container" class="hidden" style="width: 100%; height: calc(90vh - 100px); background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <iframe id="pdf-iframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+
+            <div class="a4-sheet" id="a4-report-sheet">
+                <header class="a4-header">
+                    <div class="a4-logo-section" style="max-width: 480px; text-align: left; display: flex; align-items: center; gap: 15px;">
+                        <img src="img/logo.png" alt="Maclau Logo" style="width: 80px; height: auto; flex-shrink: 0; margin: 0;">
+                        <div>
+                            <p style="font-size: 11px; line-height: 1.3; font-weight: 700; color: #1e293b; margin: 0;">MACLAU – Indústria e Comércio de Máquinas Industriais, Unipessoal Lda.</p>
+                            <!-- <p style="font-size: 10px; line-height: 1.3; color: #64748b; margin: 0; margin-top: 2px;">Sistema de Gestão da Qualidade – ISO 9001:2015</p> -->
+                        </div>
+                    </div>
+                    <div class="a4-id-section">
+                        <h2 id="a4-report-type">Relatório de Intervenção</h2>
+                        <p id="a4-report-id">ID: #00000</p>
+                        <p id="a4-report-date">Data: --/--/----</p>
+                    </div>
+                </header>
+
+                <div class="a4-grid">
+                    <div class="a4-section">
+                        <h3><i class="ph ph-user"></i> Cliente</h3>
+                        <div class="a4-info-box">
+                            <p><strong>Nome:</strong> <span id="a4-cliente-nome">---</span></p>
+                            <p><strong>Email:</strong> <span id="a4-cliente-email">---</span></p>
+                            <p><strong>Contacto:</strong> <span id="a4-cliente-contato">---</span></p>
+                            <p><strong>NIF:</strong> <span id="a4-cliente-nif">---</span></p>
+                        </div>
+                    </div>
+                    <div class="a4-section">
+                        <h3 id="a4-details-title"><i class="ph ph-wrench"></i> Máquina</h3>
+                        <div class="a4-info-box">
+                            <p><strong>Técnico:</strong> <span id="a4-tecnico-nome">---</span></p>
+                            <div id="a4-machine-row">
+                                <p><strong>Máquina:</strong> <span id="a4-maquina-nome">---</span></p>
+                                <p id="a4-maquina-serie-row"><strong>Nº de Série:</strong> <span id="a4-maquina-serie">---</span></p>
+                                <p><strong>Tipo:</strong> <span id="a4-tipo-avaria">---</span></p>
+                            </div>
+                            <div id="a4-service-row" style="display:none;">
+                                <p><strong>Serviço:</strong> <span id="a4-tipo-servico">---</span></p>
+                                <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
+                            </div>
+                            <p><strong>Horas de Trabalho:</strong> <span id="a4-horas-trabalho">---</span></p>
+                            <p><strong>Deslocações:</strong> <span id="a4-deslocacoes">---</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="a4-manutencao-maquinas-section" class="a4-editable-section" style="display:none; margin-top: 20px;">
+                    <h3 style="font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                        <i class="ph-bold ph-washing-machine" style="color: var(--accent);"></i> Máquinas Intervencionadas
+                    </h3>
+                    <div id="a4-manutencao-maquinas-list" style="margin-top: 5px;">
+                        <!-- JS popula aqui -->
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3><i class="ph ph-clipboard-text"></i> Descrição da Intervenção</h3>
+                    <div class="a4-editable-area">
+                        <textarea id="relatorio-texto" rows="8" placeholder="Descreva aqui o trabalho que realizou..." style="width: 100%; min-height: 150px; border: none; background: transparent; font-family: inherit; font-size: 15px; resize: vertical; outline: none; color: #1e293b; line-height: 1.6;"></textarea>
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3><i class="ph ph-package"></i> Peças Substituídas</h3>
+                    <div class="a4-editable-area" style="min-height: 60px;">
+                        <textarea id="relatorio-pecas" rows="4" placeholder="Liste as peças utilizadas..." style="width: 100%; min-height: 80px; border: none; background: transparent; font-family: inherit; font-size: 15px; resize: vertical; outline: none; color: #1e293b; line-height: 1.6;"></textarea>
+                    </div>
+                </div>
+
+                <div id="a4-time-input-section" class="a4-grid" style="margin-bottom: 20px;">
+                    <div class="a4-section">
+                        <h3><i class="ph ph-clock"></i> Tempo de Trabalho</h3>
+                        <div class="form-group" style="margin:0;">
+                            <input type="text" id="relatorio-horas" placeholder="HH:mm" style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1; width: 100%;">
+                        </div>
+                    </div>
+                    <div class="a4-section">
+                        <h3><i class="ph ph-map-pin"></i> Deslocações</h3>
+                        <div class="form-group" style="margin:0;">
+                            <input type="number" id="relatorio-deslocacoes" min="0" placeholder="1" value="1" style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1; width: 100%;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="a4-signature-grid">
+                    <div class="a4-signature-block">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:10px; color:#64748b; font-weight:700;">ASSINATURA DO TÉCNICO</span>
+                            <button type="button" id="btn-clear-signature-tech" style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer;"><i class="ph ph-eraser"></i> Limpar</button>
+                        </div>
+                        <div style="border:1px solid #e2e8f0; border-radius:4px; background:#f8fafc; touch-action:none;">
+                            <canvas id="signature-pad-tech" width="400" height="150" style="width:100%; height:auto; display:block; touch-action:none;"></canvas>
+                        </div>
+                        <div class="a4-signature-line">Técnico Responsável</div>
+                    </div>
+                    <div class="a4-signature-block">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:10px; color:#64748b; font-weight:700;">ASSINATURA DO CLIENTE</span>
+                            <button type="button" id="btn-clear-signature" style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer;"><i class="ph ph-eraser"></i> Limpar</button>
+                        </div>
+                        <div style="border:1px solid #e2e8f0; border-radius:4px; background:#f8fafc; touch-action:none;">
+                            <canvas id="signature-pad" width="400" height="150" style="width:100%; height:auto; display:block; touch-action:none;"></canvas>
+                        </div>
+                        <div class="a4-signature-line" style="margin-top:10px;">Assinatura do Cliente</div>
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" id="relatorio-avaria-id">
+            <input type="hidden" id="relatorio-type" value="avaria">
+            
+            <div id="relatorio-warning" style="text-align:center; font-size:12px; color:#cbd5e1; margin-top:15px;">
+                <i class="ph ph-info"></i> Modo de Edição de Administrador: Alterações são salvas diretamente.
+            </div>
+
+            <div id="relatorio-footer-close" style="text-align:right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <button type="button" id="btn-close-report-bottom" class="btn-primary close-btn" data-modal="modal-relatorio" style="background-color: #64748b;">Fechar Relatório</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Confirmação Edição Admin -->
+    <div id="modal-confirm-submit" class="modal hidden" style="z-index: 10001;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; padding: 30px;">
+            <i class="ph ph-warning-circle" style="font-size: 48px; color: #f59e0b; margin-bottom: 20px;"></i>
+            <h2 style="margin-bottom: 10px;">Salvar Alterações?</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.5;">
+                Tem a certeza que deseja atualizar este relatório? Esta ação substituirá a versão anterior.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" id="btn-cancel-submit" class="btn-secondary" style="flex: 1;">Cancelar</button>
+                <button type="button" id="btn-confirm-submit-action" class="btn-primary" style="flex: 1; background: var(--accent);">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/admin.js?v=3.1"></script>
+</body>
+
+</html>
