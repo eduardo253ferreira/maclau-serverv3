@@ -1728,15 +1728,75 @@ body {
     accent-color: var(--accent);
 }
 
+.report-close-btn {
+    color: white;
+    top: 15px;
+    right: 20px;
+    z-index: 1000;
+}
+
 @media (max-width: 950px) {
-    #modal-relatorio {
+    #modal-relatorio:not(.hidden) {
         display: block !important;
         overflow: auto !important;
         padding: 10px !important;
     }
     #modal-relatorio .report-modal-content {
         width: 900px !important;
-        max-width: none !important;
+        max-width: 100% !important;
         margin: 20px auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    #modal-relatorio:not(.hidden) {
+        display: block !important;
+        overflow: auto !important;
+        padding: 0 !important;
+    }
+    #modal-relatorio .report-modal-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        min-height: 100vh !important;
+        padding: 60px 15px 40px 15px !important;
+        box-sizing: border-box;
+        overflow-x: hidden !important;
+    }
+    #modal-relatorio .a4-sheet {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 20px 15px !important;
+        min-height: auto !important;
+        box-shadow: none !important;
+    }
+    #modal-relatorio .a4-grid {
+        grid-template-columns: 1fr !important;
+        gap: 20px !important;
+        margin-bottom: 20px !important;
+    }
+    #modal-relatorio .a4-signature-grid {
+        grid-template-columns: 1fr !important;
+        gap: 30px !important;
+        margin-top: 30px !important;
+    }
+    #modal-relatorio .a4-editable-area {
+        padding: 10px !important;
+    }
+    #modal-relatorio .a4-editable-area textarea {
+        font-size: 16px !important;
+    }
+    #modal-relatorio .form-group input,
+    #modal-relatorio .form-group select {
+        font-size: 16px !important;
+    }
+    .report-close-btn {
+        color: var(--text-primary) !important;
+        background: #f8fafc !important;
+        border: 1px solid var(--border) !important;
+        top: 15px !important;
+        right: 15px !important;
+        z-index: 1001 !important;
     }
 }

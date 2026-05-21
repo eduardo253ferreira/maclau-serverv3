@@ -502,8 +502,7 @@
     <!-- Modal Relatorio (Interativo A4) -->
     <div id="modal-relatorio" class="modal hidden">
         <div class="modal-content report-modal-content">
-            <span class="close-btn" data-modal="modal-relatorio"
-                style="color:white; top:10px; right:20px;">&times;</span>
+            <span class="close-btn report-close-btn" data-modal="modal-relatorio">&times;</span>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <div class="a4-toolbar" id="relatorio-toolbar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 0;">
@@ -672,8 +671,8 @@
                 <i class="ph ph-warning-circle"></i> Atenção: Após submeter, o relatório torna-se definitivo.
             </p>
 
-            <div id="relatorio-footer-close" style="display:none; text-align:right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                <button type="button" id="btn-close-report-bottom" class="btn-primary" style="background-color: #64748b;">Fechar Relatório</button>
+            <div id="relatorio-footer-close" style="text-align:right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <button type="button" id="btn-close-report-bottom" class="btn-primary close-btn" data-modal="modal-relatorio" style="background-color: #64748b;">Fechar Relatório</button>
             </div>
         </div>
     </div>
