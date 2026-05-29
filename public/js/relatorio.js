@@ -85,7 +85,8 @@ function renderReport(data) {
     } else {
         interventionInfo = `
             <p><strong>Serviço:</strong> ${data.tipo_servico}</p>
-            <p><strong>Camião:</strong> ${data.tipo_camiao}</p>
+            <p><strong>Transporte:</strong> ${data.tipo_camiao}</p>
+            ${data.maquinas && data.maquinas.length > 0 ? `<p><strong>Máquinas Associadas:</strong> ${data.maquinas.length}</p>` : ''}
         `;
     }
 

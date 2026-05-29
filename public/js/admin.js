@@ -257,6 +257,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'maquinas') loadMaquinas();
         if (target === 'tecnicos') loadTecnicos();
         if (target === 'frota') loadFrota();
+        if (target === 'stock') loadStock();
         if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
         if (target === 'agendamentos') initCalendar();
         if (target === 'anotacoes') {
@@ -586,7 +587,7 @@ window.openTicketDetailsModal = function (task) {
         typeColor = '#1e3a8a';
         icon = 'ph-truck';
         titleStr = task.tipo_servico || task.title || 'Serviço Externo';
-        subTitleStr = `Camião: ${task.tipo_camiao || '---'}`;
+        subTitleStr = `Transporte: ${task.tipo_camiao || '---'}`;
     } else {
         typeLabel = 'Manutenção';
         typeColor = '#7c3aed';
@@ -831,6 +832,17 @@ function createAvariaCard(a) {
     card.querySelector('.card-tech-name').textContent = a.tecnico_nome || 'Não Atribuído';
 
     if (a.estado === 'resolvida') {
+        const btnReport = document.createElement('button');
+        btnReport.className = 'btn-archive';
+        btnReport.title = 'Ver Relatório';
+        btnReport.innerHTML = '<i class="ph ph-file-pdf" style="color: #ef4444;"></i>';
+        btnReport.style.right = '45px';
+        btnReport.onclick = (e) => {
+            e.stopPropagation();
+            window.open(`/relatorio.html?id=${a.id}&type=avaria`, '_blank');
+        };
+        card.appendChild(btnReport);
+
         const btnArchive = document.createElement('button');
         btnArchive.className = 'btn-archive';
         btnArchive.title = 'Limpar do dashboard';
@@ -1554,6 +1566,17 @@ function createServicoCard(s) {
     card.querySelector('.card-tech-name').textContent = s.tecnico_nome || 'Não Atribuído';
 
     if (s.estado === 'resolvida') {
+        const btnReport = document.createElement('button');
+        btnReport.className = 'btn-archive';
+        btnReport.title = 'Ver Relatório';
+        btnReport.innerHTML = '<i class="ph ph-file-pdf" style="color: #ef4444;"></i>';
+        btnReport.style.right = '45px';
+        btnReport.onclick = (e) => {
+            e.stopPropagation();
+            window.open(`/relatorio.html?id=${s.id}&type=servico`, '_blank');
+        };
+        card.appendChild(btnReport);
+
         const btnArchive = document.createElement('button');
         btnArchive.className = 'btn-archive';
         btnArchive.title = 'Limpar do dashboard';
@@ -1655,6 +1678,17 @@ function createManutencaoCard(m) {
     card.querySelector('.card-tech-name').textContent = m.tecnico_nome || 'Não Atribuído';
 
     if (m.estado === 'resolvida') {
+        const btnReport = document.createElement('button');
+        btnReport.className = 'btn-archive';
+        btnReport.title = 'Ver Relatório';
+        btnReport.innerHTML = '<i class="ph ph-file-pdf" style="color: #ef4444;"></i>';
+        btnReport.style.right = '45px';
+        btnReport.onclick = (e) => {
+            e.stopPropagation();
+            window.open(`/relatorio.html?id=${m.id}&type=manutencao`, '_blank');
+        };
+        card.appendChild(btnReport);
+
         const btnArchive = document.createElement('button');
         btnArchive.className = 'btn-archive';
         btnArchive.title = 'Limpar do dashboard';
@@ -2402,6 +2436,26 @@ window.onload = async () => {
 
     document.querySelectorAll('.btn-open-report-servico').forEach(btn => {
         btn.addEventListener('click', () => {
+            const form = document.getElementById('form-report-servico');
+            if (form) form.reset();
+            const customContainer = document.getElementById('report-servico-tipo-outro-container');
+            if (customContainer) customContainer.classList.add('hidden');
+            const customInput = document.getElementById('report-servico-tipo-outro');
+            if (customInput) {
+                customInput.required = false;
+                customInput.value = '';
+            }
+            const customCamiaoContainer = document.getElementById('report-servico-camiao-outro-container');
+            if (customCamiaoContainer) customCamiaoContainer.classList.add('hidden');
+            const customCamiaoInput = document.getElementById('report-servico-camiao-outro');
+            if (customCamiaoInput) {
+                customCamiaoInput.required = false;
+                customCamiaoInput.value = '';
+            }
+            const machinesContainer = document.getElementById('report-servico-maquinas-container');
+            if (machinesContainer) {
+                machinesContainer.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
+            }
             document.getElementById('report-servico-agendada').value = '';
             loadClientes();
             loadTecnicos();
@@ -2547,13 +2601,20 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
     const btn = e.target.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
 
+    const tipoSelect = document.getElementById('report-servico-tipo').value;
+    const tipoFinal = tipoSelect === 'Outros' ? document.getElementById('report-servico-tipo-outro').value : tipoSelect;
+    const camiaoSelect = document.getElementById('report-servico-camiao').value;
+    const camiaoFinal = camiaoSelect === 'Outros' ? document.getElementById('report-servico-camiao-outro').value : camiaoSelect;
+    const maquina_ids = Array.from(document.querySelectorAll('.srv-maquina-checkbox:checked')).map(cb => parseInt(cb.value));
+
     const payload = {
         cliente_id: document.getElementById('report-servico-cliente').value,
-        tipo_servico: document.getElementById('report-servico-tipo').value,
-        tipo_camiao: document.getElementById('report-servico-camiao').value,
+        tipo_servico: tipoFinal,
+        tipo_camiao: camiaoFinal,
         tecnico_ids: Array.from(document.querySelectorAll('input[name="report-servico-tecnico-ids"]:checked')).map(cb => cb.value),
         notas: document.getElementById('report-servico-notas').value,
-        data_agendada: document.getElementById('report-servico-agendada').value || null
+        data_agendada: document.getElementById('report-servico-agendada').value || null,
+        maquina_ids: maquina_ids
     };
 
     try {
@@ -2565,6 +2626,13 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
         showNotification('Serviço reportado com sucesso!');
         closeModal('modal-report-servico');
         document.getElementById('form-report-servico').reset();
+        document.getElementById('report-servico-tipo-outro-container').classList.add('hidden');
+        document.getElementById('report-servico-tipo-outro').required = false;
+        document.getElementById('report-servico-tipo-outro').value = '';
+        document.getElementById('report-servico-camiao-outro-container').classList.add('hidden');
+        document.getElementById('report-servico-camiao-outro').required = false;
+        document.getElementById('report-servico-camiao-outro').value = '';
+        document.getElementById('report-servico-maquinas-container').innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
         refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
@@ -2612,6 +2680,59 @@ async function loadMachinesForMaintenance() {
 
                 const label = document.createElement('label');
                 label.htmlFor = `mnt-maq-${m.id}`;
+                label.style.fontSize = '14px';
+                label.style.cursor = 'pointer';
+                label.style.flex = '1';
+                label.textContent = `${m.marca} - ${m.modelo} (${m.numero_serie || 'S/N'})`;
+
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+    } catch (e) {
+        container.innerHTML = '<p style="font-size: 13px; color: var(--danger); text-align: center;">Erro ao carregar máquinas.</p>';
+    }
+}
+
+// Carregar máquinas para o modal de serviço
+async function loadMachinesForService() {
+    const clienteId = document.getElementById('report-servico-cliente').value;
+    const container = document.getElementById('report-servico-maquinas-container');
+
+    if (!clienteId) {
+        container.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
+        return;
+    }
+
+    try {
+        container.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Carregando máquinas...</p>';
+        const maquinas = await apiFetch('/maquinas');
+        const filtradas = maquinas.filter(m => m.cliente_id == clienteId);
+
+        if (filtradas.length === 0) {
+            container.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Nenhuma máquina encontrada para este cliente.</p>';
+        } else {
+            container.innerHTML = '';
+            filtradas.forEach(m => {
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.gap = '10px';
+                div.style.padding = '8px';
+                div.style.borderBottom = '1px solid #edf2f7';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'srv-maquina-checkbox';
+                checkbox.value = m.id;
+                checkbox.id = `srv-maq-${m.id}`;
+                checkbox.style.width = '18px';
+                checkbox.style.height = '18px';
+                checkbox.style.cursor = 'pointer';
+
+                const label = document.createElement('label');
+                label.htmlFor = `srv-maq-${m.id}`;
                 label.style.fontSize = '14px';
                 label.style.cursor = 'pointer';
                 label.style.flex = '1';
@@ -2698,6 +2819,50 @@ document.getElementById('report-avaria-cliente').addEventListener('change', asyn
 });
 
 document.getElementById('report-manutencao-cliente').addEventListener('change', loadMachinesForMaintenance);
+
+document.getElementById('report-servico-cliente').addEventListener('change', loadMachinesForService);
+
+// Toggle conditional field for "Outros" service type
+const selectTipoServico = document.getElementById('report-servico-tipo');
+if (selectTipoServico) {
+    selectTipoServico.addEventListener('change', (e) => {
+        const customContainer = document.getElementById('report-servico-tipo-outro-container');
+        const customInput = document.getElementById('report-servico-tipo-outro');
+        if (e.target.value === 'Outros') {
+            customContainer.classList.remove('hidden');
+            customInput.required = true;
+        } else {
+            customContainer.classList.add('hidden');
+            customInput.required = false;
+            customInput.value = '';
+        }
+    });
+}
+
+// Toggle conditional field for "Outros" transport type
+const selectCamiaoServico = document.getElementById('report-servico-camiao');
+if (selectCamiaoServico) {
+    selectCamiaoServico.addEventListener('change', (e) => {
+        const customContainer = document.getElementById('report-servico-camiao-outro-container');
+        const customInput = document.getElementById('report-servico-camiao-outro');
+        if (e.target.value === 'Outros') {
+            customContainer.classList.remove('hidden');
+            customInput.required = true;
+        } else {
+            customContainer.classList.add('hidden');
+            customInput.required = false;
+            customInput.value = '';
+        }
+    });
+}
+
+document.getElementById('btn-srv-select-all').addEventListener('click', () => {
+    document.querySelectorAll('.srv-maquina-checkbox').forEach(cb => cb.checked = true);
+});
+
+document.getElementById('btn-srv-deselect-all').addEventListener('click', () => {
+    document.querySelectorAll('.srv-maquina-checkbox').forEach(cb => cb.checked = false);
+});
 
 document.getElementById('btn-mnt-select-all').addEventListener('click', () => {
     document.querySelectorAll('.mnt-maquina-checkbox').forEach(cb => cb.checked = true);
@@ -3925,5 +4090,880 @@ document.getElementById('form-edit-recorrente').addEventListener('submit', async
         loadRecorrentes(true);
     } catch (err) {
         showNotification(err.message, true);
+    }
+});
+
+// --- Gestão de Stock ---
+let cachedProducts = [];
+
+async function loadStock() {
+    try {
+        const products = await apiFetch('/stock');
+        cachedProducts = products;
+        updateStockCategoriesFilter(products);
+        renderStockTable(products);
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function updateStockCategoriesFilter(products) {
+    const filterSelect = document.getElementById('filter-stock-category');
+    const pillsContainer = document.getElementById('stock-categories-pills');
+    if (!filterSelect) return;
+    
+    const currentVal = filterSelect.value;
+    const categories = [...new Set(products.map(p => p.categoria_produto).filter(Boolean))].sort();
+    
+    // 1. Sincronizar o elemento select original oculto (para retrocompatibilidade)
+    filterSelect.innerHTML = '<option value="">Todas as Categorias</option>';
+    categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        filterSelect.appendChild(opt);
+    });
+    
+    if (categories.includes(currentVal)) {
+        filterSelect.value = currentVal;
+    } else {
+        filterSelect.value = "";
+    }
+    
+    if (!pillsContainer) return;
+    
+    // 2. Renderizar dinamicamente as pills de categoria
+    const activeVal = filterSelect.value;
+    pillsContainer.innerHTML = '';
+    
+    // Pill "Todas"
+    const allPill = document.createElement('button');
+    allPill.className = `category-pill ${activeVal === "" ? "active" : ""}`;
+    allPill.innerHTML = `<i class="ph ph-squares-four"></i> Todas`;
+    allPill.addEventListener('click', () => {
+        filterSelect.value = "";
+        filterSelect.dispatchEvent(new Event('change'));
+        updatePillSelection("");
+    });
+    pillsContainer.appendChild(allPill);
+    
+    // Pills das Categorias
+    categories.forEach(cat => {
+        const pill = document.createElement('button');
+        pill.className = `category-pill ${activeVal === cat ? "active" : ""}`;
+        pill.textContent = cat;
+        pill.addEventListener('click', () => {
+            filterSelect.value = cat;
+            filterSelect.dispatchEvent(new Event('change'));
+            updatePillSelection(cat);
+        });
+        pillsContainer.appendChild(pill);
+    });
+}
+
+function updatePillSelection(selectedCategory) {
+    const pillsContainer = document.getElementById('stock-categories-pills');
+    if (!pillsContainer) return;
+    const pills = pillsContainer.querySelectorAll('.category-pill');
+    pills.forEach((pill, idx) => {
+        if (idx === 0) {
+            // A pill "Todas" está no índice 0
+            if (selectedCategory === "") {
+                pill.classList.add('active');
+            } else {
+                pill.classList.remove('active');
+            }
+        } else {
+            // Outras pills correspondem à categoria de texto
+            if (pill.textContent.trim() === selectedCategory) {
+                pill.classList.add('active');
+            } else {
+                pill.classList.remove('active');
+            }
+        }
+    });
+}
+
+function renderStockTable(products) {
+    const tbody = document.getElementById('table-stock-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    const searchVal = document.getElementById('search-stock').value.toLowerCase().trim();
+    const categoryVal = document.getElementById('filter-stock-category').value;
+    
+    const filtered = products.filter(p => {
+        if (categoryVal && p.categoria_produto !== categoryVal) return false;
+        if (searchVal) {
+            const nameMatch = p.nome_produto && p.nome_produto.toLowerCase().includes(searchVal);
+            const barcodeMatch = p.codigo_barras && p.codigo_barras.toLowerCase().includes(searchVal);
+            const categoryMatch = p.categoria_produto && p.categoria_produto.toLowerCase().includes(searchVal);
+            return nameMatch || barcodeMatch || categoryMatch;
+        }
+        return true;
+    });
+    
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-secondary); padding: 30px 10px;">Nenhum produto encontrado.</td></tr>`;
+        return;
+    }
+    
+    filtered.forEach(p => {
+        const tr = document.createElement('tr');
+        const lastAddedDateStr = p.data_ultima_adicao ? new Date(p.data_ultima_adicao).toLocaleString('pt-PT') : '-';
+        
+        tr.innerHTML = `
+            <td>
+                <span class="barcode-badge" style="font-family: monospace; background: #f1f5f9; padding: 4px 8px; border-radius: 6px; font-size: 13px;">
+                    ${p.codigo_barras ? p.codigo_barras : '<span style="color:#94a3b8; font-style:italic;">Sem código</span>'}
+                </span>
+            </td>
+            <td><strong>${escapeHTML(p.nome_produto)}</strong></td>
+            <td>${p.categoria_produto ? escapeHTML(p.categoria_produto) : '<span style="color:#94a3b8; font-style:italic;">Sem categoria</span>'}</td>
+            <td style="text-align: center;">
+                <div class="qty-control">
+                    <button class="qty-btn btn-qty-dec" title="Diminuir Stock">-</button>
+                    <span class="qty-val" style="display: flex; align-items: center; gap: 4px;">
+                        <span>${Number(Number(p.quantidade).toFixed(2).replace(/\.00$/, ''))}</span>
+                        <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: lowercase;">${p.unidade || 'un'}</span>
+                    </span>
+                    <button class="qty-btn btn-qty-inc" title="Aumentar Stock">+</button>
+                </div>
+            </td>
+            <td>${lastAddedDateStr}</td>
+            <td>
+                <div style="display:flex; justify-content: flex-end; gap:8px;">
+                    <button class="btn-icon btn-edit-stock" title="Editar Produto">
+                        <i class="ph ph-pencil-simple"></i>
+                    </button>
+                    <button class="btn-icon delete btn-delete-stock" title="Eliminar Produto">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        tr.querySelector('.btn-qty-dec').addEventListener('click', () => openAddStockQtyModal(p, 'subtract'));
+        tr.querySelector('.btn-qty-inc').addEventListener('click', () => openAddStockQtyModal(p, 'add'));
+        tr.querySelector('.btn-edit-stock').addEventListener('click', () => openEditProductModal(p));
+        tr.querySelector('.btn-delete-stock').addEventListener('click', () => deleteProduct(p.id));
+        
+        tbody.appendChild(tr);
+    });
+}
+
+async function adjustStockQty(id, delta) {
+    try {
+        await apiFetch(`/stock/${id}/quantity`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ delta })
+        });
+        showNotification('Stock atualizado com sucesso!');
+        loadStock();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+async function deleteProduct(id) {
+    if (!confirm('Tem a certeza que deseja eliminar este produto do stock?')) return;
+    try {
+        await apiFetch(`/stock/${id}`, { method: 'DELETE' });
+        showNotification('Produto eliminado do stock.');
+        loadStock();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+let html5QrScanner = null;
+let activeScanTargetInputId = null;
+let scannerInitializing = false;
+let scanTimeoutId = null;
+
+function openBarcodeScanner(targetInputId = null) {
+    activeScanTargetInputId = targetInputId;
+    openModal('modal-barcode-scanner');
+    
+    const scannerStatus = document.getElementById('scanner-status');
+    if (scannerStatus) scannerStatus.textContent = "A inicializar câmara...";
+    
+    // Reset reader container display
+    const readerContainer = document.getElementById('barcode-reader-container');
+    if (readerContainer) readerContainer.style.display = 'block';
+    
+    if (html5QrScanner) {
+        if (html5QrScanner.isScanning) {
+            html5QrScanner.stop().catch(err => console.error(err));
+        }
+        html5QrScanner = null;
+    }
+    
+    if (scanTimeoutId) {
+        clearTimeout(scanTimeoutId);
+    }
+    
+    scannerInitializing = true;
+    
+    scanTimeoutId = setTimeout(() => {
+        if (!scannerInitializing) return;
+        
+        try {
+            const config = {
+                fps: 20,
+                qrbox: (width, height) => {
+                    const w = width || 300;
+                    const h = height || 200;
+                    const boxWidth = Math.min(w * 0.85, 340);
+                    const boxHeight = Math.min(h * 0.35, 120);
+                    return { width: Math.floor(boxWidth), height: Math.floor(boxHeight) };
+                }
+            };
+            
+            const startWithCamera = (cameraIdOrFacingMode) => {
+                const container = document.getElementById("barcode-reader");
+                if (container) container.innerHTML = "";
+                
+                html5QrScanner = new Html5Qrcode("barcode-reader");
+                
+                const constraints = typeof cameraIdOrFacingMode === 'string'
+                    ? { deviceId: { exact: cameraIdOrFacingMode } }
+                    : cameraIdOrFacingMode;
+                
+                if (typeof constraints === 'object') {
+                    constraints.width = { ideal: 1280 };
+                    constraints.height = { ideal: 720 };
+                }
+                
+                return html5QrScanner.start(
+                    constraints,
+                    config,
+                    onBarcodeScanSuccess,
+                    onBarcodeScanFailure
+                );
+            };
+            
+            const setupCameraControls = () => {
+                if (!scannerInitializing) return;
+                if (scannerStatus) scannerStatus.textContent = "A ler código de barras...";
+                
+                try {
+                    const track = html5QrScanner.getVideoRepresentativeTrack();
+                    if (!track) return;
+                    
+                    const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
+                    
+                    const btnTorch = document.getElementById('btn-toggle-camera-torch');
+                    if (capabilities.torch && btnTorch) {
+                        btnTorch.style.display = 'inline-flex';
+                        let torchOn = false;
+                        btnTorch.onclick = () => {
+                            torchOn = !torchOn;
+                            if (typeof html5QrScanner.applyVideoConstraints === 'function') {
+                                html5QrScanner.applyVideoConstraints({
+                                    advanced: [{ torch: torchOn }]
+                                }).catch(e => console.error("Error setting torch via library", e));
+                            } else {
+                                track.applyConstraints({
+                                    advanced: [{ torch: torchOn }]
+                                }).catch(e => console.error("Error setting torch via track", e));
+                            }
+                        };
+                    } else if (btnTorch) {
+                        btnTorch.style.display = 'none';
+                    }
+                    
+                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                        if (typeof html5QrScanner.applyVideoConstraints === 'function') {
+                            html5QrScanner.applyVideoConstraints({
+                                advanced: [{ focusMode: 'continuous' }]
+                            }).catch(e => console.error("Error setting focusMode via library", e));
+                        } else {
+                            track.applyConstraints({
+                                advanced: [{ focusMode: 'continuous' }]
+                            }).catch(e => console.error("Error setting focusMode via track", e));
+                        }
+                    }
+                    
+                    const zoomContainer = document.getElementById('scanner-zoom-container');
+                    const zoomSlider = document.getElementById('scanner-zoom-slider');
+                    const zoomValue = document.getElementById('scanner-zoom-value');
+                    
+                    if (zoomContainer) {
+                        zoomContainer.style.display = 'flex';
+                        
+                        const hasNativeZoom = !!capabilities.zoom;
+                        const minZoom = hasNativeZoom ? (capabilities.zoom.min || 1) : 1;
+                        const maxZoom = hasNativeZoom ? (capabilities.zoom.max || 1) : 4;
+                        const stepZoom = hasNativeZoom ? (capabilities.zoom.step || 0.1) : 0.1;
+                        
+                        const setZoom = (val) => {
+                            const targetZoom = Math.max(minZoom, Math.min(maxZoom, val));
+                            if (zoomSlider) zoomSlider.value = targetZoom;
+                            if (zoomValue) zoomValue.textContent = `${targetZoom.toFixed(1)}x`;
+                            
+                            if (hasNativeZoom) {
+                                if (typeof html5QrScanner.applyVideoConstraints === 'function') {
+                                    html5QrScanner.applyVideoConstraints({
+                                        advanced: [{ zoom: targetZoom }]
+                                    }).catch(e => console.error("Error setting zoom via library", e));
+                                } else {
+                                    track.applyConstraints({
+                                        advanced: [{ zoom: targetZoom }]
+                                    }).catch(e => console.error("Error setting zoom via track", e));
+                                }
+                            } else {
+                                const videoEl = document.querySelector('#barcode-reader video');
+                                if (videoEl) {
+                                    videoEl.style.transform = `scale(${targetZoom})`;
+                                    videoEl.style.transformOrigin = 'center';
+                                }
+                            }
+                        };
+                        
+                        if (zoomSlider) {
+                            zoomSlider.min = minZoom;
+                            zoomSlider.max = maxZoom;
+                            zoomSlider.step = stepZoom;
+                            zoomSlider.value = minZoom;
+                            if (zoomValue) zoomValue.textContent = `${minZoom.toFixed(1)}x`;
+                            
+                            zoomSlider.oninput = (e) => {
+                                const val = parseFloat(e.target.value);
+                                setZoom(val);
+                            };
+                        }
+                        
+                        const btnZoom1x = document.getElementById('btn-zoom-1x');
+                        const btnZoom2x = document.getElementById('btn-zoom-2x');
+                        const btnZoom3x = document.getElementById('btn-zoom-3x');
+                        const btnZoom4x = document.getElementById('btn-zoom-4x');
+                        
+                        if (btnZoom1x) {
+                            btnZoom1x.onclick = () => setZoom(1);
+                        }
+                        if (btnZoom2x) {
+                            btnZoom2x.onclick = () => setZoom(2);
+                        }
+                        if (btnZoom3x) {
+                            btnZoom3x.onclick = () => setZoom(3);
+                        }
+                        if (btnZoom4x) {
+                            btnZoom4x.onclick = () => setZoom(4);
+                        }
+                    }
+                } catch (e) {
+                    console.log("Controls setup error", e);
+                }
+            };
+            
+            const fallbackStart = () => {
+                startWithCamera({ facingMode: "environment" }).catch(err => {
+                    console.warn("Fallback environment failed, trying any camera", err);
+                    return startWithCamera({});
+                }).then(() => {
+                    setupCameraControls();
+                }).catch(err => {
+                    console.error("All camera start attempts failed", err);
+                    if (scannerInitializing) {
+                        const readerContainer = document.getElementById('barcode-reader-container');
+                        if (readerContainer) readerContainer.style.display = 'none';
+                        
+                        const zoomContainer = document.getElementById('scanner-zoom-container');
+                        if (zoomContainer) zoomContainer.style.display = 'none';
+                        
+                        const btnTorch = document.getElementById('btn-toggle-camera-torch');
+                        if (btnTorch) btnTorch.style.display = 'none';
+                        
+                        if (scannerStatus) {
+                            scannerStatus.innerHTML = `<span style="font-size: 15px; color: var(--text-main); font-weight: 600; display: block; margin-bottom: 8px;">Por favor, clique no botão abaixo para tirar uma foto do código de barras:</span>`;
+                        }
+                    }
+                });
+            };
+            
+            fallbackStart();
+            
+        } catch (e) {
+            console.error("Erro ao instanciar Html5Qrcode:", e);
+        }
+    }, 300);
+}
+
+function closeBarcodeScanner() {
+    scannerInitializing = false;
+    if (scanTimeoutId) {
+        clearTimeout(scanTimeoutId);
+        scanTimeoutId = null;
+    }
+    closeModal('modal-barcode-scanner');
+    
+    if (html5QrScanner) {
+        const scannerToStop = html5QrScanner;
+        html5QrScanner = null;
+        
+        if (scannerToStop.isScanning) {
+            scannerToStop.stop().then(() => {
+                try {
+                    scannerToStop.clear();
+                } catch(e) {
+                    console.error("Erro ao limpar scanner:", e);
+                }
+            }).catch(err => {
+                console.error("Erro ao desligar câmara:", err);
+            });
+        } else {
+            try {
+                scannerToStop.clear();
+            } catch(e) {
+                console.error("Erro ao limpar scanner:", e);
+            }
+        }
+    }
+    
+    const btnTorch = document.getElementById('btn-toggle-camera-torch');
+    if (btnTorch) btnTorch.style.display = 'none';
+    
+    const btnSwitch = document.getElementById('btn-switch-camera');
+    if (btnSwitch) btnSwitch.style.display = 'none';
+    
+    const zoomContainer = document.getElementById('scanner-zoom-container');
+    if (zoomContainer) zoomContainer.style.display = 'none';
+    
+    // Reset visual scale on video element
+    const videoEl = document.querySelector('#barcode-reader video');
+    if (videoEl) {
+        videoEl.style.transform = '';
+    }
+    
+    // Reset zoom slider controls
+    const zoomSlider = document.getElementById('scanner-zoom-slider');
+    if (zoomSlider) {
+        zoomSlider.value = 1;
+        zoomSlider.min = 1;
+        zoomSlider.max = 1;
+    }
+    const zoomValue = document.getElementById('scanner-zoom-value');
+    if (zoomValue) zoomValue.textContent = '1.0x';
+}
+
+function scanFileBarcode(file) {
+    const scannerStatus = document.getElementById('scanner-status');
+    const container = document.getElementById("barcode-reader");
+    if (container) container.innerHTML = "";
+    
+    const fileScanner = new Html5Qrcode("barcode-reader");
+    fileScanner.scanFile(file, true)
+        .then(decodedText => {
+            if (scannerStatus) scannerStatus.textContent = "Código detetado com sucesso!";
+            onBarcodeScanSuccess(decodedText);
+        })
+        .catch(err => {
+            console.error("Error scanning file", err);
+            if (scannerStatus) {
+                scannerStatus.textContent = "Erro: Não foi possível ler o código na foto. Aproxime a câmara para focar e certifique-se de que há boa luz.";
+            }
+            showNotification("Erro ao ler código. Tente tirar a foto com melhor focagem e luz.", true);
+        });
+}
+
+window.openBarcodeScanner = openBarcodeScanner;
+window.closeBarcodeScanner = closeBarcodeScanner;
+
+function playSuccessBeep() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {
+        console.error("Web Audio API error", e);
+    }
+}
+
+async function onBarcodeScanSuccess(decodedText, decodedResult) {
+    console.log(`Scan success: ${decodedText}`, decodedResult);
+    playSuccessBeep();
+    
+    closeBarcodeScanner();
+    
+    if (activeScanTargetInputId) {
+        const input = document.getElementById(activeScanTargetInputId);
+        if (input) {
+            input.value = decodedText;
+            showNotification(`Código lido: ${decodedText}`);
+        }
+        return;
+    }
+    
+    try {
+        const productRes = await fetch(`/api/stock/barcode/${decodedText}`, {
+            headers: { 'Authorization': `Bearer ${jwtToken}` }
+        });
+        
+        if (productRes.status === 200) {
+            const data = await productRes.json();
+            openAddStockQtyModal(data);
+            showNotification(`Produto "${data.nome_produto}" encontrado.`);
+        } else if (productRes.status === 404) {
+            openAddProductModal(decodedText);
+            showNotification("Código novo detetado. Preencha os dados do produto.", false);
+        } else {
+            const err = await productRes.json();
+            showNotification(err.error || "Erro ao ler código de barras", true);
+        }
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function updateStockProductCalcVisibility() {
+    const unit = document.getElementById('stock-product-unidade').value;
+    const qtyGroupVisible = document.getElementById('stock-product-qty-group').style.display !== 'none';
+    const calcGroup = document.getElementById('stock-product-calc-group');
+    
+    if (calcGroup) {
+        if (unit !== 'un' && qtyGroupVisible) {
+            calcGroup.style.display = 'block';
+            calcGroup.querySelectorAll('.unit-placeholder').forEach(span => {
+                span.textContent = unit;
+            });
+        } else {
+            calcGroup.style.display = 'none';
+        }
+    }
+}
+
+function calculateStockProductQty() {
+    const embalagens = parseFloat(document.getElementById('stock-product-embalagens').value);
+    const medida = parseFloat(document.getElementById('stock-product-medida').value);
+    if (!isNaN(embalagens) && !isNaN(medida) && embalagens > 0 && medida > 0) {
+        document.getElementById('stock-product-quantidade').value = (embalagens * medida);
+    }
+}
+
+function calculateAddStockQty() {
+    const embalagens = parseFloat(document.getElementById('add-stock-embalagens').value);
+    const medida = parseFloat(document.getElementById('add-stock-medida').value);
+    if (!isNaN(embalagens) && !isNaN(medida) && embalagens > 0 && medida > 0) {
+        document.getElementById('add-stock-product-adicionar').value = (embalagens * medida);
+    }
+}
+
+function openAddStockQtyModal(p, action = 'add') {
+    document.getElementById('add-stock-product-id').value = p.id;
+    document.getElementById('add-stock-product-nome').value = p.nome_produto;
+    document.getElementById('add-stock-product-barras').value = p.codigo_barras || '';
+    document.getElementById('add-stock-product-atual').value = p.quantidade;
+    document.getElementById('add-stock-product-adicionar').value = 1;
+    
+    const unitLabel = document.getElementById('add-stock-product-unit-label');
+    if (unitLabel) unitLabel.textContent = p.unidade || 'un';
+    
+    // Reset calculator inputs
+    const addStockEmb = document.getElementById('add-stock-embalagens');
+    const addStockMed = document.getElementById('add-stock-medida');
+    if (addStockEmb) addStockEmb.value = '';
+    if (addStockMed) addStockMed.value = '';
+    
+    const addCalcGroup = document.getElementById('add-stock-calc-group');
+    if (addCalcGroup) {
+        if (p.unidade && p.unidade !== 'un' && action === 'add') {
+            addCalcGroup.style.display = 'block';
+            addCalcGroup.querySelectorAll('.unit-placeholder').forEach(span => {
+                span.textContent = p.unidade;
+            });
+        } else {
+            addCalcGroup.style.display = 'none';
+        }
+    }
+    
+    // Set or create hidden action type field
+    let actionInput = document.getElementById('add-stock-action-type');
+    if (!actionInput) {
+        actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.id = 'add-stock-action-type';
+        document.getElementById('form-add-stock-qty').appendChild(actionInput);
+    }
+    actionInput.value = action;
+    
+    // Update header title and input style/label dynamically
+    const modalTitle = document.querySelector('#modal-add-stock-qty h2');
+    const quantityInput = document.getElementById('add-stock-product-adicionar');
+    const inputLabel = quantityInput.previousElementSibling;
+    
+    if (action === 'subtract') {
+        if (modalTitle) modalTitle.innerHTML = '<i class="ph ph-package"></i> Retirar do Stock';
+        if (inputLabel) {
+            inputLabel.innerHTML = `Qtd. a Retirar (<span id="add-stock-product-unit-label">${p.unidade || 'un'}</span>) *`;
+            inputLabel.style.color = 'var(--danger)';
+        }
+        quantityInput.style.borderColor = 'var(--danger)';
+    } else {
+        if (modalTitle) modalTitle.innerHTML = '<i class="ph ph-package"></i> Adicionar ao Stock';
+        if (inputLabel) {
+            inputLabel.innerHTML = `Qtd. a Adicionar (<span id="add-stock-product-unit-label">${p.unidade || 'un'}</span>) *`;
+            inputLabel.style.color = 'var(--accent)';
+        }
+        quantityInput.style.borderColor = 'var(--accent)';
+    }
+    
+    openModal('modal-add-stock-qty');
+}
+
+function onBarcodeScanFailure(error) {
+    // Silently ignore frame scan errors
+}
+
+function openAddProductModal(barcode = '') {
+    document.getElementById('modal-stock-title').textContent = 'Novo Produto';
+    document.getElementById('stock-product-id').value = '';
+    document.getElementById('stock-product-nome').value = '';
+    document.getElementById('stock-product-categoria').value = '';
+    document.getElementById('stock-product-barras').value = barcode;
+    document.getElementById('stock-product-quantidade').value = 0;
+    document.getElementById('stock-product-unidade').value = 'un';
+    
+    // Reset calculator inputs
+    const stockProductEmb = document.getElementById('stock-product-embalagens');
+    const stockProductMed = document.getElementById('stock-product-medida');
+    if (stockProductEmb) stockProductEmb.value = '';
+    if (stockProductMed) stockProductMed.value = '';
+    
+    document.getElementById('stock-product-qty-group').style.display = 'block';
+    
+    updateStockProductCalcVisibility();
+    
+    openModal('modal-stock-product');
+}
+
+function openEditProductModal(p) {
+    document.getElementById('modal-stock-title').textContent = 'Editar Produto';
+    document.getElementById('stock-product-id').value = p.id;
+    document.getElementById('stock-product-nome').value = p.nome_produto;
+    document.getElementById('stock-product-categoria').value = p.categoria_produto || '';
+    document.getElementById('stock-product-barras').value = p.codigo_barras || '';
+    document.getElementById('stock-product-unidade').value = p.unidade || 'un';
+    
+    document.getElementById('stock-product-qty-group').style.display = 'none';
+    
+    updateStockProductCalcVisibility();
+    
+    openModal('modal-stock-product');
+}
+
+// Add event listener setup on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+    // Setup unit calculator events for stock creation
+    const stockProductUnidade = document.getElementById('stock-product-unidade');
+    if (stockProductUnidade) {
+        stockProductUnidade.addEventListener('change', updateStockProductCalcVisibility);
+    }
+    const stockProductEmbalagens = document.getElementById('stock-product-embalagens');
+    if (stockProductEmbalagens) {
+        stockProductEmbalagens.addEventListener('input', calculateStockProductQty);
+    }
+    const stockProductMedida = document.getElementById('stock-product-medida');
+    if (stockProductMedida) {
+        stockProductMedida.addEventListener('input', calculateStockProductQty);
+    }
+
+    // Setup unit calculator events for stock adjustment
+    const addStockEmbalagens = document.getElementById('add-stock-embalagens');
+    if (addStockEmbalagens) {
+        addStockEmbalagens.addEventListener('input', calculateAddStockQty);
+    }
+    const addStockMedida = document.getElementById('add-stock-medida');
+    if (addStockMedida) {
+        addStockMedida.addEventListener('input', calculateAddStockQty);
+    }
+
+    const formProduct = document.getElementById('form-stock-product');
+    if (formProduct) {
+        formProduct.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const id = document.getElementById('stock-product-id').value;
+            const nome_produto = document.getElementById('stock-product-nome').value;
+            const categoria_produto = document.getElementById('stock-product-categoria').value;
+            const codigo_barras = document.getElementById('stock-product-barras').value;
+            const quantidade = document.getElementById('stock-product-quantidade').value;
+            const unidade = document.getElementById('stock-product-unidade').value;
+            
+            const isEdit = id !== '';
+            const endpoint = isEdit ? `/stock/${id}` : '/stock';
+            const method = isEdit ? 'PUT' : 'POST';
+            
+            const body = {
+                nome_produto,
+                categoria_produto,
+                codigo_barras,
+                unidade
+            };
+            
+            if (!isEdit) {
+                body.quantidade = quantidade;
+            }
+            
+            try {
+                await apiFetch(endpoint, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                showNotification(isEdit ? 'Produto atualizado com sucesso!' : 'Produto criado com sucesso!');
+                closeModal('modal-stock-product');
+                loadStock();
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+    
+    const formAddStockQty = document.getElementById('form-add-stock-qty');
+    if (formAddStockQty) {
+        formAddStockQty.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('add-stock-product-id').value;
+            const nome = document.getElementById('add-stock-product-nome').value;
+            const qtyVal = parseFloat(document.getElementById('add-stock-product-adicionar').value);
+            
+            if (isNaN(qtyVal) || qtyVal <= 0) {
+                showNotification('Quantidade inválida.', true);
+                return;
+            }
+            
+            const actionType = document.getElementById('add-stock-action-type')?.value || 'add';
+            const multiplier = actionType === 'subtract' ? -1 : 1;
+            const delta = qtyVal * multiplier;
+            
+            const actionVerb = actionType === 'subtract' ? 'retirar' : 'adicionar';
+            const unitLabel = document.getElementById('add-stock-product-unit-label')?.textContent || 'un';
+            const confirmMsg = `Deseja ${actionVerb} ${qtyVal} ${unitLabel} do stock do produto "${nome}"?`;
+            
+            if (!confirm(confirmMsg)) return;
+            
+            try {
+                const updateRes = await apiFetch(`/stock/${id}/quantity`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ delta })
+                });
+                
+                const successMsg = actionType === 'subtract' 
+                    ? `Stock de "${nome}" reduzido para ${updateRes.quantidade}!`
+                    : `Stock de "${nome}" aumentado para ${updateRes.quantidade}!`;
+                
+                showNotification(successMsg);
+                closeModal('modal-add-stock-qty');
+                loadStock();
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+    
+    const searchStock = document.getElementById('search-stock');
+    if (searchStock) {
+        searchStock.addEventListener('input', () => {
+            renderStockTable(cachedProducts);
+        });
+    }
+    
+    const filterCatStock = document.getElementById('filter-stock-category');
+    if (filterCatStock) {
+        filterCatStock.addEventListener('change', () => {
+            renderStockTable(cachedProducts);
+        });
+    }
+    
+    const btnOpenAddStock = document.getElementById('btn-open-add-stock');
+    if (btnOpenAddStock) {
+        btnOpenAddStock.addEventListener('click', () => openAddProductModal());
+    }
+    
+    const btnScanBarcode = document.getElementById('btn-scan-barcode');
+    if (btnScanBarcode) {
+        btnScanBarcode.addEventListener('click', () => openBarcodeScanner());
+    }
+    
+    const btnScanInsideModal = document.getElementById('btn-scan-inside-modal');
+    if (btnScanInsideModal) {
+        btnScanInsideModal.addEventListener('click', () => openBarcodeScanner('stock-product-barras'));
+    }
+
+    // Botão Cancelar e X do modal do scanner (sem onclick inline — bloqueado pela CSP)
+    const btnCancelScanner = document.getElementById('btn-cancel-scanner');
+    if (btnCancelScanner) {
+        btnCancelScanner.addEventListener('click', () => closeBarcodeScanner());
+    }
+
+    const btnCloseScanner = document.getElementById('btn-close-scanner');
+    if (btnCloseScanner) {
+        btnCloseScanner.addEventListener('click', () => closeBarcodeScanner());
+    }
+    
+    // Tirar Foto / Carregar Ficheiro
+    const btnTakePhoto = document.getElementById('btn-take-photo');
+    const fileInput = document.getElementById('barcode-file-input');
+    if (btnTakePhoto && fileInput) {
+        btnTakePhoto.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length === 0) return;
+            const file = e.target.files[0];
+            
+            const scannerStatus = document.getElementById('scanner-status');
+            if (scannerStatus) scannerStatus.textContent = "A ler código de barras a partir da foto...";
+            
+            // Clean up live scanner if active
+            if (html5QrScanner && html5QrScanner.isScanning) {
+                html5QrScanner.stop().then(() => {
+                    html5QrScanner = null;
+                    scanFileBarcode(file);
+                }).catch(err => {
+                    console.error(err);
+                    html5QrScanner = null;
+                    scanFileBarcode(file);
+                });
+            } else {
+                scanFileBarcode(file);
+            }
+        });
+    }
+
+    const btnCloseReportBottom = document.getElementById('btn-close-report-bottom');
+    if (btnCloseReportBottom) {
+        btnCloseReportBottom.addEventListener('click', () => {
+            closeModal('modal-relatorio');
+        });
+    }
+
+    const btnCancelStockProduct = document.getElementById('btn-cancel-stock-product');
+    if (btnCancelStockProduct) {
+        btnCancelStockProduct.addEventListener('click', () => {
+            closeModal('modal-stock-product');
+        });
+    }
+
+    const btnCancelAddStock = document.getElementById('btn-cancel-add-stock');
+    if (btnCancelAddStock) {
+        btnCancelAddStock.addEventListener('click', () => {
+            closeModal('modal-add-stock-qty');
+        });
     }
 });

@@ -182,6 +182,22 @@ async function logout() {
     window.location.href = 'index.html';
 }
 
+let stockProducts = [];
+
+async function loadStockProducts() {
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/stock`);
+        if (res.ok) {
+            stockProducts = await res.json();
+            console.log("Stock products loaded:", stockProducts.length);
+        } else {
+            console.error("Failed to load stock products");
+        }
+    } catch (e) {
+        console.error("Error loading stock products:", e);
+    }
+}
+
 async function showView() {
     if (!jwtToken) {
         window.location.href = 'index.html?expired=1';
@@ -196,6 +212,7 @@ async function showView() {
 
     document.getElementById('tech-name-display').textContent = `Olá, ${currentTechName || 'Técnico'}!`;
     loadMyTasks();
+    loadStockProducts();
 }
 
 async function authFetch(url, options = {}) {
@@ -694,11 +711,11 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
             document.getElementById('a4-tipo-camiao').textContent = data.tipo_camiao || '---';
         }
 
-        // Handle Manutenção Machines List
+        // Handle Manutenção/Serviço Machines List
         const mntSection = document.getElementById('a4-manutencao-maquinas-section');
         const mntList = document.getElementById('a4-manutencao-maquinas-list');
         if (mntSection && mntList) {
-            if (type === 'manutencao' && data.maquinas && data.maquinas.length > 0) {
+            if ((type === 'manutencao' || type === 'servico') && data.maquinas && data.maquinas.length > 0) {
                 mntSection.style.display = 'block';
                 mntList.style.display = 'grid';
                 mntList.style.gridTemplateColumns = 'repeat(auto-fill, minmax(240px, 1fr))';
@@ -794,6 +811,11 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
         btnSubmit.style.display = disabled ? 'none' : 'block';
         btnSave.style.display = disabled ? 'none' : 'block';
         warning.style.display = disabled ? 'none' : 'block';
+
+        const stockSelector = document.getElementById('stock-selector-container');
+        if (stockSelector) {
+            stockSelector.style.display = disabled ? 'none' : 'block';
+        }
 
         // Visibility adjustments for "Identical to PDF"
         const reportSheet = document.getElementById('a4-report-sheet');
@@ -1394,11 +1416,127 @@ if (pwdForm) {
     });
 }
 
+function initStockSelector() {
+    const searchInput = document.getElementById('stock-search-input');
+    const dropdown = document.getElementById('stock-search-dropdown');
+    const qtyInput = document.getElementById('stock-qty-input');
+    const btnAdd = document.getElementById('btn-add-stock-to-report');
+    const pecasTextarea = document.getElementById('relatorio-pecas');
+
+    if (!searchInput || !dropdown || !qtyInput || !btnAdd || !pecasTextarea) return;
+
+    let selectedProduct = null;
+
+    // Filtrar e exibir dropdown no input
+    searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase().trim();
+        dropdown.innerHTML = '';
+        if (!query) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        const filtered = stockProducts.filter(p => 
+            (p.nome_produto && p.nome_produto.toLowerCase().includes(query)) ||
+            (p.codigo_barras && p.codigo_barras.toLowerCase().includes(query))
+        );
+
+        if (filtered.length === 0) {
+            const div = document.createElement('div');
+            div.className = 'custom-search-option';
+            div.style.color = '#94a3b8';
+            div.style.fontStyle = 'italic';
+            div.textContent = 'Nenhum produto encontrado';
+            dropdown.appendChild(div);
+        } else {
+            filtered.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'custom-search-option';
+                div.innerHTML = `
+                    <div style="font-weight: 600;">${escapeHTML(p.nome_produto)}</div>
+                    <div style="font-size: 11px; color: #64748b;">Qtd. Disp: ${Number(Number(p.quantidade).toFixed(2).replace(/\.00$/, ''))} ${p.unidade || 'un'} | ${p.categoria_produto || 'Sem categoria'}</div>
+                `;
+                div.addEventListener('click', () => {
+                    searchInput.value = p.nome_produto;
+                    selectedProduct = p;
+                    dropdown.style.display = 'none';
+                    const unitLabel = document.getElementById('stock-qty-unit');
+                    if (unitLabel) {
+                        unitLabel.textContent = p.unidade || 'un';
+                    }
+                });
+                dropdown.appendChild(div);
+            });
+        }
+        dropdown.style.display = 'block';
+    });
+
+    // Fechar dropdown no blur com delay para permitir o clique
+    searchInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            dropdown.style.display = 'none';
+            if (selectedProduct && searchInput.value !== selectedProduct.nome_produto) {
+                selectedProduct = null;
+            }
+            if (!selectedProduct) {
+                const exactMatch = stockProducts.find(p => p.nome_produto.toLowerCase() === searchInput.value.toLowerCase().trim());
+                if (exactMatch) {
+                    selectedProduct = exactMatch;
+                    searchInput.value = exactMatch.nome_produto;
+                    const unitLabel = document.getElementById('stock-qty-unit');
+                    if (unitLabel) unitLabel.textContent = exactMatch.unidade || 'un';
+                } else {
+                    searchInput.value = '';
+                    const unitLabel = document.getElementById('stock-qty-unit');
+                    if (unitLabel) unitLabel.textContent = 'un';
+                }
+            }
+        }, 200);
+    });
+
+    // Adicionar peça ao clicar no botão
+    btnAdd.addEventListener('click', () => {
+        const qty = parseFloat(qtyInput.value);
+        if (!selectedProduct) {
+            showNotification('Selecione uma peça válida do stock.', true);
+            return;
+        }
+        if (isNaN(qty) || qty <= 0) {
+            showNotification('Insira uma quantidade válida.', true);
+            return;
+        }
+
+        const unit = selectedProduct.unidade || 'un';
+        let formattedLine;
+        if (unit === 'un') {
+            const formattedQty = Number(qty.toFixed(2).replace(/\.00$/, ''));
+            formattedLine = `${formattedQty}x - ${selectedProduct.nome_produto}`;
+        } else {
+            const formattedQty = Number(qty.toFixed(2).replace(/\.00$/, ''));
+            formattedLine = `${formattedQty}${unit} - ${selectedProduct.nome_produto}`;
+        }
+        let currentText = pecasTextarea.value.trim();
+        if (currentText) {
+            pecasTextarea.value = currentText + '\n' + formattedLine;
+        } else {
+            pecasTextarea.value = formattedLine;
+        }
+
+        searchInput.value = '';
+        qtyInput.value = '1';
+        selectedProduct = null;
+        const unitLabel = document.getElementById('stock-qty-unit');
+        if (unitLabel) unitLabel.textContent = 'un';
+        showNotification('Peça adicionada ao relatório!');
+    });
+}
+
 window.onload = () => {
     showView();
     initSignaturePad();
     initGlobalTimer();
     startAutoRefresh();
+    initStockSelector();
 
     const inputFotos = document.getElementById('relatorio-fotos');
     if (inputFotos) {
@@ -1605,6 +1743,16 @@ window.onload = () => {
             }
         });
     }
+
+    const btnCloseReportBottom = document.getElementById('btn-close-report-bottom');
+    if (btnCloseReportBottom) {
+        btnCloseReportBottom.addEventListener('click', () => {
+            closeModal('modal-relatorio');
+            if (document.getElementById('relatorio-status-change').value === '1') {
+                loadMyTasks();
+            }
+        });
+    }
 };
 
 // --- Anotações / Intervenções Futuras ---
@@ -1720,7 +1868,7 @@ window.openTicketDetailsModal = function(task) {
         typeColor = '#1E4419';
         icon = 'ph-truck';
         titleStr = task.tipo_servico || task.title; // Fallback for agendamentos
-        subTitleStr = `Camião: ${task.tipo_camiao || '---'}`;
+        subTitleStr = `Transporte: ${task.tipo_camiao || '---'}`;
     } else {
         typeLabel = 'Manutenção';
         typeColor = '#7c3aed';

@@ -1,12 +1,19 @@
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('database.db');
 
-db.all("SELECT id, relatorio, pecas_substituidas FROM avarias WHERE pecas_substituidas IS NOT NULL OR relatorio IS NOT NULL LIMIT 5", (err, rows) => {
+db.all("PRAGMA table_info(produto)", (err, cols) => {
     if (err) {
         console.error(err);
         return;
     }
-    console.log("Recent reports with content:");
-    console.log(JSON.stringify(rows, null, 2));
-    db.close();
+    console.log("PRODUTO COLUMNS:", cols.map(c => c.name));
+    
+    db.all("SELECT * FROM produto LIMIT 10", (err, rows) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
+        console.log("PRODUTO ROWS:", JSON.stringify(rows, null, 2));
+        db.close();
+    });
 });

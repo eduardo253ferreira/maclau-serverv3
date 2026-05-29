@@ -750,6 +750,47 @@ body {
     box-shadow: 0 0 0 3px rgba(45, 90, 39, 0.1);
 }
 
+/* --- Category Pills for Stock --- */
+.category-pills-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.category-pills-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.category-pill {
+    background-color: var(--bg-main);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+}
+
+.category-pill:hover {
+    background-color: var(--accent-light);
+    color: var(--accent);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.category-pill.active {
+    background-color: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    box-shadow: 0 4px 10px rgba(45, 90, 39, 0.2);
+}
+
 /* Header Actions Layout */
 .header-actions {
     display: flex;
@@ -1799,4 +1840,54 @@ body {
         right: 15px !important;
         z-index: 1001 !important;
     }
+}
+
+/* Stock Management Styles */
+.qty-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 8px;
+    background: #F8FAFC;
+}
+.qty-btn {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+.qty-btn:hover {
+    background-color: var(--accent-light);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.qty-val {
+    font-weight: 700;
+    min-width: 32px;
+    text-align: center;
+    font-size: 14px;
+}
+
+/* Barcode Scanner Styles */
+@keyframes scanning {
+    0% { top: 0%; }
+    50% { top: 100%; }
+    100% { top: 0%; }
+}
+
+#barcode-reader video {
+    border-radius: 10px;
+    object-fit: cover;
 }

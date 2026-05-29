@@ -517,6 +517,11 @@
                     <i class="ph ph-truck"></i> Gestão de Frota
                 </button>
 
+                <!-- Gestão de Stock -->
+                <button class="nav-btn" data-target="stock">
+                    <i class="ph ph-package"></i> Gestão de Stock
+                </button>
+
                 <!-- Outros Serviços -->
                 <a href="outros.html" class="nav-link-special" style="text-decoration:none; color:inherit; background: #fffbeb; border: 1px solid #fde68a; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 12px; font-weight: 600; margin: 10px 0;">
                     <i class="ph ph-plus-circle" style="color: #d97706; font-size: 20px;"></i> <strong>Outros Serviços</strong>
@@ -1177,6 +1182,62 @@
                 </div>
             </section>
 
+            <!-- Gestão de Stock View -->
+            <section id="view-stock" class="view hidden">
+                <header class="view-header flex-header" style="flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h1>Gestão de Stock</h1>
+                        <p>Controle de produtos, categorias e quantidades.</p>
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button id="btn-scan-barcode" class="btn-primary" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); display: flex; align-items: center; gap: 8px;">
+                            <i class="ph ph-barcode" style="font-size: 20px;"></i> Ler Código de Barras
+                        </button>
+                        <button id="btn-open-add-stock" class="btn-primary" style="display: flex; align-items: center; gap: 8px;">
+                            <i class="ph ph-plus" style="font-size: 20px;"></i> Novo Produto
+                        </button>
+                    </div>
+                </header>
+
+                <div class="filter-bar" style="background: var(--surface-color); padding: 15px; border-radius: 12px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
+                    <div style="display: flex; gap: 15px; width: 100%; align-items: center; flex-wrap: wrap;">
+                        <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+                            <input type="text" id="search-stock" placeholder="Pesquisar por nome ou código de barras..." style="padding: 10px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px;">
+                        </div>
+                        <select id="filter-stock-category" style="display: none;">
+                            <option value="">Todas as Categorias</option>
+                        </select>
+                    </div>
+                    
+                    <div class="category-menu-container" style="width: 100%;">
+                        <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                            <i class="ph ph-tag" style="font-size: 16px;"></i> Categorias
+                        </div>
+                        <div id="stock-categories-pills" class="category-pills-scroll" style="display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; -webkit-overflow-scrolling: touch;">
+                            <!-- JS popula aqui -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Código de Barras</th>
+                                <th>Nome do Produto</th>
+                                <th>Categoria</th>
+                                <th style="text-align: center; width: 180px;">Quantidade</th>
+                                <th>Última Adição</th>
+                                <th style="text-align: right; width: 120px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-stock-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Checklists View -->
             <section id="view-checklists" class="view hidden">
                 <header class="view-header flex-header">
@@ -1778,14 +1839,34 @@
                         <option value="Transporte">Transporte</option>
                         <option value="Instalação">Instalação</option>
                         <option value="Transporte/Instalação">Transporte/Instalação</option>
+                        <option value="Outros">Outros</option>
                     </select>
                 </div>
+                <div class="form-group hidden" id="report-servico-tipo-outro-container">
+                    <label>Especificar Tipo de Serviço *</label>
+                    <input type="text" id="report-servico-tipo-outro" placeholder="Especificar tipo de serviço...">
+                </div>
                 <div class="form-group">
-                    <label>Tipo de Camião *</label>
+                    <label>Tipo de Transporte *</label>
                     <select id="report-servico-camiao" required>
                         <option value="Camião da Empresa Pessoal">Camião da Empresa Pessoal</option>
                         <option value="Empresa Particular">Empresa Particular</option>
+                        <option value="Outros">Outros</option>
                     </select>
+                </div>
+                <div class="form-group hidden" id="report-servico-camiao-outro-container">
+                    <label>Especificar Tipo de Transporte *</label>
+                    <input type="text" id="report-servico-camiao-outro" placeholder="Especificar tipo de transporte...">
+                </div>
+                <div class="form-group">
+                    <label>Máquinas Associadas (Opcional)</label>
+                    <div id="report-servico-maquinas-container" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 8px; background: var(--bg-card);">
+                        <p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>
+                    </div>
+                    <div style="margin-top: 8px; display: flex; gap: 10px;">
+                        <button type="button" id="btn-srv-select-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Selecionar Todas</button>
+                        <button type="button" id="btn-srv-deselect-all" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">Limpar Seleção</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Notas Adicionais</label>
@@ -1981,6 +2062,158 @@
     </div>
 
     <div id="calendar-tooltip" class="fc-event-tooltip"></div>
+
+    <!-- Modal Add/Edit Stock Product -->
+    <div id="modal-stock-product" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-stock-product">&times;</span>
+            <h2 id="modal-stock-title">Novo Produto</h2>
+            <form id="form-stock-product">
+                <input type="hidden" id="stock-product-id">
+                <div class="form-group">
+                    <label>Nome do Produto *</label>
+                    <input type="text" id="stock-product-nome" required placeholder="Ex: Detergente A">
+                </div>
+                <div class="form-group">
+                    <label>Categoria do Produto</label>
+                    <input type="text" id="stock-product-categoria" placeholder="Ex: Consumíveis, Ferramentas">
+                </div>
+                <div class="form-group">
+                    <label>Código de Barras</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="stock-product-barras" placeholder="Ex: 5601234567890" style="flex: 1;">
+                        <button type="button" id="btn-scan-inside-modal" class="btn-secondary" style="padding: 10px 14px; font-size: 18px; display: flex; align-items: center; justify-content: center;" title="Scan barcode with camera">
+                            <i class="ph ph-barcode"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Unidade de Medida</label>
+                    <select id="stock-product-unidade" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); width: 100%; box-sizing: border-box; background: var(--bg-primary); color: var(--text-primary);">
+                        <option value="un">Unidades (un)</option>
+                        <option value="m">Metros (m)</option>
+                        <option value="kg">Quilos (kg)</option>
+                        <option value="l">Litros (l)</option>
+                    </select>
+                </div>
+                <div id="stock-product-calc-group" style="display: none; background: var(--bg-secondary); border: 1px dashed var(--border-color); padding: 15px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; font-size: 13px; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                        <i class="ph ph-calculator"></i> Calculadora de Embalagem / Bobine
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label style="font-size: 12px; font-weight: 600;">Qtd. Embalagens / Bobines</label>
+                            <input type="number" id="stock-product-embalagens" min="1" step="any" placeholder="Ex: 5">
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label style="font-size: 12px; font-weight: 600;">Medida por Embalagem (<span class="unit-placeholder">m</span>)</label>
+                            <input type="number" id="stock-product-medida" min="0.001" step="any" placeholder="Ex: 100">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" id="stock-product-qty-group">
+                    <label>Quantidade Inicial</label>
+                    <input type="number" id="stock-product-quantidade" min="0" step="any" value="0">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button type="button" id="btn-cancel-stock-product" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Scanner Código de Barras -->
+    <div id="modal-barcode-scanner" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" id="btn-close-scanner" data-modal="modal-barcode-scanner">&times;</span>
+            <h2><i class="ph ph-barcode"></i> Scanner de Código de Barras</h2>
+            <div style="text-align: center; margin-top: 20px;">
+                <p style="margin-bottom: 15px; color: var(--text-secondary);">Aponte a câmara do telemóvel para o código de barras.</p>
+                <div id="barcode-reader-container" style="position: relative; width: 100%; max-width: 400px; margin: 0 auto; overflow: hidden; border-radius: 12px; border: 2px solid var(--accent); background: #000; min-height: 250px;">
+                    <div id="barcode-reader" style="width: 100%;"></div>
+                    <div class="scanner-laser"></div>
+                </div>
+                <div id="scanner-status" style="margin-top: 15px; font-weight: 600; color: var(--accent);">
+                    Inicializando câmara...
+                </div>
+                
+                <div style="margin-top: 15px; margin-bottom: 15px;">
+                    <input type="file" id="barcode-file-input" accept="image/*" capture="environment" style="display: none;">
+                    <button type="button" class="btn-primary" id="btn-take-photo" style="display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: 0 auto;">
+                        <i class="ph ph-camera" style="font-size: 20px;"></i> Tirar Foto / Carregar Imagem
+                    </button>
+                </div>
+                <div id="scanner-zoom-container" style="margin-top: 15px; display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 8px; width: 100%; justify-content: center;">
+                        <span style="font-size: 14px; font-weight: 600; color: var(--text-secondary);">Zoom:</span>
+                        <input type="range" id="scanner-zoom-slider" min="1" max="1" step="0.1" value="1" style="flex: 1; max-width: 200px; accent-color: var(--accent); height: 6px; border-radius: 3px; outline: none; cursor: pointer;">
+                        <span id="scanner-zoom-value" style="font-size: 14px; font-weight: bold; min-width: 35px; text-align: left; color: var(--text-main);">1.0x</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                        <button type="button" class="btn-secondary" id="btn-zoom-1x" style="padding: 4px 12px; font-size: 13px;">1x</button>
+                        <button type="button" class="btn-secondary" id="btn-zoom-2x" style="padding: 4px 12px; font-size: 13px; display: none;">2x</button>
+                        <button type="button" class="btn-secondary" id="btn-zoom-3x" style="padding: 4px 12px; font-size: 13px; display: none;">3x</button>
+                        <button type="button" class="btn-secondary" id="btn-zoom-4x" style="padding: 4px 12px; font-size: 13px; display: none;">4x</button>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" class="btn-secondary" id="btn-toggle-camera-torch" style="display: none; align-items: center; gap: 8px;">
+                        <i class="ph ph-lightbulb"></i> Lanterna
+                    </button>
+                    <button type="button" class="btn-secondary" id="btn-cancel-scanner">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Adicionar Quantidade ao Stock -->
+    <div id="modal-add-stock-qty" class="modal hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close-btn" data-modal="modal-add-stock-qty">&times;</span>
+            <h2><i class="ph ph-package"></i> Adicionar ao Stock</h2>
+            <form id="form-add-stock-qty">
+                <input type="hidden" id="add-stock-product-id">
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-weight: 600; font-size: 14px;">Nome do Produto</label>
+                    <input type="text" id="add-stock-product-nome" readonly style="background-color: var(--bg-secondary); cursor: not-allowed; border: 1px solid var(--border-color);">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-weight: 600; font-size: 14px;">Código de Barras</label>
+                    <input type="text" id="add-stock-product-barras" readonly style="background-color: var(--bg-secondary); cursor: not-allowed; border: 1px solid var(--border-color);">
+                </div>
+                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label style="font-weight: 600; font-size: 14px;">Quantidade Atual</label>
+                        <input type="number" id="add-stock-product-atual" readonly style="background-color: var(--bg-secondary); cursor: not-allowed; border: 1px solid var(--border-color);">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label style="font-weight: 600; font-size: 14px; color: var(--accent);">Qtd. a Adicionar (<span id="add-stock-product-unit-label">un</span>) *</label>
+                        <input type="number" id="add-stock-product-adicionar" min="0.001" step="any" value="1" required style="border: 2px solid var(--accent); font-weight: bold; font-size: 16px;">
+                    </div>
+                </div>
+                <div id="add-stock-calc-group" style="display: none; background: var(--bg-secondary); border: 1px dashed var(--border-color); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="font-weight: 600; font-size: 13px; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                        <i class="ph ph-calculator"></i> Calculadora de Embalagem / Bobine
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label style="font-size: 12px; font-weight: 600;">Qtd. Embalagens / Bobines</label>
+                            <input type="number" id="add-stock-embalagens" min="1" step="any" placeholder="Ex: 5">
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label style="font-size: 12px; font-weight: 600;">Medida por Embalagem (<span class="unit-placeholder">m</span>)</label>
+                            <input type="number" id="add-stock-medida" min="0.001" step="any" placeholder="Ex: 100">
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" id="btn-cancel-add-stock" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary" style="background: var(--accent);">Confirmar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Modal Add Frota -->
     <div id="modal-add-frota" class="modal hidden">
@@ -2240,7 +2473,7 @@
                             </div>
                             <div id="a4-service-row" style="display:none;">
                                 <p><strong>Serviço:</strong> <span id="a4-tipo-servico">---</span></p>
-                                <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
+                                <p><strong>Transporte:</strong> <span id="a4-tipo-camiao">---</span></p>
                             </div>
                             <p><strong>Horas de Trabalho:</strong> <span id="a4-horas-trabalho">---</span></p>
                             <p><strong>Deslocações:</strong> <span id="a4-deslocacoes">---</span></p>
@@ -2318,7 +2551,7 @@
             </div>
 
             <div id="relatorio-footer-close" style="text-align:right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                <button type="button" id="btn-close-report-bottom" class="btn-primary close-btn" data-modal="modal-relatorio" style="background-color: #64748b;">Fechar Relatório</button>
+                <button type="button" id="btn-close-report-bottom" class="btn-primary" data-modal="modal-relatorio" style="background-color: #64748b;">Fechar Relatório</button>
             </div>
         </div>
     </div>
@@ -2338,7 +2571,8 @@
         </div>
     </div>
 
-    <script src="/js/admin.js?v=3.1"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="/js/admin.js?v=3.3"></script>
 </body>
 
 </html>

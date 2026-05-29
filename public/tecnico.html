@@ -553,7 +553,7 @@
                             </div>
                             <div id="a4-service-row" style="display:none;">
                                 <p><strong>Serviço:</strong> <span id="a4-tipo-servico">---</span></p>
-                                <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
+                                <p><strong>Transporte:</strong> <span id="a4-tipo-camiao">---</span></p>
                             </div>
                             <p><strong>Horas de Trabalho:</strong> <span id="a4-horas-trabalho">---</span></p>
                             <p><strong>Deslocações:</strong> <span id="a4-deslocacoes">---</span></p>
@@ -594,6 +594,28 @@
                     </div>
                     <div class="a4-editable-area" id="a4-pecas-input-section" style="min-height: 60px;">
                         <textarea id="relatorio-pecas" rows="2" placeholder="Liste as peças utilizadas..."></textarea>
+                        
+                        <!-- Novo Seletor de Peças do Stock -->
+                        <div id="stock-selector-container" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                            <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                                <i class="ph ph-package" style="font-size: 16px;"></i> Associar Peça do Stock
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap; position: relative;">
+                                <div style="position: relative; flex: 1; min-width: 180px;">
+                                    <input type="text" id="stock-search-input" placeholder="Pesquisar peça no stock..." style="padding: 8px 12px; font-size: 13px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; box-sizing: border-box;" autocomplete="off">
+                                    <div id="stock-search-dropdown" class="custom-search-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 150px; overflow-y: auto; z-index: 10;">
+                                        <!-- Opções dinâmicas -->
+                                    </div>
+                                </div>
+                                <div style="width: 80px; position: relative; display: flex; align-items: center;">
+                                    <input type="number" id="stock-qty-input" min="0.001" step="any" value="1" style="padding: 8px 24px 8px 8px; font-size: 13px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; text-align: center; box-sizing: border-box;">
+                                    <span id="stock-qty-unit" style="position: absolute; right: 6px; font-size: 11px; font-weight: 600; color: #64748b; pointer-events: none; text-transform: lowercase;">un</span>
+                                </div>
+                                <button type="button" id="btn-add-stock-to-report" class="btn-primary" style="padding: 8px 16px; font-size: 13px; border-radius: 6px; display: flex; align-items: center; gap: 4px; height: 35px;">
+                                    <i class="ph ph-plus"></i> Adicionar
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -672,7 +694,7 @@
             </p>
 
             <div id="relatorio-footer-close" style="text-align:right; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                <button type="button" id="btn-close-report-bottom" class="btn-primary close-btn" data-modal="modal-relatorio" style="background-color: #64748b;">Fechar Relatório</button>
+                <button type="button" id="btn-close-report-bottom" class="btn-primary" data-modal="modal-relatorio" style="background-color: #64748b;">Fechar Relatório</button>
             </div>
         </div>
     </div>

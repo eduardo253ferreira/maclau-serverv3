@@ -90,7 +90,7 @@ app.use(helmet({
 
 // 🔒 CORREÇÃO: CORS sem IPs privados genéricos — usar apenas allowedOrigins do .env
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : ['http://localhost:3000'];
 
 app.use(cors({
@@ -100,7 +100,7 @@ app.use(cors({
             callback(null, true);
         } else {
             securityLog('CORS_BLOCKED', { origin });
-            callback(new Error('Not allowed by CORS'));
+            callback(null, false); // Recusa o CORS graciosamente sem atirar erro 500 no servidor
         }
     },
     credentials: true,
@@ -436,6 +436,22 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 data_ultima_revisao DATE
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS produto (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome_produto TEXT NOT NULL,
+                quantidade REAL NOT NULL DEFAULT 0,
+                codigo_barras TEXT UNIQUE,
+                data_ultima_adicao DATETIME,
+                categoria_produto TEXT,
+                unidade TEXT DEFAULT 'un'
+            )`);
+
+            db.run(`ALTER TABLE produto ADD COLUMN unidade TEXT DEFAULT 'un'`, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error("Migration error (unidade):", err);
+                }
+            });
+
             db.run(`CREATE TABLE IF NOT EXISTS checklists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 marca TEXT NOT NULL,
@@ -512,6 +528,14 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 PRIMARY KEY (servico_id, tecnico_id),
                 FOREIGN KEY (servico_id) REFERENCES servicos(id) ON DELETE CASCADE,
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos(id) ON DELETE CASCADE
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS servico_maquinas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                servico_id INTEGER NOT NULL,
+                maquina_id INTEGER NOT NULL,
+                FOREIGN KEY (servico_id) REFERENCES servicos (id) ON DELETE CASCADE,
+                FOREIGN KEY (maquina_id) REFERENCES maquinas (id) ON DELETE CASCADE
             )`);
 
             db.run(`CREATE TABLE IF NOT EXISTS manutencao_tecnicos (
@@ -1244,6 +1268,175 @@ app.post('/api/auth/login', (req, res) => {
 
 // --- ADMIN ROUTES ---
 
+// --- GESTÃO DE STOCK ---
+
+app.get('/api/stock', authenticateJWT, isAdmin, (req, res) => {
+    db.all(`SELECT * FROM produto ORDER BY nome_produto ASC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/stock/barcode/:barcode', authenticateJWT, isAdmin, (req, res) => {
+    const { barcode } = req.params;
+    db.get(`SELECT * FROM produto WHERE codigo_barras = ?`, [barcode], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Produto não encontrado" });
+        res.json(row);
+    });
+});
+
+app.post('/api/stock', authenticateJWT, isAdmin, (req, res) => {
+    let { nome_produto, quantidade, codigo_barras, categoria_produto, unidade } = req.body;
+    
+    nome_produto = sanitizeString(nome_produto);
+    codigo_barras = sanitizeString(codigo_barras);
+    categoria_produto = sanitizeString(categoria_produto);
+    unidade = sanitizeString(unidade) || 'un';
+    const qty = parseFloat(quantidade) || 0;
+    
+    if (!nome_produto) return res.status(400).json({ error: "Nome do produto é obrigatório" });
+    if (qty < 0) return res.status(400).json({ error: "A quantidade não pode ser negativa" });
+    
+    const dateUltimaAdicao = qty > 0 ? new Date().toISOString() : null;
+    
+    if (codigo_barras) {
+        db.get(`SELECT id FROM produto WHERE codigo_barras = ?`, [codigo_barras], (err, row) => {
+            if (err) return handleDBError(res, err);
+            if (row) return res.status(400).json({ error: "Já existe um produto com este código de barras" });
+            insertProduct();
+        });
+    } else {
+        insertProduct();
+    }
+    
+    function insertProduct() {
+        db.run(
+            `INSERT INTO produto (nome_produto, quantidade, codigo_barras, data_ultima_adicao, categoria_produto, unidade) VALUES (?, ?, ?, ?, ?, ?)`,
+            [nome_produto, qty, codigo_barras || null, dateUltimaAdicao, categoria_produto || null, unidade],
+            function (err) {
+                if (err) return handleDBError(res, err);
+                res.status(201).json({
+                    id: this.lastID,
+                    nome_produto,
+                    quantidade: qty,
+                    codigo_barras: codigo_barras || null,
+                    data_ultima_adicao: dateUltimaAdicao,
+                    categoria_produto: categoria_produto || null,
+                    unidade
+                });
+            }
+        );
+    }
+});
+
+app.put('/api/stock/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { nome_produto, quantidade, codigo_barras, categoria_produto, unidade } = req.body;
+    
+    nome_produto = sanitizeString(nome_produto);
+    codigo_barras = sanitizeString(codigo_barras);
+    categoria_produto = sanitizeString(categoria_produto);
+    unidade = sanitizeString(unidade) || 'un';
+    const qty = parseFloat(quantidade) || 0;
+    
+    if (!nome_produto) return res.status(400).json({ error: "Nome do produto é obrigatório" });
+    if (qty < 0) return res.status(400).json({ error: "A quantidade não pode ser negativa" });
+    
+    if (codigo_barras) {
+        db.get(`SELECT id FROM produto WHERE codigo_barras = ? AND id != ?`, [codigo_barras, id], (err, row) => {
+            if (err) return handleDBError(res, err);
+            if (row) return res.status(400).json({ error: "Já existe outro produto com este código de barras" });
+            updateProduct();
+        });
+    } else {
+        updateProduct();
+    }
+    
+    function updateProduct() {
+        db.get(`SELECT quantidade FROM produto WHERE id = ?`, [id], (err, row) => {
+            if (err) return handleDBError(res, err);
+            if (!row) return res.status(404).json({ error: "Produto não encontrado" });
+            
+            let dateUltimaAdicao = null;
+            if (qty > row.quantidade) {
+                dateUltimaAdicao = new Date().toISOString();
+            }
+            
+            const query = dateUltimaAdicao 
+                ? `UPDATE produto SET nome_produto = ?, quantidade = ?, codigo_barras = ?, data_ultima_adicao = ?, categoria_produto = ?, unidade = ? WHERE id = ?`
+                : `UPDATE produto SET nome_produto = ?, quantidade = ?, codigo_barras = ?, categoria_produto = ?, unidade = ? WHERE id = ?`;
+            
+            const params = dateUltimaAdicao
+                ? [nome_produto, qty, codigo_barras || null, dateUltimaAdicao, categoria_produto || null, unidade, id]
+                : [nome_produto, qty, codigo_barras || null, categoria_produto || null, unidade, id];
+                
+            db.run(query, params, function (err) {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Produto atualizado com sucesso" });
+            });
+        });
+    }
+});
+
+app.put('/api/stock/:id/quantity', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { delta } = req.body;
+    
+    const diff = parseFloat(delta);
+    if (isNaN(diff)) return res.status(400).json({ error: "Diferença de quantidade inválida" });
+    
+    db.get(`SELECT quantidade FROM produto WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Produto não encontrado" });
+        
+        const newQty = row.quantidade + diff;
+        if (newQty < 0) return res.status(400).json({ error: "A quantidade resultante não pode ser negativa" });
+        
+        const dateUltimaAdicao = diff > 0 ? new Date().toISOString() : null;
+        
+        const query = dateUltimaAdicao
+            ? `UPDATE produto SET quantidade = ?, data_ultima_adicao = ? WHERE id = ?`
+            : `UPDATE produto SET quantidade = ? WHERE id = ?`;
+            
+        const params = dateUltimaAdicao ? [newQty, dateUltimaAdicao, id] : [newQty, id];
+        
+        db.run(query, params, function(err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Quantidade atualizada", quantidade: newQty });
+        });
+    });
+});
+
+app.put('/api/stock/barcode/:barcode/increment', authenticateJWT, isAdmin, (req, res) => {
+    const { barcode } = req.params;
+    
+    db.get(`SELECT id, nome_produto, quantidade FROM produto WHERE codigo_barras = ?`, [barcode], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Produto não encontrado" });
+        
+        const newQty = row.quantidade + 1;
+        const dateUltimaAdicao = new Date().toISOString();
+        
+        db.run(
+            `UPDATE produto SET quantidade = ?, data_ultima_adicao = ? WHERE id = ?`,
+            [newQty, dateUltimaAdicao, row.id],
+            function(err) {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Quantidade updated", id: row.id, nome_produto: row.nome_produto, quantidade: newQty });
+            }
+        );
+    });
+});
+
+app.delete('/api/stock/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM produto WHERE id = ?`, [id], function (err) {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Produto eliminado com sucesso" });
+    });
+});
+
 app.get('/api/clientes', authenticateJWT, isAdmin, (req, res) => {
     db.all(`SELECT * FROM clientes`, [], (err, rows) => {
         if (err) return handleDBError(res, err);
@@ -1331,12 +1524,21 @@ app.put('/api/admin/avarias/:id/relatorio', authenticateJWT, isAdmin, (req, res)
     const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
     const deslocacoesNum = (deslocacoes !== null && deslocacoes !== undefined && deslocacoes !== '') ? parseInt(deslocacoes) : 1;
 
-    db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
-        [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
-            if (err) return handleDBError(res, err);
-            securityLog('ADMIN_EDIT_REPORT', { type: 'avaria', id, admin_id: req.user.id });
-            res.json({ message: "Relatório atualizado pelo administrador" });
+    db.get(`SELECT pecas_substituidas FROM avarias WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        const oldPecas = row ? row.pecas_substituidas : '';
+
+        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, (adjustErr) => {
+            if (adjustErr) return handleDBError(res, adjustErr);
+
+            db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
+                [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
+                    if (err) return handleDBError(res, err);
+                    securityLog('ADMIN_EDIT_REPORT', { type: 'avaria', id, admin_id: req.user.id });
+                    res.json({ message: "Relatório atualizado pelo administrador" });
+                });
         });
+    });
 });
 
 app.put('/api/admin/servicos/:id/relatorio', authenticateJWT, isAdmin, (req, res) => {
@@ -1346,12 +1548,21 @@ app.put('/api/admin/servicos/:id/relatorio', authenticateJWT, isAdmin, (req, res
     const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
     const deslocacoesNum = (deslocacoes !== null && deslocacoes !== undefined && deslocacoes !== '') ? parseInt(deslocacoes) : 1;
 
-    db.run(`UPDATE servicos SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
-        [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
-            if (err) return handleDBError(res, err);
-            securityLog('ADMIN_EDIT_REPORT', { type: 'servico', id, admin_id: req.user.id });
-            res.json({ message: "Relatório atualizado pelo administrador" });
+    db.get(`SELECT pecas_substituidas FROM servicos WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        const oldPecas = row ? row.pecas_substituidas : '';
+
+        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, (adjustErr) => {
+            if (adjustErr) return handleDBError(res, adjustErr);
+
+            db.run(`UPDATE servicos SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
+                [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
+                    if (err) return handleDBError(res, err);
+                    securityLog('ADMIN_EDIT_REPORT', { type: 'servico', id, admin_id: req.user.id });
+                    res.json({ message: "Relatório atualizado pelo administrador" });
+                });
         });
+    });
 });
 
 app.put('/api/admin/manutencoes/:id/relatorio', authenticateJWT, isAdmin, (req, res) => {
@@ -1361,12 +1572,21 @@ app.put('/api/admin/manutencoes/:id/relatorio', authenticateJWT, isAdmin, (req, 
     const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
     const deslocacoesNum = (deslocacoes !== null && deslocacoes !== undefined && deslocacoes !== '') ? parseInt(deslocacoes) : 1;
 
-    db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
-        [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
-            if (err) return handleDBError(res, err);
-            securityLog('ADMIN_EDIT_REPORT', { type: 'manutencao', id, admin_id: req.user.id });
-            res.json({ message: "Relatório atualizado pelo administrador" });
+    db.get(`SELECT pecas_substituidas FROM manutencoes WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        const oldPecas = row ? row.pecas_substituidas : '';
+
+        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, (adjustErr) => {
+            if (adjustErr) return handleDBError(res, adjustErr);
+
+            db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
+                [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
+                    if (err) return handleDBError(res, err);
+                    securityLog('ADMIN_EDIT_REPORT', { type: 'manutencao', id, admin_id: req.user.id });
+                    res.json({ message: "Relatório atualizado pelo administrador" });
+                });
         });
+    });
 });
 
 // --- CLIENT USERS MANAGEMENT ---
@@ -1876,16 +2096,20 @@ app.post('/api/tecnico/avarias/:id/submeter-relatorio', authenticateJWT, isTecni
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT relatorio_submetido, EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = a.id AND tecnico_id = ?) as is_assigned FROM avarias a WHERE a.id = ?`, [techId, id], (err, row) => {
+    db.get(`SELECT relatorio_submetido, pecas_substituidas, EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = a.id AND tecnico_id = ?) as is_assigned FROM avarias a WHERE a.id = ?`, [techId, id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Avaria não encontrada" });
         if (!row.is_assigned) return res.status(403).json({ error: "Acesso negado" });
         if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já foi submetido." });
 
-        db.run(`UPDATE avarias SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
-            if (err) return handleDBError(res, err);
-            securityLog('RELATORIO_SUBMETIDO', { avaria_id: id, tecnico_id: techId });
-            res.json({ message: "Relatório submetido com sucesso." });
+        deductStockFromReportParts(row.pecas_substituidas, (deductErr) => {
+            if (deductErr) return handleDBError(res, deductErr);
+
+            db.run(`UPDATE avarias SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
+                if (err) return handleDBError(res, err);
+                securityLog('RELATORIO_SUBMETIDO', { avaria_id: id, tecnico_id: techId });
+                res.json({ message: "Relatório submetido com sucesso." });
+            });
         });
     });
 });
@@ -2016,7 +2240,7 @@ app.get('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
 });
 
 app.post('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
-    const { cliente_id, tipo_servico, tipo_camiao, notas, data_agendada } = req.body;
+    const { cliente_id, tipo_servico, tipo_camiao, notas, data_agendada, maquina_ids } = req.body;
     let tecnico_ids = req.body.tecnico_ids;
     if (!tecnico_ids && req.body.tecnico_id) {
         tecnico_ids = [req.body.tecnico_id];
@@ -2026,7 +2250,7 @@ app.post('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
     }
 
     if (!cliente_id || !tipo_servico || !tipo_camiao) {
-        return res.status(400).json({ error: "Cliente, Tipo de Serviço e Tipo de Camião são obrigatórios" });
+        return res.status(400).json({ error: "Cliente, Tipo de Serviço e Tipo de Transporte são obrigatórios" });
     }
 
     const main_tecnico_id = tecnico_ids.length > 0 ? tecnico_ids[0] : null;
@@ -2042,40 +2266,66 @@ app.post('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
             }
             const serviceId = this.lastID;
 
-            const stmt = db.prepare(`INSERT INTO servico_tecnicos (servico_id, tecnico_id) VALUES (?, ?)`);
-            tecnico_ids.forEach(tid => {
-                stmt.run(serviceId, tid);
-            });
-            stmt.finalize((err) => {
-                if (err) {
-                    db.run('ROLLBACK');
-                    return handleDBError(res, err);
-                }
-
-                db.run('COMMIT', (err) => {
-                    if (err) return handleDBError(res, err);
-
-                    securityLog('SERVICE_REPORTED_BY_ADMIN', { id: serviceId, cliente_id, tecnico_ids });
-
-                    if (tecnico_ids.length > 0) {
-                        db.all(`SELECT nome, email FROM tecnicos WHERE id IN (${tecnico_ids.map(() => '?').join(',')})`, tecnico_ids, (err, techs) => {
-                            if (!err && techs) {
-                                db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
-                                    if (!err && client) {
-                                        techs.forEach(t => {
-                                            if (t.email) {
-                                                sendAssignmentEmail(t.email, t.nome, `${tipo_servico} (${tipo_camiao})`, client.nome, notas, 'servico');
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        });
+            const insertTechs = () => {
+                const stmt = db.prepare(`INSERT INTO servico_tecnicos (servico_id, tecnico_id) VALUES (?, ?)`);
+                tecnico_ids.forEach(tid => {
+                    stmt.run(serviceId, tid);
+                });
+                stmt.finalize((err) => {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return handleDBError(res, err);
                     }
 
-                    res.status(201).json({ id: serviceId, message: "Serviço reportado com sucesso" });
+                    db.run('COMMIT', (err) => {
+                        if (err) return handleDBError(res, err);
+
+                        securityLog('SERVICE_REPORTED_BY_ADMIN', { id: serviceId, cliente_id, tecnico_ids });
+
+                        if (tecnico_ids.length > 0) {
+                            db.all(`SELECT nome, email FROM tecnicos WHERE id IN (${tecnico_ids.map(() => '?').join(',')})`, tecnico_ids, (err, techs) => {
+                                if (!err && techs) {
+                                    db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
+                                        if (!err && client) {
+                                            techs.forEach(t => {
+                                                if (t.email) {
+                                                    sendAssignmentEmail(t.email, t.nome, `${tipo_servico} (${tipo_camiao})`, client.nome, notas, 'servico');
+                                                }
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
+
+                        res.status(201).json({ id: serviceId, message: "Serviço reportado com sucesso" });
+                    });
                 });
-            });
+            };
+
+            if (Array.isArray(maquina_ids) && maquina_ids.length > 0) {
+                const stmt = db.prepare(`INSERT INTO servico_maquinas (servico_id, maquina_id) VALUES (?, ?)`);
+                let hasError = false;
+
+                maquina_ids.forEach(mId => {
+                    stmt.run(serviceId, mId, (err) => {
+                        if (err) {
+                            console.error('[DB ERROR] Error inserting service machine:', err);
+                            hasError = true;
+                        }
+                    });
+                });
+
+                stmt.finalize((err) => {
+                    if (err || hasError) {
+                        db.run('ROLLBACK');
+                        return handleDBError(res, err || new Error("Erro ao associar máquinas"));
+                    }
+                    insertTechs();
+                });
+            } else {
+                insertTechs();
+            }
         });
     });
 });
@@ -2274,6 +2524,7 @@ app.delete('/api/servicos/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     db.serialize(() => {
         db.run(`DELETE FROM fotos_relatorio WHERE servico_id = ?`, [id]);
+        db.run(`DELETE FROM servico_maquinas WHERE servico_id = ?`, [id]);
         db.run(`DELETE FROM servicos WHERE id = ?`, [id], function (err) {
             if (err) return handleDBError(res, err);
             securityLog('SERVICO_DELETED', { servico_id: id, admin_id: req.user.id });
@@ -2327,7 +2578,18 @@ app.get('/api/servicos/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
         db.all(`SELECT id, caminho FROM fotos_relatorio WHERE servico_id = ?`, [id], (err, fotos) => {
             if (err) return handleDBError(res, err);
             row.fotos = fotos || [];
-            res.json(row);
+            
+            const machinesQuery = `
+                SELECT m.id, m.marca, m.modelo, m.numero_serie
+                FROM servico_maquinas sm
+                JOIN maquinas m ON sm.maquina_id = m.id
+                WHERE sm.servico_id = ?
+            `;
+            db.all(machinesQuery, [id], (err, machines) => {
+                if (err) return handleDBError(res, err);
+                row.maquinas = machines || [];
+                res.json(row);
+            });
         });
     });
 });
@@ -2359,17 +2621,21 @@ app.post('/api/tecnico/servicos/:id/submeter-relatorio', authenticateJWT, isTecn
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT relatorio_submetido, EXISTS (SELECT 1 FROM servico_tecnicos WHERE servico_id = s.id AND tecnico_id = ?) as is_assigned
+    db.get(`SELECT relatorio_submetido, pecas_substituidas, EXISTS (SELECT 1 FROM servico_tecnicos WHERE servico_id = s.id AND tecnico_id = ?) as is_assigned
             FROM servicos s WHERE s.id = ?`, [techId, id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Serviço não encontrado" });
         if (!row.is_assigned) return res.status(403).json({ error: "Acesso negado" });
         if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já submetido" });
 
-        db.run(`UPDATE servicos SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
-            if (err) return handleDBError(res, err);
-            securityLog('RELATORIO_SERVICO_SUBMETIDO', { service_id: id, tecnico_id: techId });
-            res.json({ message: "Relatório submetido" });
+        deductStockFromReportParts(row.pecas_substituidas, (deductErr) => {
+            if (deductErr) return handleDBError(res, deductErr);
+
+            db.run(`UPDATE servicos SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
+                if (err) return handleDBError(res, err);
+                securityLog('RELATORIO_SERVICO_SUBMETIDO', { service_id: id, tecnico_id: techId });
+                res.json({ message: "Relatório submetido" });
+            });
         });
     });
 });
@@ -2795,17 +3061,21 @@ app.post('/api/tecnico/manutencoes/:id/submeter-relatorio', authenticateJWT, isT
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT relatorio_submetido, EXISTS (SELECT 1 FROM manutencao_tecnicos WHERE manutencao_id = m.id AND tecnico_id = ?) as is_assigned
+    db.get(`SELECT relatorio_submetido, pecas_substituidas, EXISTS (SELECT 1 FROM manutencao_tecnicos WHERE manutencao_id = m.id AND tecnico_id = ?) as is_assigned
             FROM manutencoes m WHERE m.id = ?`, [techId, id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Manutenção não encontrada" });
         if (!row.is_assigned) return res.status(403).json({ error: "Acesso negado" });
         if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já submetido" });
 
-        db.run(`UPDATE manutencoes SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
-            if (err) return handleDBError(res, err);
-            securityLog('RELATORIO_MANUTENCAO_SUBMETIDO', { manutencao_id: id, tecnico_id: techId });
-            res.json({ message: "Relatório de manutenção submetido" });
+        deductStockFromReportParts(row.pecas_substituidas, (deductErr) => {
+            if (deductErr) return handleDBError(res, deductErr);
+
+            db.run(`UPDATE manutencoes SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
+                if (err) return handleDBError(res, err);
+                securityLog('RELATORIO_MANUTENCAO_SUBMETIDO', { manutencao_id: id, tecnico_id: techId });
+                res.json({ message: "Relatório de manutenção submetido" });
+            });
         });
     });
 });
@@ -3457,6 +3727,124 @@ app.get('/api/tecnico/servicos/historico', authenticateJWT, isTecnico, (req, res
         res.json(rows);
     });
 });
+
+app.get('/api/tecnico/stock', authenticateJWT, isTecnico, (req, res) => {
+    db.all(`SELECT id, nome_produto, quantidade, codigo_barras, categoria_produto, unidade FROM produto ORDER BY nome_produto ASC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+function parseReportParts(pecasText) {
+    if (!pecasText) return [];
+    const lines = pecasText.split('\n');
+    const items = [];
+    // Matches: 10m - Product, 1.5kg - Product, 2x - Product, 1.25 - Product, supporting commas
+    const regex = /^([\d.,]+)\s*(x|m|metros|unidades|un|kg|l)?\s*-\s*(.+)$/i;
+
+    lines.forEach(line => {
+        const match = line.trim().match(regex);
+        if (match) {
+            const quantity = parseFloat(match[1].replace(',', '.'));
+            const productName = match[3].trim();
+            if (quantity > 0 && productName) {
+                items.push({ quantity, productName });
+            }
+        }
+    });
+    return items;
+}
+
+function deductStockFromReportParts(pecasText, callback) {
+    const items = parseReportParts(pecasText);
+    if (items.length === 0) return callback(null);
+
+    db.serialize(() => {
+        let errOccurred = null;
+        let completed = 0;
+
+        const selectStmt = db.prepare(`SELECT id, quantidade FROM produto WHERE LOWER(nome_produto) = LOWER(?)`);
+        const updateStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+
+        function checkDone() {
+            completed++;
+            if (completed === items.length) {
+                selectStmt.finalize();
+                updateStmt.finalize();
+                callback(errOccurred);
+            }
+        }
+
+        items.forEach(item => {
+            selectStmt.get(item.productName, (err, prod) => {
+                if (err) {
+                    errOccurred = err;
+                    checkDone();
+                } else if (prod) {
+                    updateStmt.run(item.quantity, prod.id, (updateErr) => {
+                        if (updateErr) errOccurred = updateErr;
+                        checkDone();
+                    });
+                } else {
+                    checkDone();
+                }
+            });
+        });
+    });
+}
+
+function adjustStockFromReportPartsDifference(oldText, newText, callback) {
+    const oldItems = parseReportParts(oldText);
+    const newItems = parseReportParts(newText);
+    const netChanges = {};
+
+    oldItems.forEach(item => {
+        netChanges[item.productName] = (netChanges[item.productName] || 0) - item.quantity;
+    });
+
+    newItems.forEach(item => {
+        netChanges[item.productName] = (netChanges[item.productName] || 0) + item.quantity;
+    });
+
+    const itemsToUpdate = Object.entries(netChanges)
+        .map(([productName, quantity]) => ({ productName, quantity }))
+        .filter(item => item.quantity !== 0);
+
+    if (itemsToUpdate.length === 0) return callback(null);
+
+    db.serialize(() => {
+        let errOccurred = null;
+        let completed = 0;
+
+        const selectStmt = db.prepare(`SELECT id, quantidade FROM produto WHERE LOWER(nome_produto) = LOWER(?)`);
+        const updateStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+
+        function checkDone() {
+            completed++;
+            if (completed === itemsToUpdate.length) {
+                selectStmt.finalize();
+                updateStmt.finalize();
+                callback(errOccurred);
+            }
+        }
+
+        itemsToUpdate.forEach(item => {
+            selectStmt.get(item.productName, (err, prod) => {
+                if (err) {
+                    errOccurred = err;
+                    checkDone();
+                } else if (prod) {
+                    updateStmt.run(item.quantity, prod.id, (updateErr) => {
+                        if (updateErr) errOccurred = updateErr;
+                        checkDone();
+                    });
+                } else {
+                    checkDone();
+                }
+            });
+        });
+    });
+}
 
 // --- CONSULTA POR MÁQUINA (TÉCNICO) ---
 
