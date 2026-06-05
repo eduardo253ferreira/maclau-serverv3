@@ -258,6 +258,8 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'tecnicos') loadTecnicos();
         if (target === 'frota') loadFrota();
         if (target === 'stock') loadStock();
+        if (target === 'fornecedores') loadSuppliers();
+        if (target === 'historico-stock') loadHistoricoStock();
         if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
         if (target === 'agendamentos') initCalendar();
         if (target === 'anotacoes') {
@@ -987,7 +989,8 @@ async function loadClientes(forceFetch = true) {
                 document.getElementById('report-avaria-cliente'),
                 document.getElementById('report-servico-cliente'),
                 document.getElementById('report-manutencao-cliente'),
-                document.getElementById('filter-anotacoes-cliente')
+                document.getElementById('filter-anotacoes-cliente'),
+                document.getElementById('filter-hist-stock-client')
             ];
 
             selects.forEach(select => {
@@ -1306,6 +1309,27 @@ async function generateQR(uuid, maquinaNome) {
         }
 
         openModal('modal-qrcode');
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+// QR Code do Produto
+async function generateProductQR(id, productNome) {
+    try {
+        const res = await apiFetch(`/stock/${id}/qrcode`);
+        const container = document.getElementById('product-qrcode-image-container');
+        const productNameEl = document.getElementById('print-product-name');
+
+        if (productNameEl) {
+            productNameEl.textContent = productNome || '';
+        }
+
+        if (container) {
+            container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">`;
+        }
+
+        openModal('modal-product-qrcode');
     } catch (e) {
         showNotification(e.message, true);
     }
@@ -2200,6 +2224,26 @@ async function loadMachinesForReport() {
 window.onload = async () => {
     await ensureAuth();
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const fullscreen = urlParams.get('fullscreen');
+    const view = urlParams.get('view');
+    
+    if (fullscreen === 'true') {
+        document.body.classList.add('fullscreen-mode');
+        if (view === 'stock') {
+            currentActiveView = 'stock';
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            const viewEl = document.getElementById(`view-stock`);
+            if (viewEl) viewEl.classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            const b = document.querySelector('.nav-btn[data-target="stock"]');
+            if (b) b.classList.add('active');
+            
+            loadStock();
+        }
+    }
+
     // Carregar o dashboard correto baseado no estado inicial
     if (currentMainDashboard === 'avarias') loadAvarias();
     else if (currentMainDashboard === 'servicos') loadServicos();
@@ -2222,6 +2266,14 @@ window.onload = async () => {
     // Logout
     const logoutBtn = document.getElementById('btn-logout');
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
+
+    // Fullscreen Stock Button
+    const btnFullscreenStock = document.getElementById('btn-fullscreen-stock');
+    if (btnFullscreenStock) {
+        btnFullscreenStock.addEventListener('click', () => {
+            window.open('/admin.html?view=stock&fullscreen=true', '_blank');
+        });
+    }
 
     // Filtros Dashboard
     const filterTech = document.getElementById('filter-tech-dashboard');
@@ -2483,6 +2535,14 @@ window.onload = async () => {
     // Impressão QR
     const printBtn = document.getElementById('btn-print-qr');
     if (printBtn) printBtn.addEventListener('click', () => window.print());
+
+    const printProductBtn = document.getElementById('btn-print-product-qr');
+    if (printProductBtn) printProductBtn.addEventListener('click', () => window.print());
+
+    const btnCloseViewSupplier = document.getElementById('btn-close-view-supplier');
+    if (btnCloseViewSupplier) {
+        btnCloseViewSupplier.addEventListener('click', () => closeModal('modal-view-supplier'));
+    }
 
     // Iniciar Auto-Refresh se estivermos no Dashboard
     startAutoRefresh();
@@ -4198,19 +4258,24 @@ function renderStockTable(products) {
             const nameMatch = p.nome_produto && p.nome_produto.toLowerCase().includes(searchVal);
             const barcodeMatch = p.codigo_barras && p.codigo_barras.toLowerCase().includes(searchVal);
             const categoryMatch = p.categoria_produto && p.categoria_produto.toLowerCase().includes(searchVal);
-            return nameMatch || barcodeMatch || categoryMatch;
+            const supplierMatch = p.fornecedor_nome && p.fornecedor_nome.toLowerCase().includes(searchVal);
+            return nameMatch || barcodeMatch || categoryMatch || supplierMatch;
         }
         return true;
     });
     
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-secondary); padding: 30px 10px;">Nenhum produto encontrado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-secondary); padding: 30px 10px;">Nenhum produto encontrado.</td></tr>`;
         return;
     }
     
     filtered.forEach(p => {
         const tr = document.createElement('tr');
         const lastAddedDateStr = p.data_ultima_adicao ? new Date(p.data_ultima_adicao).toLocaleString('pt-PT') : '-';
+        
+        const isLowStock = p.quantidade_minima !== null && p.quantidade_minima !== undefined && p.quantidade <= p.quantidade_minima;
+        const qtyColorStyle = isLowStock ? 'color: var(--danger); font-weight: bold;' : '';
+        const warningIcon = isLowStock ? `<i class="ph ph-warning-circle" style="color: var(--danger); font-size: 16px; vertical-align: middle;" title="Abaixo do stock mínimo! (Mínimo: ${p.quantidade_minima} ${p.unidade || 'un'})"></i>` : '';
         
         tr.innerHTML = `
             <td>
@@ -4220,12 +4285,14 @@ function renderStockTable(products) {
             </td>
             <td><strong>${escapeHTML(p.nome_produto)}</strong></td>
             <td>${p.categoria_produto ? escapeHTML(p.categoria_produto) : '<span style="color:#94a3b8; font-style:italic;">Sem categoria</span>'}</td>
+            <td>${p.fornecedor_nome ? `<a href="#" class="supplier-detail-link" data-id="${p.fornecedor_id}" style="color: var(--accent); font-weight: 600; text-decoration: none; border-bottom: 1px dashed var(--accent); cursor: pointer;">${escapeHTML(p.fornecedor_nome)}</a>` : '<span style="color:#94a3b8; font-style:italic;">Sem fornecedor</span>'}</td>
             <td style="text-align: center;">
                 <div class="qty-control">
                     <button class="qty-btn btn-qty-dec" title="Diminuir Stock">-</button>
-                    <span class="qty-val" style="display: flex; align-items: center; gap: 4px;">
+                    <span class="qty-val" style="display: flex; align-items: center; gap: 4px; ${qtyColorStyle}">
+                        ${warningIcon}
                         <span>${Number(Number(p.quantidade).toFixed(2).replace(/\.00$/, ''))}</span>
-                        <span style="font-size: 11px; color: var(--text-secondary); font-weight: 600; text-transform: lowercase;">${p.unidade || 'un'}</span>
+                        <span style="font-size: 11px; color: ${isLowStock ? 'var(--danger)' : 'var(--text-secondary)'}; font-weight: 600; text-transform: lowercase;">${p.unidade || 'un'}</span>
                     </span>
                     <button class="qty-btn btn-qty-inc" title="Aumentar Stock">+</button>
                 </div>
@@ -4233,6 +4300,9 @@ function renderStockTable(products) {
             <td>${lastAddedDateStr}</td>
             <td>
                 <div style="display:flex; justify-content: flex-end; gap:8px;">
+                    <button class="btn-icon btn-qr-stock" title="Imprimir QR Code">
+                        <i class="ph ph-qr-code"></i>
+                    </button>
                     <button class="btn-icon btn-edit-stock" title="Editar Produto">
                         <i class="ph ph-pencil-simple"></i>
                     </button>
@@ -4245,8 +4315,17 @@ function renderStockTable(products) {
         
         tr.querySelector('.btn-qty-dec').addEventListener('click', () => openAddStockQtyModal(p, 'subtract'));
         tr.querySelector('.btn-qty-inc').addEventListener('click', () => openAddStockQtyModal(p, 'add'));
+        tr.querySelector('.btn-qr-stock').addEventListener('click', () => generateProductQR(p.id, p.nome_produto));
         tr.querySelector('.btn-edit-stock').addEventListener('click', () => openEditProductModal(p));
         tr.querySelector('.btn-delete-stock').addEventListener('click', () => deleteProduct(p.id));
+        
+        const supplierLink = tr.querySelector('.supplier-detail-link');
+        if (supplierLink) {
+            supplierLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                showSupplierDetails(p.fornecedor_id);
+            });
+        }
         
         tbody.appendChild(tr);
     });
@@ -4275,6 +4354,170 @@ async function deleteProduct(id) {
     } catch (e) {
         showNotification(e.message, true);
     }
+}
+
+let cachedStockMovements = [];
+
+async function loadHistoricoStock() {
+    try {
+        const movements = await apiFetch('/stock/movimentos');
+        cachedStockMovements = movements;
+        
+        // Popula select de clientes e garante que temos a lista
+        await loadClientes(false);
+        
+        // Configura listeners para filtros se necessário
+        const filterIds = [
+            'search-hist-stock',
+            'filter-hist-stock-client',
+            'filter-hist-stock-type',
+            'filter-hist-stock-date-start',
+            'filter-hist-stock-date-end'
+        ];
+        
+        filterIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && !el.dataset.listenerAdded) {
+                el.addEventListener(id === 'search-hist-stock' ? 'input' : 'change', () => {
+                    renderHistoricoStockTable(cachedStockMovements);
+                });
+                el.dataset.listenerAdded = 'true';
+            }
+        });
+
+        renderHistoricoStockTable(movements);
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function renderHistoricoStockTable(movements) {
+    const tbody = document.getElementById('table-historico-stock-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const searchVal = (document.getElementById('search-hist-stock')?.value || '').toLowerCase().trim();
+    const clientVal = document.getElementById('filter-hist-stock-client')?.value;
+    const typeVal = document.getElementById('filter-hist-stock-type')?.value;
+    const dateStartVal = document.getElementById('filter-hist-stock-date-start')?.value;
+    const dateEndVal = document.getElementById('filter-hist-stock-date-end')?.value;
+
+    const filtered = movements.filter(m => {
+        // 1. Filtro de pesquisa (produto, quem, referência, cliente)
+        if (searchVal) {
+            const prodMatch = m.nome_produto && m.nome_produto.toLowerCase().includes(searchVal);
+            const userMatch = m.utilizador_nome && m.utilizador_nome.toLowerCase().includes(searchVal);
+            const refMatch = m.referencia_id && String(m.referencia_id).includes(searchVal);
+            const clientMatch = m.cliente_nome && m.cliente_nome.toLowerCase().includes(searchVal);
+            if (!prodMatch && !userMatch && !refMatch && !clientMatch) return false;
+        }
+
+        // 2. Filtro de cliente
+        if (clientVal && m.cliente_id != clientVal) return false;
+
+        // 3. Filtro de tipo
+        if (typeVal) {
+            if (typeVal === 'consumo') {
+                if (!['consumo_avaria', 'consumo_servico', 'consumo_manutencao', 'ajuste_avaria', 'ajuste_servico', 'ajuste_manutencao'].includes(m.tipo_movimento)) return false;
+            } else if (typeVal === 'ajuste') {
+                if (m.tipo_movimento !== 'ajuste_manual') return false;
+            } else if (typeVal === 'adicao') {
+                if (!['registo_inicial', 'adicao_codigo_barras'].includes(m.tipo_movimento)) return false;
+            }
+        }
+
+        // 4. Filtro de data
+        if (m.data_hora) {
+            const mDate = new Date(m.data_hora);
+            if (dateStartVal) {
+                const start = new Date(dateStartVal);
+                start.setHours(0, 0, 0, 0);
+                if (mDate < start) return false;
+            }
+            if (dateEndVal) {
+                const end = new Date(dateEndVal);
+                end.setHours(23, 59, 59, 999);
+                if (mDate > end) return false;
+            }
+        }
+
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-secondary); padding: 30px 10px;">Nenhum registo encontrado.</td></tr>`;
+        return;
+    }
+
+    const typeLabels = {
+        'registo_inicial': 'Registo Inicial',
+        'ajuste_manual': 'Ajuste Manual',
+        'adicao_codigo_barras': 'Leitura Código Barras',
+        'consumo_avaria': 'Consumo (Avaria)',
+        'consumo_servico': 'Consumo (Serviço)',
+        'consumo_manutencao': 'Consumo (Manutenção)',
+        'ajuste_avaria': 'Ajuste (Avaria)',
+        'ajuste_servico': 'Ajuste (Serviço)',
+        'ajuste_manutencao': 'Ajuste (Manutenção)'
+    };
+
+    filtered.forEach(m => {
+        const tr = document.createElement('tr');
+        const dateStr = m.data_hora ? new Date(m.data_hora).toLocaleString('pt-PT') : '-';
+        
+        // Quantidade formatting & colors
+        const qtyVal = Number(Number(m.quantidade).toFixed(2).replace(/\.00$/, ''));
+        let qtyText = qtyVal;
+        let qtyColor = 'var(--text-primary)';
+        if (qtyVal > 0) {
+            qtyText = `+${qtyVal}`;
+            qtyColor = 'var(--success)';
+        } else if (qtyVal < 0) {
+            qtyText = `${qtyVal}`;
+            qtyColor = 'var(--danger)';
+        }
+        
+        const typeLabel = typeLabels[m.tipo_movimento] || m.tipo_movimento;
+        
+        // badge background/color based on type
+        let badgeBg = '#f1f5f9';
+        let badgeColor = '#475569';
+        if (m.tipo_movimento.includes('consumo')) {
+            badgeBg = '#fee2e2';
+            badgeColor = '#b91c1c';
+        } else if (m.tipo_movimento.includes('ajuste_manual')) {
+            badgeBg = '#e0f2fe';
+            badgeColor = '#0369a1';
+        } else if (['registo_inicial', 'adicao_codigo_barras'].includes(m.tipo_movimento)) {
+            badgeBg = 'var(--accent-light)';
+            badgeColor = 'var(--accent)';
+        }
+
+        // Referência formatting
+        let refText = '-';
+        if (m.referencia_id) {
+            if (m.tipo_movimento.includes('avaria')) {
+                refText = `Avaria #${m.referencia_id}`;
+            } else if (m.tipo_movimento.includes('servico')) {
+                refText = `Serviço #${m.referencia_id}`;
+            } else if (m.tipo_movimento.includes('manutencao')) {
+                refText = `Manutenção #${m.referencia_id}`;
+            } else {
+                refText = `#${m.referencia_id}`;
+            }
+        }
+
+        tr.innerHTML = `
+            <td>${dateStr}</td>
+            <td><strong>${escapeHTML(m.nome_produto || 'Produto Eliminado')}</strong></td>
+            <td style="text-align: center; font-weight: bold; color: ${qtyColor};">${qtyText} <span style="font-size: 11px; font-weight: normal; color: var(--text-secondary); text-transform: lowercase;">${m.unidade || 'un'}</span></td>
+            <td><span class="badge-type" style="padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; background: ${badgeBg}; color: ${badgeColor};">${typeLabel}</span></td>
+            <td>${escapeHTML(m.utilizador_nome || 'Sistema')}</td>
+            <td>${m.cliente_nome ? escapeHTML(m.cliente_nome) : '<span style="color:#94a3b8; font-style:italic;">N/A</span>'}</td>
+            <td><span style="font-family: monospace; font-size: 13px;">${refText}</span></td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 let html5QrScanner = null;
@@ -4314,10 +4557,9 @@ function openBarcodeScanner(targetInputId = null) {
                 fps: 20,
                 qrbox: (width, height) => {
                     const w = width || 300;
-                    const h = height || 200;
-                    const boxWidth = Math.min(w * 0.85, 340);
-                    const boxHeight = Math.min(h * 0.35, 120);
-                    return { width: Math.floor(boxWidth), height: Math.floor(boxHeight) };
+                    const h = height || 300;
+                    const size = Math.min(w * 0.75, h * 0.75, 250);
+                    return { width: Math.floor(size), height: Math.floor(size) };
                 }
             };
             
@@ -4642,6 +4884,19 @@ function updateStockProductCalcVisibility() {
             calcGroup.style.display = 'none';
         }
     }
+
+    // Atualizar o label da quantidade mínima
+    const labelMap = {
+        'un': 'unidades',
+        'l': 'litros',
+        'kg': 'kilos',
+        'm': 'metros'
+    };
+    const label = document.getElementById('lbl-stock-product-qty-minima');
+    if (label) {
+        const unitName = labelMap[unit] || 'unidades';
+        label.textContent = `Quantidade Mínima a Notificar (${unitName})`;
+    }
 }
 
 function calculateStockProductQty() {
@@ -4726,14 +4981,222 @@ function onBarcodeScanFailure(error) {
     // Silently ignore frame scan errors
 }
 
+function populateProductModalCategories(selectedCategory = '') {
+    const select = document.getElementById('stock-product-categoria');
+    if (!select) return;
+    
+    const categories = [...new Set(cachedProducts.map(p => p.categoria_produto).filter(Boolean))].sort();
+    
+    select.innerHTML = '<option value="">Nenhuma Categoria</option>';
+    categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        select.appendChild(opt);
+    });
+    
+    if (selectedCategory && !categories.includes(selectedCategory)) {
+        const opt = document.createElement('option');
+        opt.value = selectedCategory;
+        opt.textContent = selectedCategory;
+        select.appendChild(opt);
+    }
+    
+    select.value = selectedCategory;
+}
+
+async function populateProductModalSuppliers(selectedSupplierId = '') {
+    const select = document.getElementById('stock-product-fornecedor');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">A carregar fornecedores...</option>';
+    
+    try {
+        const suppliers = await apiFetch('/fornecedores');
+        select.innerHTML = '<option value="">Nenhum</option>';
+        suppliers.forEach(sup => {
+            const opt = document.createElement('option');
+            opt.value = sup.id;
+            opt.textContent = sup.nome;
+            select.appendChild(opt);
+        });
+        
+        select.value = selectedSupplierId || '';
+    } catch (e) {
+        console.error("Erro ao carregar fornecedores para modal:", e);
+        select.innerHTML = '<option value="">Erro ao carregar fornecedores</option>';
+    }
+}
+
+function addNewCategoryPrompt() {
+    const newCat = prompt("Introduza o nome da nova categoria:");
+    if (!newCat) return;
+    const cleanCat = newCat.trim();
+    if (!cleanCat) return;
+    
+    const select = document.getElementById('stock-product-categoria');
+    if (!select) return;
+    
+    let exists = false;
+    for (let option of select.options) {
+        if (option.value.toLowerCase() === cleanCat.toLowerCase()) {
+            select.value = option.value;
+            exists = true;
+            break;
+        }
+    }
+    
+    if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = cleanCat;
+        opt.textContent = cleanCat;
+        select.appendChild(opt);
+        select.value = cleanCat;
+    }
+}
+
+// Visualizar Detalhes do Fornecedor
+async function showSupplierDetails(id) {
+    try {
+        const sup = await apiFetch(`/fornecedores/${id}`);
+        const idEl = document.getElementById('view-supplier-id');
+        const nomeEl = document.getElementById('view-supplier-nome');
+        const contactoEl = document.getElementById('view-supplier-contacto');
+        const moradaEl = document.getElementById('view-supplier-morada');
+        
+        if (idEl) idEl.textContent = sup.id || '-';
+        if (nomeEl) nomeEl.textContent = sup.nome || '-';
+        if (contactoEl) contactoEl.textContent = sup.contacto || 'Sem contacto';
+        if (moradaEl) moradaEl.textContent = sup.morada || 'Sem morada';
+        
+        openModal('modal-view-supplier');
+    } catch (e) {
+        showNotification(e.message || 'Erro ao carregar dados do fornecedor', true);
+    }
+}
+
+// --- Gestão de Fornecedores ---
+async function loadSuppliers() {
+    const tbody = document.getElementById('table-suppliers-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 10px;">A carregar...</td></tr>';
+    
+    try {
+        const suppliers = await apiFetch('/fornecedores');
+        renderSuppliersTable(suppliers);
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--danger); padding: 10px;">Erro: ${escapeHTML(e.message)}</td></tr>`;
+    }
+}
+
+function renderSuppliersTable(suppliers) {
+    const tbody = document.getElementById('table-suppliers-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    if (suppliers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary); padding: 15px;">Nenhum fornecedor registado.</td></tr>';
+        return;
+    }
+    
+    suppliers.forEach(sup => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${sup.id}</td>
+            <td><strong>${escapeHTML(sup.nome)}</strong></td>
+            <td>${sup.contacto ? escapeHTML(sup.contacto) : '<span style="color:#94a3b8; font-style:italic;">-</span>'}</td>
+            <td>${sup.morada ? escapeHTML(sup.morada) : '<span style="color:#94a3b8; font-style:italic;">-</span>'}</td>
+            <td>
+                <div style="display:flex; justify-content: flex-end; gap:8px;">
+                    <button type="button" class="btn-icon btn-edit-supplier" title="Editar Fornecedor" style="width:28px; height:28px; font-size:14px; padding:0;">
+                        <i class="ph ph-pencil-simple"></i>
+                    </button>
+                    <button type="button" class="btn-icon delete btn-delete-supplier" title="Eliminar Fornecedor" style="width:28px; height:28px; font-size:14px; padding:0;">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        tr.querySelector('.btn-edit-supplier').onclick = () => editSupplier(sup);
+        tr.querySelector('.btn-delete-supplier').onclick = () => deleteSupplier(sup.id);
+        tbody.appendChild(tr);
+    });
+}
+
+function editSupplier(sup) {
+    document.getElementById('supplier-id').value = sup.id;
+    document.getElementById('supplier-nome').value = sup.nome;
+    document.getElementById('supplier-contacto').value = sup.contacto || '';
+    document.getElementById('supplier-morada').value = sup.morada || '';
+    document.getElementById('modal-supplier-title').textContent = 'Editar Fornecedor';
+    document.getElementById('btn-submit-supplier').textContent = 'Atualizar';
+    openModal('modal-supplier');
+}
+
+function resetSupplierForm() {
+    document.getElementById('supplier-id').value = '';
+    document.getElementById('supplier-nome').value = '';
+    document.getElementById('supplier-contacto').value = '';
+    document.getElementById('supplier-morada').value = '';
+    document.getElementById('modal-supplier-title').textContent = 'Novo Fornecedor';
+    document.getElementById('btn-submit-supplier').textContent = 'Guardar';
+}
+
+async function saveSupplier(e) {
+    e.preventDefault();
+    const id = document.getElementById('supplier-id').value;
+    const nome = document.getElementById('supplier-nome').value;
+    const contacto = document.getElementById('supplier-contacto').value;
+    const morada = document.getElementById('supplier-morada').value;
+    
+    const isEdit = id !== '';
+    const endpoint = isEdit ? `/fornecedores/${id}` : '/fornecedores';
+    const method = isEdit ? 'PUT' : 'POST';
+    
+    try {
+        await apiFetch(endpoint, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, contacto, morada })
+        });
+        showNotification(isEdit ? 'Fornecedor atualizado com sucesso!' : 'Fornecedor criado com sucesso!');
+        closeModal('modal-supplier');
+        loadSuppliers();
+        
+        const productModal = document.getElementById('modal-stock-product');
+        if (productModal && !productModal.classList.contains('hidden')) {
+            const currentSelected = document.getElementById('stock-product-fornecedor')?.value;
+            populateProductModalSuppliers(currentSelected);
+        }
+    } catch (err) {
+        showNotification(err.message, true);
+    }
+}
+
+async function deleteSupplier(id) {
+    if (!confirm('Tem a certeza que deseja eliminar este fornecedor?')) return;
+    try {
+        await apiFetch(`/fornecedores/${id}`, { method: 'DELETE' });
+        showNotification('Fornecedor eliminado com sucesso.');
+        loadSuppliers();
+    } catch (err) {
+        showNotification(err.message, true);
+    }
+}
+
 function openAddProductModal(barcode = '') {
     document.getElementById('modal-stock-title').textContent = 'Novo Produto';
     document.getElementById('stock-product-id').value = '';
     document.getElementById('stock-product-nome').value = '';
-    document.getElementById('stock-product-categoria').value = '';
+    
+    populateProductModalCategories('');
+    populateProductModalSuppliers('');
+    
     document.getElementById('stock-product-barras').value = barcode;
     document.getElementById('stock-product-quantidade').value = 0;
     document.getElementById('stock-product-unidade').value = 'un';
+    document.getElementById('stock-product-qty-minima').value = 0;
     
     // Reset calculator inputs
     const stockProductEmb = document.getElementById('stock-product-embalagens');
@@ -4752,9 +5215,13 @@ function openEditProductModal(p) {
     document.getElementById('modal-stock-title').textContent = 'Editar Produto';
     document.getElementById('stock-product-id').value = p.id;
     document.getElementById('stock-product-nome').value = p.nome_produto;
-    document.getElementById('stock-product-categoria').value = p.categoria_produto || '';
+    
+    populateProductModalCategories(p.categoria_produto || '');
+    populateProductModalSuppliers(p.fornecedor_id || '');
+    
     document.getElementById('stock-product-barras').value = p.codigo_barras || '';
     document.getElementById('stock-product-unidade').value = p.unidade || 'un';
+    document.getElementById('stock-product-qty-minima').value = p.quantidade_minima !== null && p.quantidade_minima !== undefined ? p.quantidade_minima : '';
     
     document.getElementById('stock-product-qty-group').style.display = 'none';
     
@@ -4797,9 +5264,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const id = document.getElementById('stock-product-id').value;
             const nome_produto = document.getElementById('stock-product-nome').value;
             const categoria_produto = document.getElementById('stock-product-categoria').value;
+            const fornecedor_id = document.getElementById('stock-product-fornecedor').value;
             const codigo_barras = document.getElementById('stock-product-barras').value;
             const quantidade = document.getElementById('stock-product-quantidade').value;
             const unidade = document.getElementById('stock-product-unidade').value;
+            const quantidade_minima = document.getElementById('stock-product-qty-minima').value;
             
             const isEdit = id !== '';
             const endpoint = isEdit ? `/stock/${id}` : '/stock';
@@ -4809,7 +5278,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 nome_produto,
                 categoria_produto,
                 codigo_barras,
-                unidade
+                unidade,
+                fornecedor_id: fornecedor_id || null,
+                quantidade_minima: quantidade_minima !== '' ? parseFloat(quantidade_minima) : null
             };
             
             if (!isEdit) {
@@ -4897,6 +5368,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnScanBarcode = document.getElementById('btn-scan-barcode');
     if (btnScanBarcode) {
         btnScanBarcode.addEventListener('click', () => openBarcodeScanner());
+    }
+    const btnOpenAddSupplier = document.getElementById('btn-open-add-supplier');
+    if (btnOpenAddSupplier) {
+        btnOpenAddSupplier.addEventListener('click', () => {
+            resetSupplierForm();
+            openModal('modal-supplier');
+        });
+    }
+    
+    const formSupplier = document.getElementById('form-supplier');
+    if (formSupplier) {
+        formSupplier.addEventListener('submit', saveSupplier);
+    }
+    
+    const btnCancelSupplier = document.getElementById('btn-cancel-supplier');
+    if (btnCancelSupplier) {
+        btnCancelSupplier.addEventListener('click', () => {
+            closeModal('modal-supplier');
+        });
+    }
+    
+    const btnAddNewCategory = document.getElementById('btn-add-new-category');
+    if (btnAddNewCategory) {
+        btnAddNewCategory.addEventListener('click', addNewCategoryPrompt);
     }
     
     const btnScanInsideModal = document.getElementById('btn-scan-inside-modal');

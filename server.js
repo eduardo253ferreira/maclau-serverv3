@@ -235,6 +235,13 @@ const handleDBError = (res, err, customMsg = "Erro interno no servidor") => {
     res.status(500).json({ error: customMsg });
 };
 
+const handleStockOrDBError = (res, err) => {
+    if (err && err.isStockError) {
+        return res.status(400).json({ error: err.message });
+    }
+    return handleDBError(res, err);
+};
+
 // Initialize DB
 const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
     if (err) {
@@ -436,6 +443,13 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 data_ultima_revisao DATE
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS fornecedores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                contacto TEXT,
+                morada TEXT
+            )`);
+
             db.run(`CREATE TABLE IF NOT EXISTS produto (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome_produto TEXT NOT NULL,
@@ -443,7 +457,9 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 codigo_barras TEXT UNIQUE,
                 data_ultima_adicao DATETIME,
                 categoria_produto TEXT,
-                unidade TEXT DEFAULT 'un'
+                unidade TEXT DEFAULT 'un',
+                fornecedor_id INTEGER,
+                FOREIGN KEY (fornecedor_id) REFERENCES fornecedores (id)
             )`);
 
             db.run(`ALTER TABLE produto ADD COLUMN unidade TEXT DEFAULT 'un'`, (err) => {
@@ -451,6 +467,33 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                     console.error("Migration error (unidade):", err);
                 }
             });
+
+            db.run(`ALTER TABLE produto ADD COLUMN fornecedor_id INTEGER`, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error("Migration error (fornecedor_id):", err);
+                }
+            });
+
+            db.run(`ALTER TABLE produto ADD COLUMN quantidade_minima REAL`, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error("Migration error (quantidade_minima):", err);
+                }
+            });
+
+            db.run(`CREATE TABLE IF NOT EXISTS movimentos_stock (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                produto_id INTEGER NOT NULL,
+                quantidade REAL NOT NULL,
+                tipo_movimento TEXT NOT NULL,
+                referencia_id INTEGER,
+                cliente_id INTEGER,
+                utilizador_id INTEGER,
+                utilizador_role TEXT,
+                data_hora DATETIME,
+                FOREIGN KEY (produto_id) REFERENCES produto(id) ON DELETE CASCADE,
+                FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL
+            )`);
+
 
             db.run(`CREATE TABLE IF NOT EXISTS checklists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -731,6 +774,79 @@ async function sendAdminNotificationEmail(adminEmails, machineNome, clientNome, 
     } catch (error) {
         console.error('[EMAIL ERROR ADMIN]', error);
     }
+}
+
+// Helpers para stock crítico
+function getUnitName(unit, qty) {
+    const plural = qty !== 1;
+    if (unit === 'un') return plural ? 'unidades' : 'unidade';
+    if (unit === 'l') return plural ? 'litros' : 'litro';
+    if (unit === 'kg') return plural ? 'kilos' : 'kilo';
+    if (unit === 'm') return plural ? 'metros' : 'metro';
+    return unit || '';
+}
+
+async function sendStockLimitEmail(adminEmails, productNome, currentQty, limitQty, unit) {
+    if (!process.env.SMTP_HOST || !adminEmails || adminEmails.length === 0) return;
+
+    const unitName = getUnitName(unit, currentQty);
+    const limitUnitName = getUnitName(unit, limitQty);
+
+    const mailOptions = {
+        from: process.env.EMAIL_FROM || 'Maclau <noreply@maclau.pt>',
+        to: adminEmails.join(','),
+        subject: `⚠️ ALERTA DE STOCK MÍNIMO: ${productNome}`,
+        html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #fca5a5; border-radius: 12px; padding: 30px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <img src="cid:logo" alt="Maclau Logo" style="max-width: 150px; height: auto;">
+                </div>
+                <h1 style="color: #b91c1c; font-size: 20px; margin-bottom: 20px;">Alerta de Stock Crítico!</h1>
+                <p style="font-size: 16px; color: #4b5563;">O produto <strong>"${productNome}"</strong> atingiu ou desceu abaixo do limite mínimo de stock configurado.</p>
+                
+                <div style="background: #fffbeb; padding: 20px; border-radius: 8px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+                    <p style="margin: 0 0 10px 0; font-size: 15px;"><strong>Produto:</strong> ${productNome}</p>
+                    <p style="margin: 0 0 10px 0; font-size: 15px; color: #b91c1c;"><strong>Stock Atual:</strong> ${currentQty} ${unitName}</p>
+                    <p style="margin: 0; font-size: 15px;"><strong>Limite Mínimo:</strong> ${limitQty} ${limitUnitName}</p>
+                </div>
+
+                <p style="font-size: 14px; color: #6b7280;">Por favor, providencie o reabastecimento do produto junto ao fornecedor.</p>
+                
+                <div style="margin-top: 30px; border-top: 1px solid #fee2e2; padding-top: 20px; font-size: 12px; color: #9ca3af;">
+                    Este é um alerta automático de inventário do sistema Maclau.
+                </div>
+            </div>
+        `,
+        attachments: [{
+            filename: 'logo.png',
+            path: path.join(__dirname, 'public', 'img', 'logo.png'),
+            cid: 'logo'
+        }]
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL] Alerta de stock mínimo enviado para: ${adminEmails.join(', ')}`);
+    } catch (error) {
+        console.error('[EMAIL ERROR] Falha ao enviar alerta de stock mínimo:', error);
+    }
+}
+
+function checkAndNotifyStock(productId, newQty, prevQty) {
+    db.get(`SELECT nome_produto, quantidade_minima, unidade FROM produto WHERE id = ?`, [productId], (err, row) => {
+        if (err || !row) return;
+        const limit = row.quantidade_minima;
+        if (limit === null || limit === undefined) return;
+        
+        if (newQty <= limit && (prevQty === undefined || prevQty > limit)) {
+            db.all(`SELECT email FROM administradores WHERE email IS NOT NULL`, [], (err, admins) => {
+                if (!err && admins.length > 0) {
+                    const adminEmails = admins.map(a => a.email);
+                    sendStockLimitEmail(adminEmails, row.nome_produto, newQty, limit, row.unidade);
+                }
+            });
+        }
+    });
 }
 
 // Helper para alertas de frota
@@ -1270,8 +1386,30 @@ app.post('/api/auth/login', (req, res) => {
 
 // --- GESTÃO DE STOCK ---
 
+app.get('/api/stock/movimentos', authenticateJWT, isAdmin, (req, res) => {
+    const query = `
+        SELECT m.*,
+               p.nome_produto,
+               p.unidade,
+               CASE 
+                   WHEN m.utilizador_role = 'admin' THEN (SELECT username FROM administradores WHERE id = m.utilizador_id)
+                   WHEN m.utilizador_role = 'tecnico' THEN (SELECT nome FROM tecnicos WHERE id = m.utilizador_id)
+                   ELSE 'Sistema'
+               END as utilizador_nome,
+               c.nome as cliente_nome
+        FROM movimentos_stock m
+        LEFT JOIN produto p ON m.produto_id = p.id
+        LEFT JOIN clientes c ON m.cliente_id = c.id
+        ORDER BY m.data_hora DESC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
 app.get('/api/stock', authenticateJWT, isAdmin, (req, res) => {
-    db.all(`SELECT * FROM produto ORDER BY nome_produto ASC`, [], (err, rows) => {
+    db.all(`SELECT p.*, f.nome as fornecedor_nome FROM produto p LEFT JOIN fornecedores f ON p.fornecedor_id = f.id ORDER BY p.nome_produto ASC`, [], (err, rows) => {
         if (err) return handleDBError(res, err);
         res.json(rows);
     });
@@ -1279,24 +1417,36 @@ app.get('/api/stock', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/stock/barcode/:barcode', authenticateJWT, isAdmin, (req, res) => {
     const { barcode } = req.params;
-    db.get(`SELECT * FROM produto WHERE codigo_barras = ?`, [barcode], (err, row) => {
-        if (err) return handleDBError(res, err);
-        if (!row) return res.status(404).json({ error: "Produto não encontrado" });
-        res.json(row);
-    });
+    if (barcode && barcode.startsWith('PROD-')) {
+        const id = parseInt(barcode.replace('PROD-', ''), 10);
+        db.get(`SELECT p.*, f.nome as fornecedor_nome FROM produto p LEFT JOIN fornecedores f ON p.fornecedor_id = f.id WHERE p.id = ?`, [id], (err, row) => {
+            if (err) return handleDBError(res, err);
+            if (!row) return res.status(404).json({ error: "Produto não encontrado" });
+            res.json(row);
+        });
+    } else {
+        db.get(`SELECT p.*, f.nome as fornecedor_nome FROM produto p LEFT JOIN fornecedores f ON p.fornecedor_id = f.id WHERE p.codigo_barras = ?`, [barcode], (err, row) => {
+            if (err) return handleDBError(res, err);
+            if (!row) return res.status(404).json({ error: "Produto não encontrado" });
+            res.json(row);
+        });
+    }
 });
 
 app.post('/api/stock', authenticateJWT, isAdmin, (req, res) => {
-    let { nome_produto, quantidade, codigo_barras, categoria_produto, unidade } = req.body;
+    let { nome_produto, quantidade, codigo_barras, categoria_produto, unidade, fornecedor_id, quantidade_minima } = req.body;
     
     nome_produto = sanitizeString(nome_produto);
     codigo_barras = sanitizeString(codigo_barras);
     categoria_produto = sanitizeString(categoria_produto);
     unidade = sanitizeString(unidade) || 'un';
     const qty = parseFloat(quantidade) || 0;
+    const f_id = fornecedor_id ? parseInt(fornecedor_id) : null;
+    const qty_min = quantidade_minima !== undefined && quantidade_minima !== '' && quantidade_minima !== null ? parseFloat(quantidade_minima) : null;
     
     if (!nome_produto) return res.status(400).json({ error: "Nome do produto é obrigatório" });
     if (qty < 0) return res.status(400).json({ error: "A quantidade não pode ser negativa" });
+    if (qty_min !== null && qty_min < 0) return res.status(400).json({ error: "A quantidade mínima não pode ser negativa" });
     
     const dateUltimaAdicao = qty > 0 ? new Date().toISOString() : null;
     
@@ -1312,18 +1462,35 @@ app.post('/api/stock', authenticateJWT, isAdmin, (req, res) => {
     
     function insertProduct() {
         db.run(
-            `INSERT INTO produto (nome_produto, quantidade, codigo_barras, data_ultima_adicao, categoria_produto, unidade) VALUES (?, ?, ?, ?, ?, ?)`,
-            [nome_produto, qty, codigo_barras || null, dateUltimaAdicao, categoria_produto || null, unidade],
+            `INSERT INTO produto (nome_produto, quantidade, codigo_barras, data_ultima_adicao, categoria_produto, unidade, fornecedor_id, quantidade_minima) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [nome_produto, qty, codigo_barras || null, dateUltimaAdicao, categoria_produto || null, unidade, f_id, qty_min],
             function (err) {
                 if (err) return handleDBError(res, err);
+                const newProductId = this.lastID;
+                
+                if (qty > 0) {
+                    const dateStr = new Date().toISOString();
+                    db.run(`
+                        INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [newProductId, qty, 'registo_inicial', null, null, req.user.id, 'admin', dateStr], (movErr) => {
+                        if (movErr) console.error("Erro ao registar movimento de stock:", movErr);
+                    });
+                }
+                
+                // Realizar verificação de stock mínimo após inserção
+                checkAndNotifyStock(newProductId, qty);
+                
                 res.status(201).json({
-                    id: this.lastID,
+                    id: newProductId,
                     nome_produto,
                     quantidade: qty,
                     codigo_barras: codigo_barras || null,
                     data_ultima_adicao: dateUltimaAdicao,
                     categoria_produto: categoria_produto || null,
-                    unidade
+                    unidade,
+                    fornecedor_id: f_id,
+                    quantidade_minima: qty_min
                 });
             }
         );
@@ -1332,16 +1499,19 @@ app.post('/api/stock', authenticateJWT, isAdmin, (req, res) => {
 
 app.put('/api/stock/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    let { nome_produto, quantidade, codigo_barras, categoria_produto, unidade } = req.body;
+    let { nome_produto, quantidade, codigo_barras, categoria_produto, unidade, fornecedor_id, quantidade_minima } = req.body;
     
     nome_produto = sanitizeString(nome_produto);
     codigo_barras = sanitizeString(codigo_barras);
     categoria_produto = sanitizeString(categoria_produto);
     unidade = sanitizeString(unidade) || 'un';
-    const qty = parseFloat(quantidade) || 0;
+    const qty = quantidade !== undefined && quantidade !== null && quantidade !== '' ? parseFloat(quantidade) : null;
+    const f_id = fornecedor_id ? parseInt(fornecedor_id) : null;
+    const qty_min = quantidade_minima !== undefined && quantidade_minima !== '' && quantidade_minima !== null ? parseFloat(quantidade_minima) : null;
     
     if (!nome_produto) return res.status(400).json({ error: "Nome do produto é obrigatório" });
-    if (qty < 0) return res.status(400).json({ error: "A quantidade não pode ser negativa" });
+    if (qty !== null && qty < 0) return res.status(400).json({ error: "A quantidade não pode ser negativa" });
+    if (qty_min !== null && qty_min < 0) return res.status(400).json({ error: "A quantidade mínima não pode ser negativa" });
     
     if (codigo_barras) {
         db.get(`SELECT id FROM produto WHERE codigo_barras = ? AND id != ?`, [codigo_barras, id], (err, row) => {
@@ -1354,26 +1524,31 @@ app.put('/api/stock/:id', authenticateJWT, isAdmin, (req, res) => {
     }
     
     function updateProduct() {
-        db.get(`SELECT quantidade FROM produto WHERE id = ?`, [id], (err, row) => {
+        db.get(`SELECT quantidade, quantidade_minima FROM produto WHERE id = ?`, [id], (err, row) => {
             if (err) return handleDBError(res, err);
             if (!row) return res.status(404).json({ error: "Produto não encontrado" });
             
+            const finalQty = qty !== null ? qty : row.quantidade;
             let dateUltimaAdicao = null;
-            if (qty > row.quantidade) {
+            if (finalQty > row.quantidade) {
                 dateUltimaAdicao = new Date().toISOString();
             }
             
             const query = dateUltimaAdicao 
-                ? `UPDATE produto SET nome_produto = ?, quantidade = ?, codigo_barras = ?, data_ultima_adicao = ?, categoria_produto = ?, unidade = ? WHERE id = ?`
-                : `UPDATE produto SET nome_produto = ?, quantidade = ?, codigo_barras = ?, categoria_produto = ?, unidade = ? WHERE id = ?`;
+                ? `UPDATE produto SET nome_produto = ?, quantidade = ?, codigo_barras = ?, data_ultima_adicao = ?, categoria_produto = ?, unidade = ?, fornecedor_id = ?, quantidade_minima = ? WHERE id = ?`
+                : `UPDATE produto SET nome_produto = ?, quantidade = ?, codigo_barras = ?, categoria_produto = ?, unidade = ?, fornecedor_id = ?, quantidade_minima = ? WHERE id = ?`;
             
             const params = dateUltimaAdicao
-                ? [nome_produto, qty, codigo_barras || null, dateUltimaAdicao, categoria_produto || null, unidade, id]
-                : [nome_produto, qty, codigo_barras || null, categoria_produto || null, unidade, id];
+                ? [nome_produto, finalQty, codigo_barras || null, dateUltimaAdicao, categoria_produto || null, unidade, f_id, qty_min, id]
+                : [nome_produto, finalQty, codigo_barras || null, categoria_produto || null, unidade, f_id, qty_min, id];
                 
             db.run(query, params, function (err) {
                 if (err) return handleDBError(res, err);
-                res.json({ message: "Produto atualizado com sucesso" });
+                
+                // Realizar verificação de stock mínimo após atualização
+                checkAndNotifyStock(id, finalQty, row.quantidade);
+                
+                res.json({ message: "Produto updated com sucesso" });
             });
         });
     }
@@ -1403,6 +1578,19 @@ app.put('/api/stock/:id/quantity', authenticateJWT, isAdmin, (req, res) => {
         
         db.run(query, params, function(err) {
             if (err) return handleDBError(res, err);
+            
+            // Registar movimento
+            const dateStr = new Date().toISOString();
+            db.run(`
+                INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [id, diff, 'ajuste_manual', null, null, req.user.id, 'admin', dateStr], (movErr) => {
+                if (movErr) console.error("Erro ao registar movimento de stock:", movErr);
+            });
+
+            // Realizar verificação de stock mínimo após ajuste de quantidade
+            checkAndNotifyStock(id, newQty, row.quantidade);
+            
             res.json({ message: "Quantidade atualizada", quantidade: newQty });
         });
     });
@@ -1411,7 +1599,15 @@ app.put('/api/stock/:id/quantity', authenticateJWT, isAdmin, (req, res) => {
 app.put('/api/stock/barcode/:barcode/increment', authenticateJWT, isAdmin, (req, res) => {
     const { barcode } = req.params;
     
-    db.get(`SELECT id, nome_produto, quantidade FROM produto WHERE codigo_barras = ?`, [barcode], (err, row) => {
+    const query = barcode && barcode.startsWith('PROD-')
+        ? `SELECT id, nome_produto, quantidade FROM produto WHERE id = ?`
+        : `SELECT id, nome_produto, quantidade FROM produto WHERE codigo_barras = ?`;
+    
+    const param = barcode && barcode.startsWith('PROD-')
+        ? parseInt(barcode.replace('PROD-', ''), 10)
+        : barcode;
+        
+    db.get(query, [param], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Produto não encontrado" });
         
@@ -1423,6 +1619,19 @@ app.put('/api/stock/barcode/:barcode/increment', authenticateJWT, isAdmin, (req,
             [newQty, dateUltimaAdicao, row.id],
             function(err) {
                 if (err) return handleDBError(res, err);
+                
+                // Registar movimento
+                const dateStr = new Date().toISOString();
+                db.run(`
+                    INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [row.id, 1, 'adicao_codigo_barras', null, null, req.user.id, 'admin', dateStr], (movErr) => {
+                    if (movErr) console.error("Erro ao registar movimento de stock:", movErr);
+                });
+
+                // Realizar verificação de stock mínimo após incremento
+                checkAndNotifyStock(row.id, newQty, row.quantidade);
+                
                 res.json({ message: "Quantidade updated", id: row.id, nome_produto: row.nome_produto, quantidade: newQty });
             }
         );
@@ -1434,6 +1643,94 @@ app.delete('/api/stock/:id', authenticateJWT, isAdmin, (req, res) => {
     db.run(`DELETE FROM produto WHERE id = ?`, [id], function (err) {
         if (err) return handleDBError(res, err);
         res.json({ message: "Produto eliminado com sucesso" });
+    });
+});
+
+app.get('/api/stock/:id/qrcode', authenticateJWT, isAdmin, async (req, res) => {
+    const { id } = req.params;
+    const value = `PROD-${id}`;
+    
+    try {
+        const qrCodeDataUrl = await qrcode.toDataURL(value);
+        res.json({ qrCode: qrCodeDataUrl, value });
+    } catch (err) {
+        res.status(500).json({ error: "Falha ao gerar QR Code para o produto" });
+    }
+});
+
+// --- GESTÃO DE FORNECEDORES ---
+
+app.get('/api/fornecedores', authenticateJWT, isAdmin, (req, res) => {
+    db.all(`SELECT * FROM fornecedores ORDER BY nome ASC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/fornecedores/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.get(`SELECT * FROM fornecedores WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Fornecedor não encontrado" });
+        res.json(row);
+    });
+});
+
+app.post('/api/fornecedores', authenticateJWT, isAdmin, (req, res) => {
+    let { nome, contacto, morada } = req.body;
+    nome = sanitizeString(nome);
+    contacto = sanitizeString(contacto);
+    morada = sanitizeString(morada);
+    
+    if (!nome) return res.status(400).json({ error: "Nome do fornecedor é obrigatório" });
+    
+    db.run(
+        `INSERT INTO fornecedores (nome, contacto, morada) VALUES (?, ?, ?)`,
+        [nome, contacto || null, morada || null],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            res.status(201).json({
+                id: this.lastID,
+                nome,
+                contacto: contacto || null,
+                morada: morada || null
+            });
+        }
+    );
+});
+
+app.put('/api/fornecedores/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { nome, contacto, morada } = req.body;
+    nome = sanitizeString(nome);
+    contacto = sanitizeString(contacto);
+    morada = sanitizeString(morada);
+    
+    if (!nome) return res.status(400).json({ error: "Nome do fornecedor é obrigatório" });
+    
+    db.run(
+        `UPDATE fornecedores SET nome = ?, contacto = ?, morada = ? WHERE id = ?`,
+        [nome, contacto || null, morada || null, id],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Fornecedor atualizado com sucesso" });
+        }
+    );
+});
+
+app.delete('/api/fornecedores/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    
+    db.get(`SELECT COUNT(*) as count FROM produto WHERE fornecedor_id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (row && row.count > 0) {
+            return res.status(400).json({ error: "Não é possível eliminar este fornecedor porque tem produtos associados" });
+        }
+        
+        db.run(`DELETE FROM fornecedores WHERE id = ?`, [id], function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Fornecedor eliminado com sucesso" });
+        });
     });
 });
 
@@ -1524,12 +1821,26 @@ app.put('/api/admin/avarias/:id/relatorio', authenticateJWT, isAdmin, (req, res)
     const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
     const deslocacoesNum = (deslocacoes !== null && deslocacoes !== undefined && deslocacoes !== '') ? parseInt(deslocacoes) : 1;
 
-    db.get(`SELECT pecas_substituidas FROM avarias WHERE id = ?`, [id], (err, row) => {
+    db.get(`
+        SELECT a.pecas_substituidas, m.cliente_id
+        FROM avarias a
+        LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+        WHERE a.id = ?
+    `, [id], (err, row) => {
         if (err) return handleDBError(res, err);
         const oldPecas = row ? row.pecas_substituidas : '';
+        const clienteId = row ? row.cliente_id : null;
 
-        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, (adjustErr) => {
-            if (adjustErr) return handleDBError(res, adjustErr);
+        const metadata = {
+            userId: req.user.id,
+            userRole: 'admin',
+            refId: id,
+            tipoMovimento: 'ajuste_avaria',
+            clienteId: clienteId
+        };
+
+        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, metadata, (adjustErr) => {
+            if (adjustErr) return handleStockOrDBError(res, adjustErr);
 
             db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
                 [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
@@ -1548,12 +1859,21 @@ app.put('/api/admin/servicos/:id/relatorio', authenticateJWT, isAdmin, (req, res
     const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
     const deslocacoesNum = (deslocacoes !== null && deslocacoes !== undefined && deslocacoes !== '') ? parseInt(deslocacoes) : 1;
 
-    db.get(`SELECT pecas_substituidas FROM servicos WHERE id = ?`, [id], (err, row) => {
+    db.get(`SELECT pecas_substituidas, cliente_id FROM servicos WHERE id = ?`, [id], (err, row) => {
         if (err) return handleDBError(res, err);
         const oldPecas = row ? row.pecas_substituidas : '';
+        const clienteId = row ? row.cliente_id : null;
 
-        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, (adjustErr) => {
-            if (adjustErr) return handleDBError(res, adjustErr);
+        const metadata = {
+            userId: req.user.id,
+            userRole: 'admin',
+            refId: id,
+            tipoMovimento: 'ajuste_servico',
+            clienteId: clienteId
+        };
+
+        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, metadata, (adjustErr) => {
+            if (adjustErr) return handleStockOrDBError(res, adjustErr);
 
             db.run(`UPDATE servicos SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
                 [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
@@ -1572,12 +1892,21 @@ app.put('/api/admin/manutencoes/:id/relatorio', authenticateJWT, isAdmin, (req, 
     const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
     const deslocacoesNum = (deslocacoes !== null && deslocacoes !== undefined && deslocacoes !== '') ? parseInt(deslocacoes) : 1;
 
-    db.get(`SELECT pecas_substituidas FROM manutencoes WHERE id = ?`, [id], (err, row) => {
+    db.get(`SELECT pecas_substituidas, cliente_id FROM manutencoes WHERE id = ?`, [id], (err, row) => {
         if (err) return handleDBError(res, err);
         const oldPecas = row ? row.pecas_substituidas : '';
+        const clienteId = row ? row.cliente_id : null;
 
-        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, (adjustErr) => {
-            if (adjustErr) return handleDBError(res, adjustErr);
+        const metadata = {
+            userId: req.user.id,
+            userRole: 'admin',
+            refId: id,
+            tipoMovimento: 'ajuste_manutencao',
+            clienteId: clienteId
+        };
+
+        adjustStockFromReportPartsDifference(oldPecas, pecas_substituidas, metadata, (adjustErr) => {
+            if (adjustErr) return handleStockOrDBError(res, adjustErr);
 
             db.run(`UPDATE manutencoes SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
                 [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
@@ -2096,14 +2425,28 @@ app.post('/api/tecnico/avarias/:id/submeter-relatorio', authenticateJWT, isTecni
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT relatorio_submetido, pecas_substituidas, EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = a.id AND tecnico_id = ?) as is_assigned FROM avarias a WHERE a.id = ?`, [techId, id], (err, row) => {
+    db.get(`
+        SELECT a.relatorio_submetido, a.pecas_substituidas, m.cliente_id,
+               EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = a.id AND tecnico_id = ?) as is_assigned
+        FROM avarias a
+        LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+        WHERE a.id = ?
+    `, [techId, id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Avaria não encontrada" });
         if (!row.is_assigned) return res.status(403).json({ error: "Acesso negado" });
         if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já foi submetido." });
 
-        deductStockFromReportParts(row.pecas_substituidas, (deductErr) => {
-            if (deductErr) return handleDBError(res, deductErr);
+        const metadata = {
+            userId: techId,
+            userRole: 'tecnico',
+            refId: id,
+            tipoMovimento: 'consumo_avaria',
+            clienteId: row.cliente_id
+        };
+
+        deductStockFromReportParts(row.pecas_substituidas, metadata, (deductErr) => {
+            if (deductErr) return handleStockOrDBError(res, deductErr);
 
             db.run(`UPDATE avarias SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
                 if (err) return handleDBError(res, err);
@@ -2621,15 +2964,23 @@ app.post('/api/tecnico/servicos/:id/submeter-relatorio', authenticateJWT, isTecn
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT relatorio_submetido, pecas_substituidas, EXISTS (SELECT 1 FROM servico_tecnicos WHERE servico_id = s.id AND tecnico_id = ?) as is_assigned
+    db.get(`SELECT relatorio_submetido, pecas_substituidas, cliente_id, EXISTS (SELECT 1 FROM servico_tecnicos WHERE servico_id = s.id AND tecnico_id = ?) as is_assigned
             FROM servicos s WHERE s.id = ?`, [techId, id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Serviço não encontrado" });
         if (!row.is_assigned) return res.status(403).json({ error: "Acesso negado" });
         if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já submetido" });
 
-        deductStockFromReportParts(row.pecas_substituidas, (deductErr) => {
-            if (deductErr) return handleDBError(res, deductErr);
+        const metadata = {
+            userId: techId,
+            userRole: 'tecnico',
+            refId: id,
+            tipoMovimento: 'consumo_servico',
+            clienteId: row.cliente_id
+        };
+
+        deductStockFromReportParts(row.pecas_substituidas, metadata, (deductErr) => {
+            if (deductErr) return handleStockOrDBError(res, deductErr);
 
             db.run(`UPDATE servicos SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
                 if (err) return handleDBError(res, err);
@@ -3061,15 +3412,23 @@ app.post('/api/tecnico/manutencoes/:id/submeter-relatorio', authenticateJWT, isT
     const { id } = req.params;
     const techId = req.user.id;
 
-    db.get(`SELECT relatorio_submetido, pecas_substituidas, EXISTS (SELECT 1 FROM manutencao_tecnicos WHERE manutencao_id = m.id AND tecnico_id = ?) as is_assigned
+    db.get(`SELECT relatorio_submetido, pecas_substituidas, cliente_id, EXISTS (SELECT 1 FROM manutencao_tecnicos WHERE manutencao_id = m.id AND tecnico_id = ?) as is_assigned
             FROM manutencoes m WHERE m.id = ?`, [techId, id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Manutenção não encontrada" });
         if (!row.is_assigned) return res.status(403).json({ error: "Acesso negado" });
         if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já submetido" });
 
-        deductStockFromReportParts(row.pecas_substituidas, (deductErr) => {
-            if (deductErr) return handleDBError(res, deductErr);
+        const metadata = {
+            userId: techId,
+            userRole: 'tecnico',
+            refId: id,
+            tipoMovimento: 'consumo_manutencao',
+            clienteId: row.cliente_id
+        };
+
+        deductStockFromReportParts(row.pecas_substituidas, metadata, (deductErr) => {
+            if (deductErr) return handleStockOrDBError(res, deductErr);
 
             db.run(`UPDATE manutencoes SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
                 if (err) return handleDBError(res, err);
@@ -3755,48 +4114,127 @@ function parseReportParts(pecasText) {
     return items;
 }
 
-function deductStockFromReportParts(pecasText, callback) {
+function deductStockFromReportParts(pecasText, metadata, callback) {
+    if (typeof metadata === 'function') {
+        callback = metadata;
+        metadata = {};
+    }
     const items = parseReportParts(pecasText);
     if (items.length === 0) return callback(null);
+
+    const meta = metadata || {};
+
+    const aggregated = {};
+    items.forEach(item => {
+        const nameKey = item.productName.toLowerCase();
+        aggregated[nameKey] = (aggregated[nameKey] || 0) + item.quantity;
+    });
 
     db.serialize(() => {
         let errOccurred = null;
         let completed = 0;
+        const keys = Object.keys(aggregated);
+        const productsToCheck = [];
 
-        const selectStmt = db.prepare(`SELECT id, quantidade FROM produto WHERE LOWER(nome_produto) = LOWER(?)`);
-        const updateStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+        const selectStmt = db.prepare(`SELECT id, nome_produto, quantidade, unidade FROM produto WHERE LOWER(nome_produto) = ?`);
 
-        function checkDone() {
-            completed++;
-            if (completed === items.length) {
+        function checkProducts() {
+            if (errOccurred) {
                 selectStmt.finalize();
-                updateStmt.finalize();
-                callback(errOccurred);
+                return callback(errOccurred);
             }
+            selectStmt.finalize();
+            performUpdates();
         }
 
-        items.forEach(item => {
-            selectStmt.get(item.productName, (err, prod) => {
+        keys.forEach(nameKey => {
+            selectStmt.get(nameKey, (err, prod) => {
                 if (err) {
                     errOccurred = err;
-                    checkDone();
-                } else if (prod) {
-                    updateStmt.run(item.quantity, prod.id, (updateErr) => {
-                        if (updateErr) errOccurred = updateErr;
-                        checkDone();
-                    });
+                } else if (!prod) {
+                    // Se o produto não for encontrado no stock, ignoramos (comportamento original)
+                } else if (prod.quantidade < aggregated[nameKey]) {
+                    errOccurred = new Error(`Stock insuficiente para o produto "${prod.nome_produto}". Disponível: ${prod.quantidade} ${prod.unidade || 'un'}, Solicitado: ${aggregated[nameKey]} ${prod.unidade || 'un'}.`);
+                    errOccurred.isStockError = true;
                 } else {
-                    checkDone();
+                    productsToCheck.push({ id: prod.id, name: prod.nome_produto, prevQty: prod.quantidade, deductQty: aggregated[nameKey] });
+                }
+
+                completed++;
+                if (completed === keys.length) {
+                    checkProducts();
                 }
             });
         });
+
+        function performUpdates() {
+            db.serialize(() => {
+                let updateErr = null;
+                let updateCompleted = 0;
+                const updateStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+                const insertMovStmt = db.prepare(`
+                    INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+
+                function checkDone() {
+                    updateCompleted++;
+                    if (updateCompleted === productsToCheck.length) {
+                        updateStmt.finalize();
+                        insertMovStmt.finalize();
+                        callback(updateErr);
+                    }
+                }
+
+                if (productsToCheck.length === 0) {
+                    updateStmt.finalize();
+                    insertMovStmt.finalize();
+                    return callback(null);
+                }
+
+                productsToCheck.forEach(prod => {
+                    updateStmt.run(prod.deductQty, prod.id, (err) => {
+                        if (err) {
+                            updateErr = err;
+                            checkDone();
+                        } else {
+                            const newQty = Math.max(0, prod.prevQty - prod.deductQty);
+                            checkAndNotifyStock(prod.id, newQty, prod.prevQty);
+
+                            // Insert movement
+                            const dateStr = new Date().toISOString();
+                            insertMovStmt.run(
+                                prod.id,
+                                -prod.deductQty,
+                                meta.tipoMovimento || 'consumo',
+                                meta.refId || null,
+                                meta.clienteId || null,
+                                meta.userId || null,
+                                meta.userRole || null,
+                                dateStr,
+                                (movErr) => {
+                                    if (movErr) updateErr = movErr;
+                                    checkDone();
+                                }
+                            );
+                        }
+                    });
+                });
+            });
+        }
     });
 }
 
-function adjustStockFromReportPartsDifference(oldText, newText, callback) {
+function adjustStockFromReportPartsDifference(oldText, newText, metadata, callback) {
+    if (typeof metadata === 'function') {
+        callback = metadata;
+        metadata = {};
+    }
     const oldItems = parseReportParts(oldText);
     const newItems = parseReportParts(newText);
     const netChanges = {};
+    
+    const meta = metadata || {};
 
     oldItems.forEach(item => {
         netChanges[item.productName] = (netChanges[item.productName] || 0) - item.quantity;
@@ -3815,34 +4253,97 @@ function adjustStockFromReportPartsDifference(oldText, newText, callback) {
     db.serialize(() => {
         let errOccurred = null;
         let completed = 0;
+        const productsToCheck = [];
 
-        const selectStmt = db.prepare(`SELECT id, quantidade FROM produto WHERE LOWER(nome_produto) = LOWER(?)`);
-        const updateStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+        const selectStmt = db.prepare(`SELECT id, quantidade, nome_produto, unidade FROM produto WHERE LOWER(nome_produto) = LOWER(?)`);
 
-        function checkDone() {
-            completed++;
-            if (completed === itemsToUpdate.length) {
+        function checkProducts() {
+            if (errOccurred) {
                 selectStmt.finalize();
-                updateStmt.finalize();
-                callback(errOccurred);
+                return callback(errOccurred);
             }
+            selectStmt.finalize();
+            performUpdates();
         }
 
         itemsToUpdate.forEach(item => {
             selectStmt.get(item.productName, (err, prod) => {
                 if (err) {
                     errOccurred = err;
-                    checkDone();
-                } else if (prod) {
-                    updateStmt.run(item.quantity, prod.id, (updateErr) => {
-                        if (updateErr) errOccurred = updateErr;
-                        checkDone();
-                    });
+                } else if (!prod) {
+                    // Ignora produtos que não existem
                 } else {
-                    checkDone();
+                    const newQty = prod.quantidade - item.quantity;
+                    if (newQty < 0) {
+                        errOccurred = new Error(`Stock insuficiente para o produto "${prod.nome_produto}". Disponível: ${prod.quantidade} ${prod.unidade || 'un'}, Necessário: ${item.quantity} ${prod.unidade || 'un'} adicionais.`);
+                        errOccurred.isStockError = true;
+                    } else {
+                        productsToCheck.push({ id: prod.id, name: prod.nome_produto, prevQty: prod.quantidade, changeQty: item.quantity });
+                    }
+                }
+
+                completed++;
+                if (completed === itemsToUpdate.length) {
+                    checkProducts();
                 }
             });
         });
+
+        function performUpdates() {
+            db.serialize(() => {
+                let updateErr = null;
+                let updateCompleted = 0;
+                const updateStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+                const insertMovStmt = db.prepare(`
+                    INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+
+                function checkDone() {
+                    updateCompleted++;
+                    if (updateCompleted === productsToCheck.length) {
+                        updateStmt.finalize();
+                        insertMovStmt.finalize();
+                        callback(updateErr);
+                    }
+                }
+
+                if (productsToCheck.length === 0) {
+                    updateStmt.finalize();
+                    insertMovStmt.finalize();
+                    return callback(null);
+                }
+
+                productsToCheck.forEach(prod => {
+                    updateStmt.run(prod.changeQty, prod.id, (err) => {
+                        if (err) {
+                            updateErr = err;
+                            checkDone();
+                        } else {
+                            const newQty = Math.max(0, prod.prevQty - prod.changeQty);
+                            checkAndNotifyStock(prod.id, newQty, prod.prevQty);
+                            
+                            // Insert movement
+                            const dateStr = new Date().toISOString();
+                            insertMovStmt.run(
+                                prod.id,
+                                -prod.changeQty, // Negative if we consumed more, positive if we consumed less
+                                meta.tipoMovimento || 'ajuste_consumo',
+                                meta.refId || null,
+                                meta.clienteId || null,
+                                meta.userId || null,
+                                meta.userRole || null,
+                                dateStr,
+                                (movErr) => {
+                                    if (movErr) updateErr = movErr;
+                                    checkDone();
+                                }
+                            );
+                        }
+                    });
+                });
+            });
+        }
     });
 }
 

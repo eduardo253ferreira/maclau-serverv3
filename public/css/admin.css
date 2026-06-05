@@ -1219,11 +1219,14 @@ body {
     }
 
     #modal-qrcode,
-    #modal-qrcode * {
+    #modal-qrcode *,
+    #modal-product-qrcode,
+    #modal-product-qrcode * {
         visibility: visible;
     }
 
-    #modal-qrcode {
+    #modal-qrcode,
+    #modal-product-qrcode {
         position: absolute;
         left: 0;
         top: 0;
@@ -1237,7 +1240,8 @@ body {
         border: none;
     }
 
-    #modal-qrcode .modal-content {
+    #modal-qrcode .modal-content,
+    #modal-product-qrcode .modal-content {
         box-shadow: none !important;
         border: none !important;
         padding: 20px !important;
@@ -1249,8 +1253,10 @@ body {
 
     .close-btn,
     #btn-print-qr,
+    #btn-print-product-qr,
     #modal-qrcode h2,
-    #modal-qrcode p:not(#print-contact-info) {
+    #modal-qrcode p:not(#print-contact-info),
+    #modal-product-qrcode p {
         display: none !important;
     }
 
@@ -1890,4 +1896,21 @@ body {
 #barcode-reader video {
     border-radius: 10px;
     object-fit: cover;
+}
+
+/* Fullscreen Mode */
+body.fullscreen-mode .sidebar {
+    display: none !important;
+}
+body.fullscreen-mode .content-area {
+    padding: 20px !important;
+    margin-left: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+}
+body.fullscreen-mode .mobile-header {
+    display: none !important;
+}
+body.fullscreen-mode #btn-fullscreen-stock {
+    display: none !important;
 }
