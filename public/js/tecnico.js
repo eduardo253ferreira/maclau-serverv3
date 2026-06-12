@@ -423,8 +423,22 @@ window.renderPendingTasks = function() {
             actionsDiv.appendChild(btnPausar);
         }
 
-        const btn = document.createElement('button');
         const ehAguardando = (task.estado === 'pendente' || task.estado === 'pausada');
+
+        if (task._type === 'avaria' && ehAguardando) {
+            const btnPrep = document.createElement('button');
+            btnPrep.className = 'btn-status';
+            btnPrep.style.backgroundColor = '#1e3a8a';
+            btnPrep.style.color = '#ffffff';
+            btnPrep.innerHTML = '<i class="ph ph-package"></i> Preparativos';
+            btnPrep.onclick = (e) => {
+                e.stopPropagation();
+                openPreparativosModal(task.id);
+            };
+            actionsDiv.appendChild(btnPrep);
+        }
+
+        const btn = document.createElement('button');
         btn.className = 'btn-status ' + (ehAguardando ? 'btn-resolucao' : 'btn-resolvida');
         btn.innerHTML = ehAguardando ? '<i class="ph ph-play"></i> ' + (task.estado === 'pausada' ? 'Retomar' : 'Começar') : '<i class="ph ph-check"></i> Concluir';
         btn.onclick = (e) => {
@@ -817,6 +831,35 @@ async function openRelatorioModal(id, isStatusChange = false, currentText = '', 
             stockSelector.style.display = disabled ? 'none' : 'block';
         }
 
+        const preparedContainer = document.getElementById('prepared-materials-container');
+        const preparedList = document.getElementById('prepared-materials-list');
+
+        if (preparedContainer && preparedList) {
+            if (type === 'avaria' && data.preparativos && data.preparativos.length > 0) {
+                preparedContainer.style.display = disabled ? 'none' : 'block';
+                preparedList.innerHTML = data.preparativos.map(p => {
+                    const qtyVal = Number(Number(p.quantidade_levada).toFixed(2).replace(/\.00$/, ''));
+                    const usedVal = p.quantidade_usada !== null ? p.quantidade_usada : p.quantidade_levada;
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                            <div>
+                                <span style="font-weight: 600; color: #1e293b;">${escapeHTML(p.nome_produto)}</span>
+                                <span style="font-size: 11px; color: #64748b; margin-left: 6px;">(Levou: ${qtyVal} ${p.unidade || 'un'})</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <label style="font-size: 11px; color: #64748b; font-weight: 500;">Usado:</label>
+                                <input type="number" class="prep-used-qty" data-produto-id="${p.produto_id}" min="0" max="${p.quantidade_levada}" step="any" value="${usedVal}" style="width: 70px; padding: 4px 6px; border-radius: 4px; border: 1px solid #cbd5e1; text-align: center;">
+                                <span style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: lowercase;">${p.unidade || 'un'}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                preparedContainer.style.display = 'none';
+                preparedList.innerHTML = '';
+            }
+        }
+
         // Visibility adjustments for "Identical to PDF"
         const reportSheet = document.getElementById('a4-report-sheet');
         const pdfViewer = document.getElementById('pdf-viewer-container');
@@ -898,6 +941,11 @@ async function saveRelatorioDraft() {
     const assinatura_cliente = isCanvasBlank(canvasCli) ? null : canvasCli.toDataURL('image/png');
     const assinatura_tecnico = isCanvasBlank(canvasTec) ? null : canvasTec.toDataURL('image/png');
 
+    const preparativos = Array.from(document.querySelectorAll('.prep-used-qty')).map(input => ({
+        produto_id: parseInt(input.dataset.produtoId),
+        quantidade_usada: parseFloat(input.value) || 0
+    }));
+
     console.log("Tentando salvar rascunho. Assinatura técnico presente:", !!assinatura_tecnico);
 
     try {
@@ -905,7 +953,7 @@ async function saveRelatorioDraft() {
         const res = await authFetch(endpoint, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes })
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes, preparativos })
         });
 
         if (res.ok) {
@@ -956,12 +1004,17 @@ async function submitRelatorio() {
             const assinatura_cliente = isCanvasBlank(canvasCli) ? null : canvasCli.toDataURL('image/png');
             const assinatura_tecnico = isCanvasBlank(canvasTec) ? null : canvasTec.toDataURL('image/png');
 
+            const preparativos = Array.from(document.querySelectorAll('.prep-used-qty')).map(input => ({
+                produto_id: parseInt(input.dataset.produtoId),
+                quantidade_usada: parseFloat(input.value) || 0
+            }));
+
             // 1. Salvar Rascunho Final
             const draftEndpoint = type === 'servico' ? `${API_BASE}/tecnico/servicos/${id}/relatorio` : (type === 'manutencao' ? `${API_BASE}/tecnico/manutencoes/${id}/relatorio` : `${API_BASE}/tecnico/avarias/${id}/relatorio`);
             await authFetch(draftEndpoint, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes })
+                body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes, preparativos })
             });
 
             // 2. Submeter
@@ -1531,12 +1584,228 @@ function initStockSelector() {
     });
 }
 
+let currentPrepItems = [];
+
+async function openPreparativosModal(avariaId) {
+    document.getElementById('preparativos-avaria-id').value = avariaId;
+    document.getElementById('prep-search-input').value = '';
+    document.getElementById('prep-qty-input').value = '1';
+    const unitLabel = document.getElementById('prep-qty-unit');
+    if (unitLabel) unitLabel.textContent = 'un';
+    document.getElementById('prep-search-dropdown').style.display = 'none';
+
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/avarias/${avariaId}/preparativos`);
+        if (!res.ok) throw new Error("Erro ao carregar preparativos");
+        currentPrepItems = await res.json();
+        renderPrepItemsList();
+        document.getElementById('modal-preparativos').classList.remove('hidden');
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function renderPrepItemsList() {
+    const container = document.getElementById('prep-list-container');
+    if (!container) return;
+
+    if (currentPrepItems.length === 0) {
+        container.innerHTML = `<p style="text-align: center; color: var(--text-secondary); font-size: 13px; margin: 15px 0;">Nenhum produto selecionado para levar.</p>`;
+        return;
+    }
+
+    container.innerHTML = '';
+    currentPrepItems.forEach(item => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+        div.style.padding = '8px 12px';
+        div.style.borderBottom = '1px solid #f1f5f9';
+        div.style.fontSize = '13px';
+
+        const qtyLabel = Number(Number(item.quantidade_levada).toFixed(2).replace(/\.00$/, ''));
+
+        div.innerHTML = `
+            <div>
+                <strong style="color: var(--text-main);">${escapeHTML(item.nome_produto)}</strong>
+                <span style="color: var(--text-secondary); font-size: 11px; margin-left: 5px;">(${qtyLabel} ${item.unidade || 'un'})</span>
+            </div>
+            <button type="button" class="btn-icon" style="color: var(--danger); cursor: pointer;" onclick="removePrepItem(${item.produto_id})">
+                <i class="ph ph-trash"></i>
+            </button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+window.removePrepItem = function(produtoId) {
+    currentPrepItems = currentPrepItems.filter(item => item.produto_id !== produtoId);
+    renderPrepItemsList();
+};
+
+function initPreparativosSelector() {
+    const searchInput = document.getElementById('prep-search-input');
+    const dropdown = document.getElementById('prep-search-dropdown');
+    const qtyInput = document.getElementById('prep-qty-input');
+    const btnAdd = document.getElementById('btn-add-stock-to-prep');
+
+    if (!searchInput || !dropdown || !qtyInput || !btnAdd) return;
+
+    let selectedProduct = null;
+
+    searchInput.addEventListener('input', () => {
+        const query = searchInput.value.toLowerCase().trim();
+        dropdown.innerHTML = '';
+        if (!query) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        const filtered = stockProducts.filter(p => 
+            (p.nome_produto && p.nome_produto.toLowerCase().includes(query)) ||
+            (p.codigo_barras && p.codigo_barras.toLowerCase().includes(query))
+        );
+
+        if (filtered.length === 0) {
+            const div = document.createElement('div');
+            div.className = 'custom-search-option';
+            div.style.color = '#94a3b8';
+            div.style.fontStyle = 'italic';
+            div.textContent = 'Nenhum produto encontrado';
+            dropdown.appendChild(div);
+        } else {
+            filtered.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'custom-search-option';
+                div.innerHTML = `
+                    <div style="font-weight: 600;">${escapeHTML(p.nome_produto)}</div>
+                    <div style="font-size: 11px; color: #64748b;">Qtd. Disp: ${Number(Number(p.quantidade).toFixed(2).replace(/\.00$/, ''))} ${p.unidade || 'un'} | ${p.categoria_produto || 'Sem categoria'}</div>
+                `;
+                div.addEventListener('click', () => {
+                    searchInput.value = p.nome_produto;
+                    selectedProduct = p;
+                    dropdown.style.display = 'none';
+                    const unitLabel = document.getElementById('prep-qty-unit');
+                    if (unitLabel) {
+                        unitLabel.textContent = p.unidade || 'un';
+                    }
+                });
+                dropdown.appendChild(div);
+            });
+        }
+        dropdown.style.display = 'block';
+    });
+
+    searchInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            dropdown.style.display = 'none';
+            if (selectedProduct && searchInput.value !== selectedProduct.nome_produto) {
+                selectedProduct = null;
+            }
+            if (!selectedProduct) {
+                const exactMatch = stockProducts.find(p => p.nome_produto.toLowerCase() === searchInput.value.toLowerCase().trim());
+                if (exactMatch) {
+                    selectedProduct = exactMatch;
+                    searchInput.value = exactMatch.nome_produto;
+                    const unitLabel = document.getElementById('prep-qty-unit');
+                    if (unitLabel) unitLabel.textContent = exactMatch.unidade || 'un';
+                } else {
+                    searchInput.value = '';
+                    const unitLabel = document.getElementById('prep-qty-unit');
+                    if (unitLabel) unitLabel.textContent = 'un';
+                }
+            }
+        }, 200);
+    });
+
+    btnAdd.addEventListener('click', () => {
+        const qty = parseFloat(qtyInput.value);
+        if (!selectedProduct) {
+            showNotification('Selecione um produto válido do stock.', true);
+            return;
+        }
+        if (isNaN(qty) || qty <= 0) {
+            showNotification('Insira uma quantidade válida.', true);
+            return;
+        }
+
+        const existing = currentPrepItems.find(item => item.produto_id === selectedProduct.id);
+        if (existing) {
+            existing.quantidade_levada += qty;
+        } else {
+            currentPrepItems.push({
+                produto_id: selectedProduct.id,
+                nome_produto: selectedProduct.nome_produto,
+                quantidade_levada: qty,
+                unidade: selectedProduct.unidade || 'un'
+            });
+        }
+
+        renderPrepItemsList();
+
+        searchInput.value = '';
+        qtyInput.value = '1';
+        selectedProduct = null;
+        const unitLabel = document.getElementById('prep-qty-unit');
+        if (unitLabel) unitLabel.textContent = 'un';
+    });
+}
+
+function initPreparativosModalEvents() {
+    const btnSave = document.getElementById('btn-save-preparativos');
+    const btnCancel = document.getElementById('btn-cancel-preparativos');
+    
+    if (btnSave) {
+        btnSave.addEventListener('click', async () => {
+            const avariaId = document.getElementById('preparativos-avaria-id').value;
+            const items = currentPrepItems.map(item => ({
+                produto_id: item.produto_id,
+                quantidade_levada: item.quantidade_levada
+            }));
+
+            btnSave.disabled = true;
+            btnSave.textContent = "A gravar...";
+
+            try {
+                const res = await authFetch(`${API_BASE}/tecnico/avarias/${avariaId}/preparativos`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items })
+                });
+
+                if (res.ok) {
+                    showNotification("Preparativos de stock gravados com sucesso!");
+                    document.getElementById('modal-preparativos').classList.add('hidden');
+                    loadMyTasks();
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.error || "Erro ao gravar preparativos.");
+                }
+            } catch (e) {
+                showNotification(e.message, true);
+            } finally {
+                btnSave.disabled = false;
+                btnSave.textContent = "Confirmar e Deduzir Stock";
+            }
+        });
+    }
+
+    if (btnCancel) {
+        btnCancel.addEventListener('click', () => {
+            document.getElementById('modal-preparativos').classList.add('hidden');
+        });
+    }
+}
+
 window.onload = () => {
     showView();
     initSignaturePad();
     initGlobalTimer();
     startAutoRefresh();
     initStockSelector();
+    initPreparativosSelector();
+    initPreparativosModalEvents();
 
     const inputFotos = document.getElementById('relatorio-fotos');
     if (inputFotos) {

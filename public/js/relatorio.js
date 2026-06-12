@@ -155,10 +155,39 @@ function renderReport(data) {
             <div class="content-box" style="min-height: 80px;">${data.relatorio || 'Nenhuma descrição detalhada fornecida.'}</div>
         </div>
 
-        ${data.pecas_substituidas ? `
+        ${(data.pecas_substituidas || (data.preparativos && data.preparativos.length > 0)) ? `
         <div class="section">
-            <h3><i class="ph ph-package"></i> Peças Substituídas</h3>
-            <div style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6;">${data.pecas_substituidas || 'Nenhuma peça registada.'}</div>
+            <h3><i class="ph ph-package"></i> Peças / Consumíveis</h3>
+            ${data.preparativos && data.preparativos.length > 0 ? `
+            <div style="margin-bottom: 15px;">
+                <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Peças do Stock Utilizadas:</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; margin-bottom: 15px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e2e8f0; color: #64748b;">
+                            <th style="padding: 6px 12px; font-weight: 600;">Produto</th>
+                            <th style="padding: 6px 12px; font-weight: 600; text-align: right;">Quantidade Utilizada</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.preparativos.map(p => {
+                            const usedVal = Number(Number(p.quantidade_usada).toFixed(2).replace(/\.00$/, ''));
+                            return `
+                            <tr style="border-bottom: 1px solid #f1f5f9;">
+                                <td style="padding: 8px 12px; font-weight: 500;">${p.nome_produto}</td>
+                                <td style="padding: 8px 12px; text-align: right; font-weight: 700;">${usedVal} ${p.unidade || 'un'}</td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            ` : ''}
+            ${data.pecas_substituidas ? `
+            <div>
+                ${data.preparativos && data.preparativos.length > 0 ? `<h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Outras Peças/Descrição:</h4>` : ''}
+                <div style="white-space: pre-wrap; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.6;">${data.pecas_substituidas}</div>
+            </div>
+            ` : ''}
         </div>
         ` : ''}
 

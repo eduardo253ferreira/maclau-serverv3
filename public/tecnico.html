@@ -475,6 +475,50 @@
         </main>
     </div>
 
+    <!-- Modal Preparativos -->
+    <div id="modal-preparativos" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-btn" data-modal="modal-preparativos">&times;</span>
+            <h2 style="color: var(--primary-color); display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <i class="ph ph-package"></i> Preparativos de Material
+            </h2>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;">Selecione os produtos do stock que irá levar para esta avaria. Eles serão deduzidos do stock imediatamente.</p>
+            
+            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px dashed #cbd5e1; margin-bottom: 15px;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">
+                    Pesquisar e Adicionar Produto
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; position: relative;">
+                    <div style="position: relative; flex: 1; min-width: 180px;">
+                        <input type="text" id="prep-search-input" placeholder="Pesquisar produto no stock..." style="padding: 8px 12px; font-size: 13px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; box-sizing: border-box;" autocomplete="off">
+                        <div id="prep-search-dropdown" class="custom-search-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 150px; overflow-y: auto; z-index: 1001;">
+                            <!-- Opções dinâmicas -->
+                        </div>
+                    </div>
+                    <div style="width: 85px; position: relative; display: flex; align-items: center;">
+                        <input type="number" id="prep-qty-input" min="0.001" step="any" value="1" style="padding: 8px 24px 8px 8px; font-size: 13px; border-radius: 6px; border: 1px solid #cbd5e1; width: 100%; text-align: center; box-sizing: border-box;">
+                        <span id="prep-qty-unit" style="position: absolute; right: 6px; font-size: 11px; font-weight: 600; color: #64748b; pointer-events: none; text-transform: lowercase;">un</span>
+                    </div>
+                    <button type="button" id="btn-add-stock-to-prep" class="btn-primary" style="padding: 8px 16px; font-size: 13px; border-radius: 6px; display: flex; align-items: center; gap: 4px; height: 35px;">
+                        <i class="ph ph-plus"></i> Adicionar
+                    </button>
+                </div>
+            </div>
+
+            <h3 style="font-size: 14px; color: var(--text-main); margin-bottom: 10px; font-weight: 600;">Produtos a Levar:</h3>
+            <div id="prep-list-container" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: white; padding: 5px; margin-bottom: 20px;">
+                <p style="text-align: center; color: var(--text-secondary); font-size: 13px; margin: 15px 0;">Nenhum produto selecionado para levar.</p>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+                <button type="button" id="btn-save-preparativos" class="btn-primary" style="flex: 2;">Confirmar e Deduzir Stock</button>
+                <button type="button" id="btn-cancel-preparativos" class="btn-secondary" style="flex: 1;">Cancelar</button>
+            </div>
+            
+            <input type="hidden" id="preparativos-avaria-id">
+        </div>
+    </div>
+
     <!-- Modal Pausar -->
     <div id="modal-pausar" class="modal hidden">
         <div class="modal-content">
@@ -593,6 +637,19 @@
                         <!-- JS popula aqui -->
                     </div>
                     <div class="a4-editable-area" id="a4-pecas-input-section" style="min-height: 60px;">
+                        <!-- Secção de Produtos Preparados -->
+                        <div id="prepared-materials-container" style="display: none; margin-bottom: 15px; background: #f0fdf4; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0;">
+                            <div style="font-size: 13px; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                                <i class="ph ph-briefcase" style="font-size: 18px;"></i> Peças Levadas para a Reparação
+                            </div>
+                            <div style="font-size: 12px; color: #166534; margin-bottom: 10px;">
+                                Indique a quantidade de cada peça que efetivamente utilizou na reparação. O restante será devolvido ao stock.
+                            </div>
+                            <div id="prepared-materials-list" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Linhas com o produto, quantidade levada, e input para quantidade usada -->
+                            </div>
+                        </div>
+
                         <textarea id="relatorio-pecas" rows="2" placeholder="Liste as peças utilizadas..."></textarea>
                         
                         <!-- Novo Seletor de Peças do Stock -->

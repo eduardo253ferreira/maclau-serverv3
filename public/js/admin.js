@@ -139,6 +139,63 @@ async function deleteTecnico(id) {
     } catch (e) { showNotification(e.message, true); }
 }
 
+async function deleteAdministrador(id) {
+    if (!confirm('Tem a certeza que deseja remover este administrador?')) return;
+    try {
+        await apiFetch(`/administradores/${id}`, { method: 'DELETE' });
+        showNotification('Administrador removido com sucesso.');
+        loadAdministradores();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+async function loadAdministradores() {
+    try {
+        const admins = await apiFetch('/administradores');
+        const tbody = document.getElementById('table-administradores-body');
+        tbody.innerHTML = '';
+
+        admins.forEach(a => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="col-id"></td>
+                <td class="col-username" style="font-weight: 600;"></td>
+                <td class="col-email"></td>
+                <td>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-icon btn-edit" title="Editar">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button class="btn-icon delete btn-delete" title="Apagar">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tr.querySelector('.col-id').textContent = a.id;
+            tr.querySelector('.col-username').textContent = a.username;
+            tr.querySelector('.col-email').textContent = a.email || '-';
+
+            tr.querySelector('.btn-edit').onclick = () => openEditAdministradorModal(a);
+            tr.querySelector('.btn-delete').onclick = () => deleteAdministrador(a.id);
+
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+function openEditAdministradorModal(admin) {
+    document.getElementById('edit-admin-id').value = admin.id;
+    document.getElementById('edit-admin-username').value = admin.username;
+    document.getElementById('edit-admin-email').value = admin.email || '';
+    document.getElementById('edit-admin-password').value = '';
+    document.getElementById('edit-admin-password-confirm').value = '';
+    openModal('modal-edit-administrador');
+}
+
 
 // Autenticação inicial
 async function ensureAuth() {
@@ -256,8 +313,10 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'manutencoes-recorrentes') loadRecorrentes();
         if (target === 'maquinas') loadMaquinas();
         if (target === 'tecnicos') loadTecnicos();
+        if (target === 'administradores') loadAdministradores();
         if (target === 'frota') loadFrota();
         if (target === 'stock') loadStock();
+        if (target === 'stock-maquinas') loadStockMaquinas();
         if (target === 'fornecedores') loadSuppliers();
         if (target === 'historico-stock') loadHistoricoStock();
         if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
@@ -562,7 +621,251 @@ async function loadAgendamentos() {
 
 // --- Modals ---
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+    if (id === 'modal-report-avaria') resetReportModal('avaria');
+    if (id === 'modal-report-servico') resetReportModal('servico');
+    if (id === 'modal-report-manutencao') resetReportModal('manutencao');
+}
+
+function formatDatetimeLocal(dateStr) {
+    if (!dateStr) return '';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch(e) {
+        return '';
+    }
+}
+
+function resetReportModal(type) {
+    if (type === 'avaria') {
+        const form = document.getElementById('form-report-avaria');
+        if (form) form.reset();
+        const editId = document.getElementById('edit-avaria-id');
+        if (editId) editId.value = '';
+        const modal = document.getElementById('modal-report-avaria');
+        if (modal) {
+            const h2 = modal.querySelector('h2');
+            if (h2) h2.textContent = 'Reportar Avaria';
+            const btn = modal.querySelector('button[type="submit"]');
+            if (btn) btn.textContent = 'Criar Reporte';
+        }
+        const selectMaquina = document.getElementById('report-avaria-maquina');
+        if (selectMaquina) {
+            selectMaquina.innerHTML = '<option value="">Selecione o Cliente primeiro</option>';
+            selectMaquina.disabled = true;
+        }
+    } else if (type === 'servico') {
+        const form = document.getElementById('form-report-servico');
+        if (form) form.reset();
+        const editId = document.getElementById('edit-servico-id');
+        if (editId) editId.value = '';
+        const modal = document.getElementById('modal-report-servico');
+        if (modal) {
+            const h2 = modal.querySelector('h2');
+            if (h2) h2.textContent = 'Reportar Serviço';
+            const btn = modal.querySelector('button[type="submit"]');
+            if (btn) btn.textContent = 'Criar Serviço';
+        }
+        const customTipoContainer = document.getElementById('report-servico-tipo-outro-container');
+        if (customTipoContainer) customTipoContainer.classList.add('hidden');
+        const customTipoInput = document.getElementById('report-servico-tipo-outro');
+        if (customTipoInput) {
+            customTipoInput.required = false;
+            customTipoInput.value = '';
+        }
+        const customCamiaoContainer = document.getElementById('report-servico-camiao-outro-container');
+        if (customCamiaoContainer) customCamiaoContainer.classList.add('hidden');
+        const customCamiaoInput = document.getElementById('report-servico-camiao-outro');
+        if (customCamiaoInput) {
+            customCamiaoInput.required = false;
+            customCamiaoInput.value = '';
+        }
+        const mContainer = document.getElementById('report-servico-maquinas-container');
+        if (mContainer) mContainer.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
+    } else if (type === 'manutencao') {
+        const form = document.getElementById('form-report-manutencao');
+        if (form) form.reset();
+        const editId = document.getElementById('edit-manutencao-id');
+        if (editId) editId.value = '';
+        const modal = document.getElementById('modal-report-manutencao');
+        if (modal) {
+            const h2 = modal.querySelector('h2');
+            if (h2) h2.textContent = 'Reportar Manutenção';
+            const btn = modal.querySelector('button[type="submit"]');
+            if (btn) btn.textContent = 'Criar Manutenção';
+        }
+        const mContainer = document.getElementById('report-manutencao-maquinas-container');
+        if (mContainer) mContainer.innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
+    }
+}
+
+async function openEditAvariaModal(a) {
+    try {
+        const maquinas = await apiFetch('/maquinas');
+        const machine = maquinas.find(m => m.uuid === a.maquina_id);
+        if (!machine) {
+            showNotification('Máquina não encontrada para esta avaria.', true);
+            return;
+        }
+
+        const clienteId = machine.cliente_id;
+        
+        document.getElementById('edit-avaria-id').value = a.id;
+        
+        const modal = document.getElementById('modal-report-avaria');
+        if (modal) {
+            const h2 = modal.querySelector('h2');
+            if (h2) h2.textContent = 'Editar Avaria';
+            const btn = modal.querySelector('button[type="submit"]');
+            if (btn) btn.textContent = 'Guardar Alterações';
+        }
+
+        const selectCliente = document.getElementById('report-avaria-cliente');
+        selectCliente.value = clienteId;
+        
+        const selectMaquina = document.getElementById('report-avaria-maquina');
+        selectMaquina.innerHTML = '<option value="">Carregando máquinas...</option>';
+        selectMaquina.disabled = true;
+
+        const filtradas = maquinas.filter(m => m.cliente_id == clienteId);
+        selectMaquina.innerHTML = '<option value="">Selecione a Máquina</option>';
+        filtradas.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.uuid;
+            opt.textContent = `${m.marca} - ${m.modelo} (${m.numero_serie || 'S/N'})`;
+            selectMaquina.appendChild(opt);
+        });
+        selectMaquina.disabled = false;
+        selectMaquina.value = a.maquina_id;
+
+        document.getElementById('report-avaria-tipo').value = a.tipo_avaria;
+        document.getElementById('report-avaria-notas').value = a.notas || '';
+        document.getElementById('report-avaria-agendada').value = formatDatetimeLocal(a.data_agendada);
+
+        const techIds = a.tecnico_id ? a.tecnico_id.toString().split(',') : [];
+        document.querySelectorAll('input[name="report-avaria-tecnico-ids"]').forEach(cb => {
+            cb.checked = techIds.includes(cb.value);
+        });
+
+        openModal('modal-report-avaria');
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+async function openEditServicoModal(s) {
+    try {
+        document.getElementById('edit-servico-id').value = s.id;
+
+        const modal = document.getElementById('modal-report-servico');
+        if (modal) {
+            const h2 = modal.querySelector('h2');
+            if (h2) h2.textContent = 'Editar Serviço';
+            const btn = modal.querySelector('button[type="submit"]');
+            if (btn) btn.textContent = 'Guardar Alterações';
+        }
+
+        document.getElementById('report-servico-cliente').value = s.cliente_id;
+        await loadMachinesForService();
+
+        const details = await apiFetch(`/servicos/${s.id}/detalhes-relatorio`);
+        const associatedIds = details.maquinas ? details.maquinas.map(m => m.id) : [];
+
+        document.querySelectorAll('.srv-maquina-checkbox').forEach(cb => {
+            cb.checked = associatedIds.includes(parseInt(cb.value));
+        });
+
+        const selectTipo = document.getElementById('report-servico-tipo');
+        const customTipoContainer = document.getElementById('report-servico-tipo-outro-container');
+        const customTipoInput = document.getElementById('report-servico-tipo-outro');
+        
+        const standardTipos = ['Transporte', 'Instalação', 'Transporte/Instalação'];
+        if (standardTipos.includes(s.tipo_servico)) {
+            selectTipo.value = s.tipo_servico;
+            customTipoContainer.classList.add('hidden');
+            customTipoInput.required = false;
+            customTipoInput.value = '';
+        } else {
+            selectTipo.value = 'Outros';
+            customTipoContainer.classList.remove('hidden');
+            customTipoInput.required = true;
+            customTipoInput.value = s.tipo_servico || '';
+        }
+
+        const selectCamiao = document.getElementById('report-servico-camiao');
+        const customCamiaoContainer = document.getElementById('report-servico-camiao-outro-container');
+        const customCamiaoInput = document.getElementById('report-servico-camiao-outro');
+
+        const standardCamioes = ['Camião da Empresa Pessoal', 'Empresa Particular'];
+        if (standardCamioes.includes(s.tipo_camiao)) {
+            selectCamiao.value = s.tipo_camiao;
+            customCamiaoContainer.classList.add('hidden');
+            customCamiaoInput.required = false;
+            customCamiaoInput.value = '';
+        } else {
+            selectCamiao.value = 'Outros';
+            customCamiaoContainer.classList.remove('hidden');
+            customCamiaoInput.required = true;
+            customCamiaoInput.value = s.tipo_camiao || '';
+        }
+
+        document.getElementById('report-servico-notas').value = s.notes || s.notas || '';
+        document.getElementById('report-servico-agendada').value = formatDatetimeLocal(s.data_agendada);
+
+        const techIds = s.tecnico_id ? s.tecnico_id.toString().split(',') : [];
+        document.querySelectorAll('input[name="report-servico-tecnico-ids"]').forEach(cb => {
+            cb.checked = techIds.includes(cb.value);
+        });
+
+        openModal('modal-report-servico');
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+async function openEditManutencaoModal(m) {
+    try {
+        document.getElementById('edit-manutencao-id').value = m.id;
+
+        const modal = document.getElementById('modal-report-manutencao');
+        if (modal) {
+            const h2 = modal.querySelector('h2');
+            if (h2) h2.textContent = 'Editar Manutenção';
+            const btn = modal.querySelector('button[type="submit"]');
+            if (btn) btn.textContent = 'Guardar Alterações';
+        }
+
+        document.getElementById('report-manutencao-cliente').value = m.cliente_id;
+        await loadMachinesForMaintenance();
+
+        const details = await apiFetch(`/manutencoes/${m.id}/detalhes-relatorio`);
+        const associatedIds = details.maquinas ? details.maquinas.map(maq => maq.id) : [];
+
+        document.querySelectorAll('.mnt-maquina-checkbox').forEach(cb => {
+            cb.checked = associatedIds.includes(parseInt(cb.value));
+        });
+
+        document.getElementById('report-manutencao-notas').value = m.notas || '';
+        document.getElementById('report-manutencao-agendada').value = formatDatetimeLocal(m.data_agendada);
+
+        const techIds = m.tecnico_id ? m.tecnico_id.toString().split(',') : [];
+        document.querySelectorAll('input[name="report-manutencao-tecnico-ids"]').forEach(cb => {
+            cb.checked = techIds.includes(cb.value);
+        });
+
+        openModal('modal-report-manutencao');
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
 function openFullNoteModal(note) {
     document.getElementById('full-note-content').textContent = note;
     openModal('modal-view-note');
@@ -861,6 +1164,19 @@ function createAvariaCard(a) {
         btnDelete.style.cssText = 'position:absolute; top:10px; right:10px; border:none; background:none; color:#ef4444; cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
         btnDelete.onclick = (e) => deleteTask('avaria', a.id, e);
         card.appendChild(btnDelete);
+
+        if (a.estado === 'pendente') {
+            const btnEdit = document.createElement('button');
+            btnEdit.className = 'btn-edit-card';
+            btnEdit.title = 'Editar tarefa';
+            btnEdit.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+            btnEdit.style.cssText = 'position:absolute; top:10px; right:38px; border:none; background:none; color:var(--primary-color, #3b82f6); cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
+            btnEdit.onclick = (e) => {
+                e.stopPropagation();
+                openEditAvariaModal(a);
+            };
+            card.appendChild(btnEdit);
+        }
     }
 
     card.onclick = () => openTicketDetailsModal({ ...a, _type: 'avaria' });
@@ -1165,6 +1481,9 @@ async function loadMaquinas() {
                         <button class="btn-icon btn-info" title="Ver Info">
                             <i class="ph ph-info"></i>
                         </button>
+                        <button class="btn-icon btn-components" title="Componentes Máquina">
+                            <i class="ph ph-wrench"></i>
+                        </button>
                         <button class="btn-icon btn-qr" title="Gerar QR Code">
                             <i class="ph ph-qr-code"></i>
                         </button>
@@ -1184,6 +1503,7 @@ async function loadMaquinas() {
             tr.querySelector('.col-cliente').textContent = m.cliente_nome || '-';
 
             tr.querySelector('.btn-info').onclick = () => openViewMaquinaModal(m);
+            tr.querySelector('.btn-components').onclick = () => openComponentsModal(m);
             tr.querySelector('.btn-qr').onclick = () => generateQR(m.uuid, m.modelo || '');
             tr.querySelector('.btn-edit').onclick = () => openEditMaquinaModal(m);
             tr.querySelector('.btn-delete').onclick = () => deleteMaquina(m.id);
@@ -1617,6 +1937,19 @@ function createServicoCard(s) {
         btnDelete.style.cssText = 'position:absolute; top:10px; right:10px; border:none; background:none; color:#ef4444; cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
         btnDelete.onclick = (e) => deleteTask('servico', s.id, e);
         card.appendChild(btnDelete);
+
+        if (s.estado === 'pendente') {
+            const btnEdit = document.createElement('button');
+            btnEdit.className = 'btn-edit-card';
+            btnEdit.title = 'Editar serviço';
+            btnEdit.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+            btnEdit.style.cssText = 'position:absolute; top:10px; right:38px; border:none; background:none; color:var(--primary-color, #3b82f6); cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
+            btnEdit.onclick = (e) => {
+                e.stopPropagation();
+                openEditServicoModal(s);
+            };
+            card.appendChild(btnEdit);
+        }
     }
 
     card.onclick = () => openTicketDetailsModal({ ...s, _type: 'servico' });
@@ -1729,6 +2062,19 @@ function createManutencaoCard(m) {
         btnDelete.style.cssText = 'position:absolute; top:10px; right:10px; border:none; background:none; color:#ef4444; cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
         btnDelete.onclick = (e) => deleteTask('manutencao', m.id, e);
         card.appendChild(btnDelete);
+
+        if (m.estado === 'pendente') {
+            const btnEdit = document.createElement('button');
+            btnEdit.className = 'btn-edit-card';
+            btnEdit.title = 'Editar manutenção';
+            btnEdit.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+            btnEdit.style.cssText = 'position:absolute; top:10px; right:38px; border:none; background:none; color:var(--primary-color, #3b82f6); cursor:pointer; font-size:18px; padding:5px; transition:all 0.2s;';
+            btnEdit.onclick = (e) => {
+                e.stopPropagation();
+                openEditManutencaoModal(m);
+            };
+            card.appendChild(btnEdit);
+        }
     }
 
     card.onclick = () => openTicketDetailsModal({ ...m, _type: 'manutencao' });
@@ -2623,11 +2969,14 @@ window.onclick = function (event) {
         event.target.classList.add('hidden');
     }
 }
-// Reportar Avaria (Manual Admin)
+// Reportar Avaria (Manual Admin / Editar)
 document.getElementById('form-report-avaria').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
+
+    const editId = document.getElementById('edit-avaria-id').value;
+    const isEdit = !!editId;
 
     const payload = {
         maquina_id: document.getElementById('report-avaria-maquina').value,
@@ -2638,14 +2987,13 @@ document.getElementById('form-report-avaria').addEventListener('submit', async (
     };
 
     try {
-        await apiFetch('/avarias', {
-            method: 'POST',
+        await apiFetch(isEdit ? `/avarias/${editId}` : '/avarias', {
+            method: isEdit ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        showNotification('Avaria reportada com sucesso!');
+        showNotification(isEdit ? 'Avaria atualizada com sucesso!' : 'Avaria reportada com sucesso!');
         closeModal('modal-report-avaria');
-        document.getElementById('form-report-avaria').reset();
         refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
@@ -2655,11 +3003,14 @@ document.getElementById('form-report-avaria').addEventListener('submit', async (
     }
 });
 
-// Reportar Serviço (Manual Admin)
+// Reportar Serviço (Manual Admin / Editar)
 document.getElementById('form-report-servico').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
+
+    const editId = document.getElementById('edit-servico-id').value;
+    const isEdit = !!editId;
 
     const tipoSelect = document.getElementById('report-servico-tipo').value;
     const tipoFinal = tipoSelect === 'Outros' ? document.getElementById('report-servico-tipo-outro').value : tipoSelect;
@@ -2678,21 +3029,13 @@ document.getElementById('form-report-servico').addEventListener('submit', async 
     };
 
     try {
-        await apiFetch('/servicos', {
-            method: 'POST',
+        await apiFetch(isEdit ? `/servicos/${editId}` : '/servicos', {
+            method: isEdit ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        showNotification('Serviço reportado com sucesso!');
+        showNotification(isEdit ? 'Serviço atualizado com sucesso!' : 'Serviço reportado com sucesso!');
         closeModal('modal-report-servico');
-        document.getElementById('form-report-servico').reset();
-        document.getElementById('report-servico-tipo-outro-container').classList.add('hidden');
-        document.getElementById('report-servico-tipo-outro').required = false;
-        document.getElementById('report-servico-tipo-outro').value = '';
-        document.getElementById('report-servico-camiao-outro-container').classList.add('hidden');
-        document.getElementById('report-servico-camiao-outro').required = false;
-        document.getElementById('report-servico-camiao-outro').value = '';
-        document.getElementById('report-servico-maquinas-container').innerHTML = '<p style="font-size: 13px; color: var(--text-secondary); text-align: center;">Selecione um cliente para carregar as máquinas.</p>';
         refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
@@ -2808,11 +3151,14 @@ async function loadMachinesForService() {
     }
 }
 
-// Reportar Manutenção (Manual Admin)
+// Reportar Manutenção (Manual Admin / Editar)
 document.getElementById('form-report-manutencao').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
+
+    const editId = document.getElementById('edit-manutencao-id').value;
+    const isEdit = !!editId;
 
     const maquina_ids = Array.from(document.querySelectorAll('.mnt-maquina-checkbox:checked')).map(cb => parseInt(cb.value));
 
@@ -2832,14 +3178,13 @@ document.getElementById('form-report-manutencao').addEventListener('submit', asy
     };
 
     try {
-        await apiFetch('/manutencoes', {
-            method: 'POST',
+        await apiFetch(isEdit ? `/manutencoes/${editId}` : '/manutencoes', {
+            method: isEdit ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        showNotification('Manutenção criada com sucesso!');
+        showNotification(isEdit ? 'Manutenção atualizada com sucesso!' : 'Manutenção criada com sucesso!');
         closeModal('modal-report-manutencao');
-        document.getElementById('form-report-manutencao').reset();
         refreshActiveDashboard();
         if (currentActiveView === 'agendamentos') loadAgendamentos();
     } catch (e) {
@@ -5230,6 +5575,369 @@ function openEditProductModal(p) {
     openModal('modal-stock-product');
 }
 
+// --- GESTÃO DE STOCK DE MÁQUINAS ---
+let cachedStockMaquinas = [];
+
+async function loadStockMaquinas() {
+    try {
+        cachedStockMaquinas = await apiFetch('/stock_maquinas');
+        renderStockMaquinasTable(cachedStockMaquinas);
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+let expandedStockGroups = new Set();
+
+function renderStockMaquinasTable(data) {
+    const tbody = document.getElementById('table-stock-maquinas-body');
+    tbody.innerHTML = '';
+
+    const query = (document.getElementById('search-stock-maquina')?.value || '').toLowerCase().trim();
+    const filtered = data.filter(m => {
+        if (!query) return true;
+        return (m.marca && m.marca.toLowerCase().includes(query)) ||
+               (m.modelo && m.modelo.toLowerCase().includes(query)) ||
+               (m.numero_serie && m.numero_serie.toLowerCase().includes(query));
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary); padding: 15px;">Nenhuma máquina em stock encontrada.</td></tr>';
+        return;
+    }
+
+    // Group by Marca + Modelo
+    const groups = {};
+    filtered.forEach(m => {
+        const key = `${(m.marca || '').trim()}|||${(m.modelo || '').trim()}`;
+        if (!groups[key]) {
+            groups[key] = {
+                marca: m.marca || '',
+                modelo: m.modelo || '',
+                units: []
+            };
+        }
+        groups[key].units.push(m);
+    });
+
+    Object.keys(groups).forEach(key => {
+        const group = groups[key];
+        const tr = document.createElement('tr');
+        tr.className = 'group-row';
+        tr.style.cursor = 'pointer';
+        
+        const isExpanded = expandedStockGroups.has(key);
+        const caretIcon = isExpanded ? 'ph-caret-down' : 'ph-caret-right';
+
+        tr.innerHTML = `
+            <td style="text-align: center; font-size: 16px; color: var(--accent); width: 40px;" class="col-caret">
+                <i class="ph ${caretIcon}"></i>
+            </td>
+            <td class="col-marca" style="font-weight: 600;"></td>
+            <td class="col-modelo"></td>
+            <td class="col-qty">
+                <span style="background: var(--accent-light); color: var(--accent); padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 12px;">
+                    ${group.units.length} ${group.units.length === 1 ? 'unidade' : 'unidades'}
+                </span>
+            </td>
+            <td>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn-icon btn-add-unit" title="Adicionar Unidade deste Modelo" style="color: var(--accent); width:28px; height:28px; font-size:14px; padding:0;">
+                        <i class="ph ph-plus"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+
+        tr.querySelector('.col-marca').textContent = group.marca || '-';
+        tr.querySelector('.col-modelo').textContent = group.modelo || '-';
+
+        // Pre-fill button click
+        tr.querySelector('.btn-add-unit').onclick = (e) => {
+            e.stopPropagation();
+            openAddStockMaquinaModalWithPrefill(group.marca, group.modelo);
+        };
+
+        // Toggle expand logic
+        const toggleExpand = () => {
+            if (expandedStockGroups.has(key)) {
+                expandedStockGroups.delete(key);
+            } else {
+                expandedStockGroups.add(key);
+            }
+            renderStockMaquinasTable(data);
+        };
+
+        tr.onclick = toggleExpand;
+
+        tbody.appendChild(tr);
+
+        // Render nested row if expanded
+        if (isExpanded) {
+            const trNested = document.createElement('tr');
+            trNested.className = 'nested-row-container';
+            
+            trNested.innerHTML = `
+                <td></td>
+                <td colspan="4" style="padding: 10px 15px 15px 15px; background: #f8fafc;">
+                    <div style="border-left: 4px solid var(--accent); padding-left: 15px;">
+                        <table class="data-table" style="margin-bottom: 0; background: white; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); width: 100%;">
+                            <thead>
+                                <tr style="background: #f1f5f9;">
+                                    <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); width: 80px;">ID Unidade</th>
+                                    <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary);">Número de Série</th>
+                                    <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary);">Data de Entrada</th>
+                                    <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); text-align: right; width: 150px; padding-right: 15px;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="nested-units-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </td>
+            `;
+
+            const nestedTbody = trNested.querySelector('.nested-units-body');
+            group.units.forEach(unit => {
+                const trUnit = document.createElement('tr');
+                const dataEntradaStr = unit.data_entrada ? new Date(unit.data_entrada).toLocaleString('pt-PT') : '-';
+
+                trUnit.innerHTML = `
+                    <td class="col-unit-id" style="font-weight: 600; color: var(--text-secondary);"></td>
+                    <td class="col-unit-serie"></td>
+                    <td class="col-unit-data" style="color: var(--text-secondary); font-size: 13px;"></td>
+                    <td>
+                        <div style="display:flex; gap:8px; justify-content:flex-end;">
+                            <button type="button" class="btn-icon btn-assoc-unit" title="Associar a Cliente" style="color: var(--accent); width:28px; height:28px; font-size:14px; padding:0;">
+                                <i class="ph ph-user-plus"></i>
+                            </button>
+                            <button type="button" class="btn-icon btn-edit-unit" title="Editar Unidade" style="width:28px; height:28px; font-size:14px; padding:0;">
+                                <i class="ph ph-pencil-simple"></i>
+                            </button>
+                            <button type="button" class="btn-icon delete btn-delete-unit" title="Apagar Unidade" style="width:28px; height:28px; font-size:14px; padding:0;">
+                                <i class="ph ph-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                trUnit.querySelector('.col-unit-id').textContent = `#${unit.id}`;
+                
+                const colSerie = trUnit.querySelector('.col-unit-serie');
+                colSerie.textContent = unit.numero_serie || 'Sem número de série';
+                if (!unit.numero_serie) {
+                    colSerie.style.color = '#94a3b8';
+                    colSerie.style.fontStyle = 'italic';
+                } else {
+                    colSerie.style.fontWeight = '600';
+                }
+
+                trUnit.querySelector('.col-unit-data').textContent = dataEntradaStr;
+
+                trUnit.querySelector('.btn-assoc-unit').onclick = (e) => {
+                    e.stopPropagation();
+                    openAssociateStockMaquinaModal(unit);
+                };
+                trUnit.querySelector('.btn-edit-unit').onclick = (e) => {
+                    e.stopPropagation();
+                    openEditStockMaquinaModal(unit);
+                };
+                trUnit.querySelector('.btn-delete-unit').onclick = (e) => {
+                    e.stopPropagation();
+                    deleteStockMaquina(unit.id);
+                };
+
+                nestedTbody.appendChild(trUnit);
+            });
+
+            tbody.appendChild(trNested);
+        }
+    });
+}
+
+function openAddStockMaquinaModal() {
+    document.getElementById('modal-stock-maquina-title').textContent = 'Nova Máquina em Stock';
+    document.getElementById('form-stock-maquina').reset();
+    document.getElementById('stock-maq-id').value = '';
+    openModal('modal-stock-maquina');
+}
+
+function openAddStockMaquinaModalWithPrefill(marca, modelo) {
+    document.getElementById('modal-stock-maquina-title').textContent = 'Nova Máquina em Stock';
+    document.getElementById('form-stock-maquina').reset();
+    document.getElementById('stock-maq-id').value = '';
+    document.getElementById('stock-maq-marca').value = marca;
+    document.getElementById('stock-maq-modelo').value = modelo;
+    openModal('modal-stock-maquina');
+}
+
+function openEditStockMaquinaModal(m) {
+    document.getElementById('modal-stock-maquina-title').textContent = 'Editar Máquina em Stock';
+    document.getElementById('stock-maq-id').value = m.id;
+    document.getElementById('stock-maq-marca').value = m.marca || '';
+    document.getElementById('stock-maq-modelo').value = m.modelo || '';
+    document.getElementById('stock-maq-numero-serie').value = m.numero_serie || '';
+    openModal('modal-stock-maquina');
+}
+
+async function deleteStockMaquina(id) {
+    if (!confirm('Tem a certeza que deseja remover esta máquina do stock?')) return;
+    try {
+        await apiFetch(`/stock_maquinas/${id}`, { method: 'DELETE' });
+        showNotification('Máquina removida do stock!');
+        loadStockMaquinas();
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+async function openAssociateStockMaquinaModal(m) {
+    document.getElementById('assoc-stock-id').value = m.id;
+    document.getElementById('assoc-detalhe-modelo').value = `${m.marca || ''} - ${m.modelo || ''}`;
+    document.getElementById('assoc-numero-serie').value = m.numero_serie || '';
+    
+    // Reset date fields
+    document.getElementById('assoc-data-instalacao').value = '';
+    document.getElementById('assoc-data-inicio-garantia').value = '';
+    document.getElementById('assoc-data-fim-garantia').value = '';
+    
+    // Load clients
+    const select = document.getElementById('assoc-cliente-id');
+    select.innerHTML = '<option value="">A carregar clientes...</option>';
+    try {
+        const clients = await apiFetch('/clientes');
+        select.innerHTML = '<option value="">Selecione o Cliente</option>';
+        clients.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.nome;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        select.innerHTML = '<option value="">Erro ao carregar clientes</option>';
+    }
+
+    openModal('modal-associar-maquina');
+}
+
+// --- GESTÃO DE COMPONENTES DE MÁQUINAS ---
+let currentComponentsModel = null;
+let editingComponentId = null;
+
+async function openComponentsModal(m) {
+    if (!m.modelo) {
+        showNotification('Esta máquina não tem modelo definido. Edite a máquina primeiro para definir um modelo.', true);
+        return;
+    }
+    
+    currentComponentsModel = m.modelo;
+    document.getElementById('comp-maquina-modelo-titulo').textContent = m.modelo;
+    
+    resetComponentForm();
+    await loadSuppliersForComponents();
+    await loadComponentsForModel(m.modelo);
+    
+    openModal('modal-componentes-maquina');
+}
+
+async function loadSuppliersForComponents() {
+    const select = document.getElementById('comp-fornecedor');
+    select.innerHTML = '<option value="">A carregar fornecedores...</option>';
+    try {
+        const suppliers = await apiFetch('/fornecedores');
+        select.innerHTML = '<option value="">Selecione o Fornecedor</option>';
+        suppliers.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.nome;
+            opt.textContent = s.nome;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.error("Erro ao carregar fornecedores:", e);
+        select.innerHTML = '<option value="">Erro ao carregar fornecedores</option>';
+    }
+}
+
+async function loadComponentsForModel(model) {
+    const tbody = document.getElementById('table-componentes-body');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">A carregar peças...</td></tr>';
+    try {
+        const res = await apiFetch(`/componentes_maquina/modelo/${encodeURIComponent(model)}`);
+        tbody.innerHTML = '';
+        if (res.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary); padding: 15px;">Nenhuma peça registada para este modelo.</td></tr>';
+            return;
+        }
+        res.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="col-comp-ref"></td>
+                <td class="col-comp-nome"></td>
+                <td class="col-comp-forn"></td>
+                <td>
+                    <div style="display:flex; gap:8px; justify-content:flex-end;">
+                        <button type="button" class="btn-icon btn-edit-comp" title="Editar Peça" style="width:28px; height:28px; font-size:14px; padding:0;">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button type="button" class="btn-icon delete btn-delete-comp" title="Eliminar Peça" style="width:28px; height:28px; font-size:14px; padding:0;">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tr.querySelector('.col-comp-ref').textContent = c.referencia;
+            tr.querySelector('.col-comp-nome').textContent = c.nome;
+            tr.querySelector('.col-comp-forn').textContent = c.fornecedor;
+            
+            tr.querySelector('.btn-edit-comp').onclick = () => setupEditComponent(c);
+            tr.querySelector('.btn-delete-comp').onclick = () => deleteComponent(c.id);
+            
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error("Erro ao carregar componentes:", e);
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--danger); padding: 15px;">Erro ao carregar peças.</td></tr>';
+    }
+}
+
+function setupEditComponent(c) {
+    editingComponentId = c.id;
+    document.getElementById('comp-id').value = c.id;
+    document.getElementById('comp-referencia').value = c.referencia;
+    document.getElementById('comp-nome').value = c.nome;
+    document.getElementById('comp-fornecedor').value = c.fornecedor;
+    
+    document.getElementById('comp-form-title').textContent = 'Editar Peça';
+    document.getElementById('btn-submit-componente').textContent = 'Atualizar';
+    document.getElementById('btn-cancelar-edit-componente').style.display = 'inline-block';
+}
+
+function resetComponentForm() {
+    editingComponentId = null;
+    document.getElementById('form-componente-maquina').reset();
+    document.getElementById('comp-id').value = '';
+    
+    document.getElementById('comp-form-title').textContent = 'Adicionar Nova Peça';
+    document.getElementById('btn-submit-componente').textContent = 'Guardar';
+    document.getElementById('btn-cancelar-edit-componente').style.display = 'none';
+}
+
+async function deleteComponent(id) {
+    if (!confirm('Tem a certeza que deseja eliminar esta peça?')) return;
+    try {
+        await apiFetch(`/componentes_maquina/${id}`, {
+            method: 'DELETE'
+        });
+        showNotification('Peça eliminada com sucesso!');
+        if (editingComponentId == id) {
+            resetComponentForm();
+        }
+        loadComponentsForModel(currentComponentsModel);
+    } catch (err) {
+        showNotification(err.message, true);
+    }
+}
+
 // Add event listener setup on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
     // Setup unit calculator events for stock creation
@@ -5459,6 +6167,238 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCancelAddStock) {
         btnCancelAddStock.addEventListener('click', () => {
             closeModal('modal-add-stock-qty');
+        });
+    }
+
+    // --- Eventos do Guia de Peças do Modelo ---
+    const formCompMaquina = document.getElementById('form-componente-maquina');
+    if (formCompMaquina) {
+        formCompMaquina.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('comp-id').value;
+            const referencia = document.getElementById('comp-referencia').value;
+            const nome = document.getElementById('comp-nome').value;
+            const fornecedor = document.getElementById('comp-fornecedor').value;
+            
+            if (!currentComponentsModel) {
+                showNotification('Nenhum modelo de máquina selecionado.', true);
+                return;
+            }
+            
+            const payload = {
+                modelo_maquina: currentComponentsModel,
+                referencia,
+                nome,
+                fornecedor
+            };
+            
+            try {
+                if (id) {
+                    await apiFetch(`/componentes_maquina/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    showNotification('Peça atualizada com sucesso!');
+                } else {
+                    await apiFetch('/componentes_maquina', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    showNotification('Peça adicionada com sucesso!');
+                }
+                resetComponentForm();
+                loadComponentsForModel(currentComponentsModel);
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+
+    const btnCancelEditComp = document.getElementById('btn-cancelar-edit-componente');
+    if (btnCancelEditComp) {
+        btnCancelEditComp.addEventListener('click', () => {
+            resetComponentForm();
+        });
+    }
+
+    // --- Stock de Máquinas Eventos ---
+    const btnOpenAddStockMaquina = document.getElementById('btn-open-add-stock-maquina');
+    if (btnOpenAddStockMaquina) {
+        btnOpenAddStockMaquina.addEventListener('click', openAddStockMaquinaModal);
+    }
+
+    const searchStockMaquina = document.getElementById('search-stock-maquina');
+    if (searchStockMaquina) {
+        searchStockMaquina.addEventListener('input', () => {
+            renderStockMaquinasTable(cachedStockMaquinas);
+        });
+    }
+
+    const formStockMaquina = document.getElementById('form-stock-maquina');
+    if (formStockMaquina) {
+        formStockMaquina.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('stock-maq-id').value;
+            const marca = document.getElementById('stock-maq-marca').value;
+            const modelo = document.getElementById('stock-maq-modelo').value;
+            const numero_serie = document.getElementById('stock-maq-numero-serie').value;
+
+            const payload = { marca, modelo, numero_serie };
+
+            try {
+                if (id) {
+                    await apiFetch(`/stock_maquinas/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    showNotification('Máquina em stock atualizada com sucesso!');
+                } else {
+                    await apiFetch('/stock_maquinas', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    showNotification('Máquina adicionada ao stock com sucesso!');
+                }
+                closeModal('modal-stock-maquina');
+                loadStockMaquinas();
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+
+    const btnCancelStockMaquina = document.getElementById('btn-cancel-stock-maquina');
+    if (btnCancelStockMaquina) {
+        btnCancelStockMaquina.addEventListener('click', () => {
+            closeModal('modal-stock-maquina');
+        });
+    }
+
+    const formAssociarMaquina = document.getElementById('form-associar-maquina');
+    if (formAssociarMaquina) {
+        formAssociarMaquina.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('assoc-stock-id').value;
+            const cliente_id = document.getElementById('assoc-cliente-id').value;
+            const numero_serie = document.getElementById('assoc-numero-serie').value;
+            const data_instalacao = document.getElementById('assoc-data-instalacao').value;
+            const data_inicio_garantia = document.getElementById('assoc-data-inicio-garantia').value;
+            const data_fim_garantia = document.getElementById('assoc-data-fim-garantia').value;
+
+            const payload = {
+                cliente_id,
+                numero_serie,
+                data_instalacao,
+                data_inicio_garantia,
+                data_fim_garantia
+            };
+
+            try {
+                await apiFetch(`/stock_maquinas/${id}/associar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                showNotification('Máquina associada ao cliente com sucesso!');
+                closeModal('modal-associar-maquina');
+                loadStockMaquinas();
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+
+    const btnCancelAssociar = document.getElementById('btn-cancel-associar');
+    if (btnCancelAssociar) {
+        btnCancelAssociar.addEventListener('click', () => {
+            closeModal('modal-associar-maquina');
+        });
+    }
+
+    const btnOpenAddAdmin = document.getElementById('btn-open-add-administrador');
+    if (btnOpenAddAdmin) {
+        btnOpenAddAdmin.addEventListener('click', () => {
+            document.getElementById('form-add-administrador').reset();
+            openModal('modal-add-administrador');
+        });
+    }
+
+    const formAddAdmin = document.getElementById('form-add-administrador');
+    if (formAddAdmin) {
+        formAddAdmin.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('admin-username').value.trim();
+            const email = document.getElementById('admin-email').value.trim();
+            const password = document.getElementById('admin-password').value;
+            const confirmPassword = document.getElementById('admin-password-confirm').value;
+
+            if (password.length < 6) {
+                return showNotification("A palavra-passe deve ter no mínimo 6 caracteres.", true);
+            }
+
+            if (password !== confirmPassword) {
+                return showNotification("As palavras-passes não coincidem.", true);
+            }
+
+            try {
+                await apiFetch('/administradores', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+
+                showNotification("Administrador adicionado com sucesso!");
+                closeModal('modal-add-administrador');
+                document.getElementById('form-add-administrador').reset();
+                loadAdministradores();
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+
+    const formEditAdmin = document.getElementById('form-edit-administrador');
+    if (formEditAdmin) {
+        formEditAdmin.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const id = document.getElementById('edit-admin-id').value;
+            const username = document.getElementById('edit-admin-username').value.trim();
+            const email = document.getElementById('edit-admin-email').value.trim();
+            const password = document.getElementById('edit-admin-password').value;
+            const confirmPassword = document.getElementById('edit-admin-password-confirm').value;
+
+            const payload = { username, email };
+
+            if (password) {
+                if (password.length < 6) {
+                    return showNotification("A nova palavra-passe deve ter no mínimo 6 caracteres.", true);
+                }
+                if (password !== confirmPassword) {
+                    return showNotification("As novas palavras-passes não coincidem.", true);
+                }
+                payload.password = password;
+            }
+
+            try {
+                await apiFetch(`/administradores/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                showNotification("Administrador atualizado com sucesso!");
+                closeModal('modal-edit-administrador');
+                document.getElementById('form-edit-administrador').reset();
+                loadAdministradores();
+            } catch (err) {
+                showNotification(err.message, true);
+            }
         });
     }
 });

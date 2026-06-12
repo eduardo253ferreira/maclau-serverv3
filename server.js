@@ -589,6 +589,32 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 FOREIGN KEY (tecnico_id) REFERENCES tecnicos(id) ON DELETE CASCADE
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS componentes_maquina (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                modelo_maquina TEXT NOT NULL,
+                referencia TEXT NOT NULL,
+                nome TEXT NOT NULL,
+                fornecedor TEXT NOT NULL
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS stock_maquinas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                marca TEXT NOT NULL,
+                modelo TEXT NOT NULL,
+                numero_serie TEXT,
+                data_entrada DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS preparativos_avaria (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                avaria_id INTEGER NOT NULL,
+                produto_id INTEGER NOT NULL,
+                quantidade_levada REAL NOT NULL DEFAULT 0,
+                quantidade_usada REAL DEFAULT 0,
+                FOREIGN KEY (avaria_id) REFERENCES avarias(id) ON DELETE CASCADE,
+                FOREIGN KEY (produto_id) REFERENCES produto(id) ON DELETE CASCADE
+            )`);
+
             // --- MIGRATIONS ---
             const migrations = [
                 { table: 'avarias', column: 'data_hora_inicio', type: 'DATETIME' },
@@ -2057,6 +2083,180 @@ app.delete('/api/maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
+// --- GESTÃO DE COMPONENTES DA MÁQUINA ---
+
+app.get('/api/componentes_maquina/modelo/:modelo', authenticateJWT, isAdmin, (req, res) => {
+    const { modelo } = req.params;
+    db.all(`SELECT * FROM componentes_maquina WHERE modelo_maquina = ? ORDER BY id ASC`, [modelo], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/componentes_maquina', authenticateJWT, isAdmin, (req, res) => {
+    let { modelo_maquina, referencia, nome, fornecedor } = req.body;
+    modelo_maquina = sanitizeString(modelo_maquina);
+    referencia = sanitizeString(referencia);
+    nome = sanitizeString(nome);
+    fornecedor = sanitizeString(fornecedor);
+
+    if (!modelo_maquina || !referencia || !nome || !fornecedor) {
+        return res.status(400).json({ error: "Modelo, Referência, Nome e Fornecedor são obrigatórios" });
+    }
+
+    // Verify if supplier exists in 'fornecedores' table
+    db.get(`SELECT id FROM fornecedores WHERE nome = ?`, [fornecedor], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) {
+            return res.status(400).json({ error: `O fornecedor "${fornecedor}" não existe na lista de fornecedores.` });
+        }
+
+        db.run(
+            `INSERT INTO componentes_maquina (modelo_maquina, referencia, nome, fornecedor) VALUES (?, ?, ?, ?)`,
+            [modelo_maquina, referencia, nome, fornecedor],
+            function (err) {
+                if (err) return handleDBError(res, err);
+                res.status(201).json({
+                    id: this.lastID,
+                    modelo_maquina,
+                    referencia,
+                    nome,
+                    fornecedor
+                });
+            }
+        );
+    });
+});
+
+app.put('/api/componentes_maquina/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { referencia, nome, fornecedor } = req.body;
+    referencia = sanitizeString(referencia);
+    nome = sanitizeString(nome);
+    fornecedor = sanitizeString(fornecedor);
+
+    if (!referencia || !nome || !fornecedor) {
+        return res.status(400).json({ error: "Referência, Nome e Fornecedor são obrigatórios" });
+    }
+
+    // Verify if supplier exists in 'fornecedores' table
+    db.get(`SELECT id FROM fornecedores WHERE nome = ?`, [fornecedor], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) {
+            return res.status(400).json({ error: `O fornecedor "${fornecedor}" não existe na lista de fornecedores.` });
+        }
+
+        db.run(
+            `UPDATE componentes_maquina SET referencia = ?, nome = ?, fornecedor = ? WHERE id = ?`,
+            [referencia, nome, fornecedor, id],
+            function (err) {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Componente atualizado com sucesso" });
+            }
+        );
+    });
+});
+
+app.delete('/api/componentes_maquina/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM componentes_maquina WHERE id = ?`, [id], function (err) {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Componente removido com sucesso" });
+    });
+});
+
+// --- GESTÃO DE STOCK DE MÁQUINAS ---
+
+app.get('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
+    db.all(`SELECT *, strftime('%Y-%m-%dT%H:%M:%SZ', data_entrada) as data_entrada FROM stock_maquinas ORDER BY id DESC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
+    let { marca, modelo, numero_serie } = req.body;
+    marca = sanitizeString(marca);
+    modelo = sanitizeString(modelo);
+    numero_serie = sanitizeString(numero_serie);
+
+    if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
+
+    db.run(
+        `INSERT INTO stock_maquinas (marca, modelo, numero_serie) VALUES (?, ?, ?)`,
+        [marca, modelo, numero_serie || null],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            res.status(201).json({
+                id: this.lastID,
+                marca,
+                modelo,
+                numero_serie: numero_serie || null
+            });
+        }
+    );
+});
+
+app.put('/api/stock_maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { marca, modelo, numero_serie } = req.body;
+    marca = sanitizeString(marca);
+    modelo = sanitizeString(modelo);
+    numero_serie = sanitizeString(numero_serie);
+
+    if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
+
+    db.run(
+        `UPDATE stock_maquinas SET marca = ?, modelo = ?, numero_serie = ? WHERE id = ?`,
+        [marca, modelo, numero_serie || null, id],
+        function (err) {
+            if (err) return handleDBError(res, err);
+            res.json({ message: "Máquina em stock atualizada com sucesso" });
+        }
+    );
+});
+
+app.delete('/api/stock_maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`DELETE FROM stock_maquinas WHERE id = ?`, [id], function (err) {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Máquina removida do stock com sucesso" });
+    });
+});
+
+app.post('/api/stock_maquinas/:id/associar', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { cliente_id, data_instalacao, data_inicio_garantia, data_fim_garantia } = req.body;
+    let { numero_serie } = req.body;
+    numero_serie = sanitizeString(numero_serie);
+
+    if (!cliente_id) return res.status(400).json({ error: "Cliente é obrigatório para associação" });
+
+    // 1. Get stock machine details
+    db.get(`SELECT * FROM stock_maquinas WHERE id = ?`, [id], (err, stockMachine) => {
+        if (err) return handleDBError(res, err);
+        if (!stockMachine) return res.status(404).json({ error: "Máquina em stock não encontrada" });
+
+        const finalNumeroSerie = numero_serie || stockMachine.numero_serie;
+        const uuid = crypto.randomUUID();
+
+        // 2. Insert into maquinas
+        db.run(
+            `INSERT INTO maquinas (cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [cliente_id, stockMachine.marca, stockMachine.modelo, finalNumeroSerie || null, data_instalacao || null, data_inicio_garantia || null, data_fim_garantia || null, uuid],
+            function (err) {
+                if (err) return handleDBError(res, err);
+
+                // 3. Delete from stock_maquinas
+                db.run(`DELETE FROM stock_maquinas WHERE id = ?`, [id], function (err) {
+                    if (err) return handleDBError(res, err);
+                    res.json({ message: "Máquina associada com sucesso e removida do stock", uuid });
+                });
+            }
+        );
+    });
+});
+
 app.get('/api/maquinas/:uuid/qrcode', authenticateJWT, isAdmin, async (req, res) => {
     const { uuid } = req.params;
 
@@ -2199,6 +2399,74 @@ app.post('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
                             }
 
                             res.status(201).json({ id: avariaId, message: "Avaria reportada e atribuída" });
+                        });
+                    });
+                }
+            );
+        });
+    });
+});
+
+app.put('/api/avarias/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { maquina_id, tipo_avaria, notas, data_agendada } = req.body;
+    let tecnico_ids = req.body.tecnico_ids;
+    if (!tecnico_ids && req.body.tecnico_id) {
+        tecnico_ids = [req.body.tecnico_id];
+    }
+    if (!Array.isArray(tecnico_ids)) {
+        tecnico_ids = [];
+    }
+
+    if (!maquina_id || !tipo_avaria) {
+        return res.status(400).json({ error: "Máquina e tipo de avaria são obrigatórios" });
+    }
+
+    if (!isValidUUID(maquina_id)) {
+        return res.status(400).json({ error: "Máquina selecionada é inválida." });
+    }
+
+    db.get('SELECT estado FROM avarias WHERE id = ?', [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Avaria não encontrada" });
+        if (row.estado !== 'pendente') {
+            return res.status(400).json({ error: "Apenas avarias pendentes podem ser editadas." });
+        }
+
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            const main_tecnico_id = tecnico_ids.length > 0 ? tecnico_ids[0] : null;
+
+            db.run(`UPDATE avarias SET maquina_id = ?, tipo_avaria = ?, tecnico_id = ?, notas = ?, data_agendada = ? WHERE id = ?`,
+                [maquina_id, tipo_avaria, main_tecnico_id, notas, data_agendada || null, id],
+                function (err) {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return handleDBError(res, err);
+                    }
+
+                    db.run('DELETE FROM avaria_tecnicos WHERE avaria_id = ?', [id], (err) => {
+                        if (err) {
+                            db.run('ROLLBACK');
+                            return handleDBError(res, err);
+                        }
+
+                        const stmt = db.prepare(`INSERT INTO avaria_tecnicos (avaria_id, tecnico_id) VALUES (?, ?)`);
+                        tecnico_ids.forEach(tid => {
+                            stmt.run(id, tid);
+                        });
+                        stmt.finalize((err) => {
+                            if (err) {
+                                db.run('ROLLBACK');
+                                return handleDBError(res, err);
+                            }
+
+                            db.run('COMMIT', (err) => {
+                                if (err) return handleDBError(res, err);
+                                securityLog('AVARIA_UPDATED_BY_ADMIN', { id, maquina_id, tecnico_ids });
+                                res.json({ message: "Avaria atualizada com sucesso" });
+                            });
                         });
                     });
                 }
@@ -2400,7 +2668,7 @@ app.put('/api/avarias/:id/status', authenticateJWT, isAdminOrTecnico, (req, res)
 // Salvar rascunho de relatório de avaria
 app.put('/api/tecnico/avarias/:id/relatorio', authenticateJWT, isTecnico, (req, res) => {
     const { id } = req.params;
-    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes } = req.body;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico, deslocacoes, preparativos } = req.body;
     const techId = req.user.id;
 
     db.get(`SELECT relatorio_submetido, EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = a.id AND tecnico_id = ?) as is_assigned FROM avarias a WHERE a.id = ?`, [techId, id], (err, row) => {
@@ -2415,7 +2683,29 @@ app.put('/api/tecnico/avarias/:id/relatorio', authenticateJWT, isTecnico, (req, 
         db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ?, deslocacoes = ? WHERE id = ?`,
             [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, deslocacoesNum, id], function (err) {
                 if (err) return handleDBError(res, err);
-                res.json({ message: "Rascunho salvo com sucesso" });
+
+                if (preparativos && preparativos.length > 0) {
+                    db.serialize(() => {
+                        let prepErr = null;
+                        let prepCompleted = 0;
+                        const updatePrepStmt = db.prepare(`UPDATE preparativos_avaria SET quantidade_usada = ? WHERE avaria_id = ? AND produto_id = ?`);
+                        
+                        preparativos.forEach(p => {
+                            const qty = parseFloat(p.quantidade_usada);
+                            updatePrepStmt.run(qty, id, p.produto_id, (err) => {
+                                if (err) prepErr = err;
+                                prepCompleted++;
+                                if (prepCompleted === preparativos.length) {
+                                    updatePrepStmt.finalize();
+                                    if (prepErr) return handleDBError(res, prepErr);
+                                    res.json({ message: "Rascunho salvo com sucesso" });
+                                }
+                            });
+                        });
+                    });
+                } else {
+                    res.json({ message: "Rascunho salvo com sucesso" });
+                }
             });
     });
 });
@@ -2445,13 +2735,70 @@ app.post('/api/tecnico/avarias/:id/submeter-relatorio', authenticateJWT, isTecni
             clienteId: row.cliente_id
         };
 
-        deductStockFromReportParts(row.pecas_substituidas, metadata, (deductErr) => {
-            if (deductErr) return handleStockOrDBError(res, deductErr);
+        // 1. Processar devolução de peças preparadas não usadas
+        db.all(`SELECT produto_id, quantidade_levada, quantidade_usada FROM preparativos_avaria WHERE avaria_id = ?`, [id], (err, preps) => {
+            if (err) return handleDBError(res, err);
 
-            db.run(`UPDATE avarias SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
-                if (err) return handleDBError(res, err);
-                securityLog('RELATORIO_SUBMETIDO', { avaria_id: id, tecnico_id: techId });
-                res.json({ message: "Relatório submetido com sucesso." });
+            db.serialize(() => {
+                let devErr = null;
+                let devCompleted = 0;
+
+                const updateStockStmt = db.prepare(`UPDATE produto SET quantidade = quantidade + ? WHERE id = ?`);
+                const insertMovStmt = db.prepare(`
+                    INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+
+                function finishDevolution() {
+                    updateStockStmt.finalize();
+                    insertMovStmt.finalize();
+                    if (devErr) return handleDBError(res, devErr);
+
+                    // 2. Deduzir outras peças do relatório e submeter
+                    deductStockFromReportParts(row.pecas_substituidas, metadata, (deductErr) => {
+                        if (deductErr) return handleStockOrDBError(res, deductErr);
+
+                        db.run(`UPDATE avarias SET relatorio_submetido = 1 WHERE id = ?`, [id], function (err) {
+                            if (err) return handleDBError(res, err);
+                            securityLog('RELATORIO_SUBMETIDO', { avaria_id: id, tecnico_id: techId });
+                            res.json({ message: "Relatório submetido com sucesso." });
+                        });
+                    });
+                }
+
+                const itemsToDevolve = (preps || []).map(p => {
+                    const levada = p.quantidade_levada || 0;
+                    const usada = p.quantidade_usada || 0;
+                    const devolver = levada - usada;
+                    return { produto_id: p.produto_id, devolver };
+                }).filter(x => x.devolver > 0);
+
+                if (itemsToDevolve.length === 0) {
+                    return finishDevolution();
+                }
+
+                itemsToDevolve.forEach(item => {
+                    updateStockStmt.run(item.devolver, item.produto_id, (err) => {
+                        if (err) {
+                            devErr = err;
+                            checkDoneDev();
+                            return;
+                        }
+
+                        const dateStr = new Date().toISOString();
+                        insertMovStmt.run(item.produto_id, item.devolver, 'devolucao_preparativos', id, row.cliente_id, techId, 'tecnico', dateStr, (err) => {
+                            if (err) devErr = err;
+                            checkDoneDev();
+                        });
+                    });
+                });
+
+                function checkDoneDev() {
+                    devCompleted++;
+                    if (devCompleted === itemsToDevolve.length) {
+                        finishDevolution();
+                    }
+                }
             });
         });
     });
@@ -2484,7 +2831,19 @@ app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
         db.all(`SELECT id, caminho FROM fotos_relatorio WHERE avaria_id = ?`, [id], (err, fotos) => {
             if (err) return handleDBError(res, err);
             row.fotos = fotos || [];
-            res.json(row);
+            
+            const prepQuery = `
+                SELECT p.produto_id, p.quantidade_levada, p.quantidade_usada, pr.nome_produto, pr.unidade
+                FROM preparativos_avaria p
+                JOIN produto pr ON p.produto_id = pr.id
+                WHERE p.avaria_id = ?
+                ORDER BY pr.nome_produto ASC
+            `;
+            db.all(prepQuery, [id], (err, preparativos) => {
+                if (err) return handleDBError(res, err);
+                row.preparativos = preparativos || [];
+                res.json(row);
+            });
         });
     });
 });
@@ -2669,6 +3028,103 @@ app.post('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
             } else {
                 insertTechs();
             }
+        });
+    });
+});
+
+app.put('/api/servicos/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { cliente_id, tipo_servico, tipo_camiao, notas, data_agendada, maquina_ids } = req.body;
+    let tecnico_ids = req.body.tecnico_ids;
+    if (!tecnico_ids && req.body.tecnico_id) {
+        tecnico_ids = [req.body.tecnico_id];
+    }
+    if (!Array.isArray(tecnico_ids)) {
+        tecnico_ids = [];
+    }
+
+    if (!cliente_id || !tipo_servico || !tipo_camiao) {
+        return res.status(400).json({ error: "Cliente, Tipo de Serviço e Tipo de Transporte são obrigatórios" });
+    }
+
+    db.get('SELECT estado FROM servicos WHERE id = ?', [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Serviço não encontrado" });
+        if (row.estado !== 'pendente') {
+            return res.status(400).json({ error: "Apenas serviços pendentes podem ser editados." });
+        }
+
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            const main_tecnico_id = tecnico_ids.length > 0 ? tecnico_ids[0] : null;
+
+            db.run(`UPDATE servicos SET cliente_id = ?, tecnico_id = ?, tipo_servico = ?, tipo_camiao = ?, notas = ?, data_agendada = ? WHERE id = ?`,
+                [cliente_id, main_tecnico_id, tipo_servico, tipo_camiao, notas, data_agendada || null, id],
+                function (err) {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return handleDBError(res, err);
+                    }
+
+                    db.run('DELETE FROM servico_tecnicos WHERE servico_id = ?', [id], (err) => {
+                        if (err) {
+                            db.run('ROLLBACK');
+                            return handleDBError(res, err);
+                        }
+
+                        const insertTechs = () => {
+                            const stmt = db.prepare(`INSERT INTO servico_tecnicos (servico_id, tecnico_id) VALUES (?, ?)`);
+                            tecnico_ids.forEach(tid => {
+                                stmt.run(id, tid);
+                            });
+                            stmt.finalize((err) => {
+                                if (err) {
+                                    db.run('ROLLBACK');
+                                    return handleDBError(res, err);
+                                }
+
+                                db.run('COMMIT', (err) => {
+                                    if (err) return handleDBError(res, err);
+                                    securityLog('SERVICE_UPDATED_BY_ADMIN', { id, cliente_id, tecnico_ids });
+                                    res.json({ message: "Serviço atualizado com sucesso" });
+                                });
+                            });
+                        };
+
+                        db.run('DELETE FROM servico_maquinas WHERE servico_id = ?', [id], (err) => {
+                            if (err) {
+                                db.run('ROLLBACK');
+                                return handleDBError(res, err);
+                            }
+
+                            if (Array.isArray(maquina_ids) && maquina_ids.length > 0) {
+                                const stmt = db.prepare(`INSERT INTO servico_maquinas (servico_id, maquina_id) VALUES (?, ?)`);
+                                let hasError = false;
+
+                                maquina_ids.forEach(mId => {
+                                    stmt.run(id, mId, (err) => {
+                                        if (err) {
+                                            console.error('[DB ERROR] Error inserting service machine:', err);
+                                            hasError = true;
+                                        }
+                                    });
+                                });
+
+                                stmt.finalize((err) => {
+                                    if (err || hasError) {
+                                        db.run('ROLLBACK');
+                                        return handleDBError(res, err || new Error("Erro ao associar máquinas"));
+                                    }
+                                    insertTechs();
+                                });
+                            } else {
+                                insertTechs();
+                            }
+                        });
+                    });
+                }
+            );
         });
     });
 });
@@ -3106,6 +3562,100 @@ app.post('/api/manutencoes', authenticateJWT, isAdmin, (req, res) => {
         }
         res.status(201).json({ id: manutencaoId, message: "Manutenção criada com sucesso" });
     }
+});
+
+app.put('/api/manutencoes/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { cliente_id, notas, data_agendada, maquina_ids } = req.body;
+    let tecnico_ids = req.body.tecnico_ids;
+    if (!tecnico_ids && req.body.tecnico_id) {
+        tecnico_ids = [req.body.tecnico_id];
+    }
+    if (!Array.isArray(tecnico_ids)) {
+        tecnico_ids = [];
+    }
+
+    if (!cliente_id) return res.status(400).json({ error: "Cliente é obrigatório" });
+
+    db.get('SELECT estado FROM manutencoes WHERE id = ?', [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Manutenção não encontrada" });
+        if (row.estado !== 'pendente') {
+            return res.status(400).json({ error: "Apenas manutenções pendentes podem ser editadas." });
+        }
+
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            const main_tecnico_id = tecnico_ids.length > 0 ? tecnico_ids[0] : null;
+
+            db.run(`UPDATE manutencoes SET cliente_id = ?, tecnico_id = ?, notas = ?, data_agendada = ? WHERE id = ?`,
+                [cliente_id, main_tecnico_id, notas, data_agendada || null, id],
+                function (err) {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return handleDBError(res, err);
+                    }
+
+                    db.run('DELETE FROM manutencao_tecnicos WHERE manutencao_id = ?', [id], (err) => {
+                        if (err) {
+                            db.run('ROLLBACK');
+                            return handleDBError(res, err);
+                        }
+
+                        const insertTechs = () => {
+                            const stmt = db.prepare(`INSERT INTO manutencao_tecnicos (manutencao_id, tecnico_id) VALUES (?, ?)`);
+                            tecnico_ids.forEach(tid => {
+                                stmt.run(id, tid);
+                            });
+                            stmt.finalize((err) => {
+                                if (err) {
+                                    db.run('ROLLBACK');
+                                    return handleDBError(res, err);
+                                }
+
+                                db.run('COMMIT', (err) => {
+                                    if (err) return handleDBError(res, err);
+                                    res.json({ message: "Manutenção atualizada com sucesso" });
+                                });
+                            });
+                        };
+
+                        db.run('DELETE FROM manutencao_maquinas WHERE manutencao_id = ?', [id], (err) => {
+                            if (err) {
+                                db.run('ROLLBACK');
+                                return handleDBError(res, err);
+                            }
+
+                            if (Array.isArray(maquina_ids) && maquina_ids.length > 0) {
+                                const stmt = db.prepare(`INSERT INTO manutencao_maquinas (manutencao_id, maquina_id) VALUES (?, ?)`);
+                                let hasError = false;
+
+                                maquina_ids.forEach(mId => {
+                                    stmt.run(id, mId, (err) => {
+                                        if (err) {
+                                            console.error('[DB ERROR] Error inserting maintenance machine:', err);
+                                            hasError = true;
+                                        }
+                                    });
+                                });
+
+                                stmt.finalize((err) => {
+                                    if (err || hasError) {
+                                        db.run('ROLLBACK');
+                                        return handleDBError(res, err || new Error("Erro ao associar máquinas"));
+                                    }
+                                    insertTechs();
+                                });
+                            } else {
+                                insertTechs();
+                            }
+                        });
+                    });
+                }
+            );
+        });
+    });
 });
 
 app.put('/api/manutencoes/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
@@ -3921,6 +4471,123 @@ app.get('/api/historico', authenticateJWT, isAdmin, (req, res) => {
     });
 });
 
+// --- ADMINISTRADORES ROUTES ---
+
+app.get('/api/administradores', authenticateJWT, isAdmin, (req, res) => {
+    db.all(`SELECT id, username, email FROM administradores ORDER BY username ASC`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/administradores', authenticateJWT, isAdmin, (req, res) => {
+    let { username, email, password } = req.body;
+
+    username = sanitizeString(username);
+    email = sanitizeString(email, 255);
+
+    if (!username || !email || !password) {
+        return res.status(400).json({ error: "Username, Email e Password são obrigatórios" });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Formato de email inválido" });
+    }
+
+    if (password.length < 6) {
+        return res.status(400).json({ error: "A password deve ter pelo menos 6 caracteres" });
+    }
+
+    const hashedPwd = bcrypt.hashSync(password, 10);
+
+    db.run(`INSERT INTO administradores (username, password, email) VALUES (?, ?, ?)`,
+        [username, hashedPwd, email],
+        function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE')) {
+                    return res.status(409).json({ error: "Username já está registado" });
+                }
+                return handleDBError(res, err);
+            }
+            securityLog('ADMINISTRADOR_CREATED', { id: this.lastID, username, email, created_by: req.user.id });
+            res.status(201).json({
+                id: this.lastID,
+                username,
+                email
+            });
+        });
+});
+
+app.delete('/api/administradores/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const currentAdminId = req.user.id;
+
+    if (parseInt(id) === parseInt(currentAdminId)) {
+        return res.status(400).json({ error: "Não pode eliminar o seu próprio utilizador administrador." });
+    }
+
+    db.get(`SELECT COUNT(*) as count FROM administradores`, [], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (row && row.count <= 1) {
+            return res.status(400).json({ error: "Não é possível eliminar o último administrador do sistema." });
+        }
+
+        db.run(`DELETE FROM administradores WHERE id = ?`, [id], function (err) {
+            if (err) return handleDBError(res, err);
+            securityLog('ADMINISTRADOR_DELETED', { id, deleted_by: currentAdminId });
+            res.json({ message: "Administrador removido com sucesso" });
+        });
+    });
+});
+
+app.put('/api/administradores/:id', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    let { username, email, password } = req.body;
+
+    username = sanitizeString(username);
+    email = sanitizeString(email, 255);
+
+    if (!username || !email) {
+        return res.status(400).json({ error: "Username e Email são obrigatórios" });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Formato de email inválido" });
+    }
+
+    if (password) {
+        if (password.length < 6) {
+            return res.status(400).json({ error: "A password deve ter pelo menos 6 caracteres" });
+        }
+        const hashedPwd = bcrypt.hashSync(password, 10);
+        db.run(`UPDATE administradores SET username = ?, email = ?, password = ? WHERE id = ?`,
+            [username, email, hashedPwd, id],
+            function (err) {
+                if (err) {
+                    if (err.message.includes('UNIQUE')) {
+                        return res.status(409).json({ error: "Username já está registado" });
+                    }
+                    return handleDBError(res, err);
+                }
+                securityLog('ADMINISTRADOR_UPDATED', { id, username, email, password_changed: true, updated_by: req.user.id });
+                res.json({ message: "Administrador atualizado com sucesso", id });
+            });
+    } else {
+        db.run(`UPDATE administradores SET username = ?, email = ? WHERE id = ?`,
+            [username, email, id],
+            function (err) {
+                if (err) {
+                    if (err.message.includes('UNIQUE')) {
+                        return res.status(409).json({ error: "Username já está registado" });
+                    }
+                    return handleDBError(res, err);
+                }
+                securityLog('ADMINISTRADOR_UPDATED', { id, username, email, password_changed: false, updated_by: req.user.id });
+                res.json({ message: "Administrador atualizado com sucesso", id });
+            });
+    }
+});
+
 // --- TECNICOS ROUTES ---
 
 app.get('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
@@ -4091,6 +4758,185 @@ app.get('/api/tecnico/stock', authenticateJWT, isTecnico, (req, res) => {
     db.all(`SELECT id, nome_produto, quantidade, codigo_barras, categoria_produto, unidade FROM produto ORDER BY nome_produto ASC`, [], (err, rows) => {
         if (err) return handleDBError(res, err);
         res.json(rows);
+    });
+});
+
+app.get('/api/tecnico/avarias/:id/preparativos', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const techId = req.user.id;
+
+    db.get(`SELECT EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = ? AND tecnico_id = ?) as is_assigned`, [id, techId], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row || !row.is_assigned) return res.status(403).json({ error: "Acesso negado: esta tarefa não lhe pertence." });
+
+        const query = `
+            SELECT p.id, p.produto_id, p.quantidade_levada, p.quantidade_usada, pr.nome_produto, pr.unidade 
+            FROM preparativos_avaria p 
+            JOIN produto pr ON p.produto_id = pr.id 
+            WHERE p.avaria_id = ?
+            ORDER BY pr.nome_produto ASC
+        `;
+        db.all(query, [id], (err, rows) => {
+            if (err) return handleDBError(res, err);
+            res.json(rows);
+        });
+    });
+});
+
+app.put('/api/tecnico/avarias/:id/preparativos', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const techId = req.user.id;
+    const items = req.body.items || [];
+
+    db.get(`
+        SELECT a.relatorio_submetido, m.cliente_id,
+               EXISTS (SELECT 1 FROM avaria_tecnicos WHERE avaria_id = a.id AND tecnico_id = ?) as is_assigned
+        FROM avarias a
+        LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+        WHERE a.id = ?
+    `, [techId, id], (err, avaria) => {
+        if (err) return handleDBError(res, err);
+        if (!avaria) return res.status(404).json({ error: "Avaria não encontrada" });
+        if (!avaria.is_assigned) return res.status(403).json({ error: "Acesso negado" });
+        if (avaria.relatorio_submetido === 1) return res.status(400).json({ error: "O relatório já foi submetido." });
+
+        db.all(`SELECT produto_id, quantidade_levada FROM preparativos_avaria WHERE avaria_id = ?`, [id], (err, oldItems) => {
+            if (err) return handleDBError(res, err);
+
+            const oldMap = {};
+            oldItems.forEach(item => {
+                oldMap[item.produto_id] = item.quantidade_levada;
+            });
+
+            const newMap = {};
+            items.forEach(item => {
+                const pid = parseInt(item.produto_id);
+                const qty = parseFloat(item.quantidade_levada);
+                if (pid && qty > 0) {
+                    newMap[pid] = qty;
+                }
+            });
+
+            const diffs = [];
+            const allProductIds = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+
+            for (const pidStr of allProductIds) {
+                const pid = parseInt(pidStr);
+                const oldQty = oldMap[pid] || 0;
+                const newQty = newMap[pid] || 0;
+                const diff = newQty - oldQty;
+                if (diff !== 0) {
+                    diffs.push({ produto_id: pid, diff, newQty });
+                }
+            }
+
+            if (diffs.length === 0) {
+                return res.json({ message: "Sem alterações nos preparativos." });
+            }
+
+            db.serialize(() => {
+                let errOccurred = null;
+                let completed = 0;
+
+                const checkStmt = db.prepare(`SELECT quantidade, nome_produto FROM produto WHERE id = ?`);
+
+                function finishChecking() {
+                    checkStmt.finalize();
+                    if (errOccurred) {
+                        return res.status(400).json({ error: errOccurred.message });
+                    }
+                    performPrepUpdates();
+                }
+
+                diffs.forEach(d => {
+                    checkStmt.get(d.produto_id, (err, prod) => {
+                        if (err) {
+                            errOccurred = err;
+                        } else if (!prod && d.diff > 0) {
+                            errOccurred = new Error(`Produto ID ${d.produto_id} não encontrado no stock.`);
+                        } else if (prod && d.diff > 0 && prod.quantidade < d.diff) {
+                            errOccurred = new Error(`Stock insuficiente para "${prod.nome_produto}". Disponível: ${prod.quantidade}, Solicitado adicional: ${d.diff}.`);
+                        }
+                        completed++;
+                        if (completed === diffs.length) {
+                            finishChecking();
+                        }
+                    });
+                });
+
+                if (diffs.length === 0) {
+                    finishChecking();
+                }
+
+                function performPrepUpdates() {
+                    db.serialize(() => {
+                        let updateErr = null;
+                        let updateCompleted = 0;
+                        const updateStockStmt = db.prepare(`UPDATE produto SET quantidade = MAX(0, quantidade - ?) WHERE id = ?`);
+                        const insertMovStmt = db.prepare(`
+                            INSERT INTO movimentos_stock (produto_id, quantidade, tipo_movimento, referencia_id, cliente_id, utilizador_id, utilizador_role, data_hora)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        `);
+
+                        function checkDone() {
+                            updateCompleted++;
+                            if (updateCompleted === diffs.length) {
+                                updateStockStmt.finalize();
+                                insertMovStmt.finalize();
+                                if (updateErr) return handleDBError(res, updateErr);
+                                securityLog('PREPARATIVOS_CONFIRMED', { avaria_id: id, tecnico_id: techId, item_count: items.length });
+                                res.json({ message: "Preparativos confirmados e stock atualizado." });
+                            }
+                        }
+
+                        diffs.forEach(d => {
+                            updateStockStmt.run(d.diff, d.produto_id, (err) => {
+                                if (err) {
+                                    updateErr = err;
+                                    checkDone();
+                                    return;
+                                }
+
+                                const dateStr = new Date().toISOString();
+                                const movQty = -d.diff;
+                                const tipoMov = d.diff > 0 ? 'preparativo_saida' : 'preparativo_devolucao';
+                                insertMovStmt.run(d.produto_id, movQty, tipoMov, id, avaria.cliente_id, techId, 'tecnico', dateStr, (err) => {
+                                    if (err) {
+                                        updateErr = err;
+                                        checkDone();
+                                        return;
+                                    }
+
+                                    if (d.newQty === 0) {
+                                        db.run(`DELETE FROM preparativos_avaria WHERE avaria_id = ? AND produto_id = ?`, [id, d.produto_id], (err) => {
+                                            if (err) updateErr = err;
+                                            checkDone();
+                                        });
+                                    } else {
+                                        db.get(`SELECT 1 FROM preparativos_avaria WHERE avaria_id = ? AND produto_id = ?`, [id, d.produto_id], (err, exists) => {
+                                            if (err) {
+                                                updateErr = err;
+                                                checkDone();
+                                            } else if (exists) {
+                                                db.run(`UPDATE preparativos_avaria SET quantidade_levada = ? WHERE avaria_id = ? AND produto_id = ?`, [d.newQty, id, d.produto_id], (err) => {
+                                                    if (err) updateErr = err;
+                                                    checkDone();
+                                                });
+                                            } else {
+                                                db.run(`INSERT INTO preparativos_avaria (avaria_id, produto_id, quantidade_levada, quantidade_usada) VALUES (?, ?, ?, 0)`, [id, d.produto_id, d.newQty], (err) => {
+                                                    if (err) updateErr = err;
+                                                    checkDone();
+                                                });
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                        });
+                    });
+                }
+            });
+        });
     });
 });
 
