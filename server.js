@@ -296,6 +296,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 data_fim_garantia TEXT,
                 uuid TEXT NOT NULL UNIQUE,
                 data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+                fornecedor TEXT,
+                fatura_compra TEXT,
                 FOREIGN KEY (cliente_id) REFERENCES clientes (id)
             )`);
 
@@ -602,7 +604,9 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 marca TEXT NOT NULL,
                 modelo TEXT NOT NULL,
                 numero_serie TEXT,
-                data_entrada DATETIME DEFAULT CURRENT_TIMESTAMP
+                data_entrada DATETIME DEFAULT CURRENT_TIMESTAMP,
+                fornecedor TEXT,
+                fatura_compra TEXT
             )`);
 
             db.run(`CREATE TABLE IF NOT EXISTS preparativos_avaria (
@@ -649,7 +653,11 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 { table: 'manutencoes', column: 'deslocacoes', type: 'INTEGER DEFAULT 1' },
                 { table: 'avarias', column: 'tempo_acumulado', type: 'INTEGER DEFAULT 0' },
                 { table: 'servicos', column: 'tempo_acumulado', type: 'INTEGER DEFAULT 0' },
-                { table: 'manutencoes', column: 'tempo_acumulado', type: 'INTEGER DEFAULT 0' }
+                { table: 'manutencoes', column: 'tempo_acumulado', type: 'INTEGER DEFAULT 0' },
+                { table: 'maquinas', column: 'fornecedor', type: 'TEXT' },
+                { table: 'maquinas', column: 'fatura_compra', type: 'TEXT' },
+                { table: 'stock_maquinas', column: 'fornecedor', type: 'TEXT' },
+                { table: 'stock_maquinas', column: 'fatura_compra', type: 'TEXT' }
             ];
 
             migrations.forEach(m => {
@@ -2025,7 +2033,7 @@ app.delete('/api/clientes-users/:id', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT m.id, m.marca, m.modelo, m.numero_serie, m.data_instalacao, m.data_inicio_garantia, m.data_fim_garantia, m.uuid, strftime('%Y-%m-%dT%H:%M:%SZ', m.data_criacao) as data_criacao, c.nome as cliente_nome, c.id as cliente_id 
+        SELECT m.id, m.marca, m.modelo, m.numero_serie, m.data_instalacao, m.data_inicio_garantia, m.data_fim_garantia, m.uuid, strftime('%Y-%m-%dT%H:%M:%SZ', m.data_criacao) as data_criacao, c.nome as cliente_nome, c.id as cliente_id, m.fornecedor, m.fatura_compra 
         FROM maquinas m 
         LEFT JOIN clientes c ON m.cliente_id = c.id
         ORDER BY m.id DESC
@@ -2038,40 +2046,44 @@ app.get('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
 
 app.post('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
     const { cliente_id, data_instalacao, data_inicio_garantia, data_fim_garantia } = req.body;
-    let { marca, modelo, numero_serie } = req.body;
+    let { marca, modelo, numero_serie, fornecedor, fatura_compra } = req.body;
 
     marca = sanitizeString(marca);
     modelo = sanitizeString(modelo);
     numero_serie = sanitizeString(numero_serie);
+    fornecedor = sanitizeString(fornecedor);
+    fatura_compra = sanitizeString(fatura_compra);
 
     if (!cliente_id || !marca || !modelo) return res.status(400).json({ error: "Cliente, Marca e Modelo são obrigatórios" });
 
     const uuid = crypto.randomUUID();
 
-    db.run(`INSERT INTO maquinas (cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid],
+    db.run(`INSERT INTO maquinas (cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid, fornecedor, fatura_compra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid, fornecedor || null, fatura_compra || null],
         function (err) {
             if (err) return handleDBError(res, err);
-            res.status(201).json({ id: this.lastID, cliente_id, marca, modelo, uuid });
+            res.status(201).json({ id: this.lastID, cliente_id, marca, modelo, uuid, fornecedor: fornecedor || null, fatura_compra: fatura_compra || null });
         });
 });
 
 app.put('/api/maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
     const { cliente_id, data_instalacao, data_inicio_garantia, data_fim_garantia } = req.body;
-    let { marca, modelo, numero_serie } = req.body;
+    let { marca, modelo, numero_serie, fornecedor, fatura_compra } = req.body;
 
     marca = sanitizeString(marca);
     modelo = sanitizeString(modelo);
     numero_serie = sanitizeString(numero_serie);
+    fornecedor = sanitizeString(fornecedor);
+    fatura_compra = sanitizeString(fatura_compra);
 
     if (!cliente_id || !marca || !modelo) return res.status(400).json({ error: "Cliente, Marca e Modelo são obrigatórios" });
 
-    db.run(`UPDATE maquinas SET cliente_id = ?, marca = ?, modelo = ?, numero_serie = ?, data_instalacao = ?, data_inicio_garantia = ?, data_fim_garantia = ? WHERE id = ?`,
-        [cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, id],
+    db.run(`UPDATE maquinas SET cliente_id = ?, marca = ?, modelo = ?, numero_serie = ?, data_instalacao = ?, data_inicio_garantia = ?, data_fim_garantia = ?, fornecedor = ?, fatura_compra = ? WHERE id = ?`,
+        [cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, fornecedor || null, fatura_compra || null, id],
         function (err) {
             if (err) return handleDBError(res, err);
-            res.json({ message: "Máquina atualizada com sucesso", id, cliente_id, marca, modelo });
+            res.json({ message: "Máquina atualizada com sucesso", id, cliente_id, marca, modelo, fornecedor: fornecedor || null, fatura_compra: fatura_compra || null });
         });
 });
 
@@ -2175,23 +2187,27 @@ app.get('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
 });
 
 app.post('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
-    let { marca, modelo, numero_serie } = req.body;
+    let { marca, modelo, numero_serie, fornecedor, fatura_compra } = req.body;
     marca = sanitizeString(marca);
     modelo = sanitizeString(modelo);
     numero_serie = sanitizeString(numero_serie);
+    fornecedor = sanitizeString(fornecedor);
+    fatura_compra = sanitizeString(fatura_compra);
 
     if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
 
     db.run(
-        `INSERT INTO stock_maquinas (marca, modelo, numero_serie) VALUES (?, ?, ?)`,
-        [marca, modelo, numero_serie || null],
+        `INSERT INTO stock_maquinas (marca, modelo, numero_serie, fornecedor, fatura_compra) VALUES (?, ?, ?, ?, ?)`,
+        [marca, modelo, numero_serie || null, fornecedor || null, fatura_compra || null],
         function (err) {
             if (err) return handleDBError(res, err);
             res.status(201).json({
                 id: this.lastID,
                 marca,
                 modelo,
-                numero_serie: numero_serie || null
+                numero_serie: numero_serie || null,
+                fornecedor: fornecedor || null,
+                fatura_compra: fatura_compra || null
             });
         }
     );
@@ -2199,16 +2215,18 @@ app.post('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
 
 app.put('/api/stock_maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    let { marca, modelo, numero_serie } = req.body;
+    let { marca, modelo, numero_serie, fornecedor, fatura_compra } = req.body;
     marca = sanitizeString(marca);
     modelo = sanitizeString(modelo);
     numero_serie = sanitizeString(numero_serie);
+    fornecedor = sanitizeString(fornecedor);
+    fatura_compra = sanitizeString(fatura_compra);
 
     if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
 
     db.run(
-        `UPDATE stock_maquinas SET marca = ?, modelo = ?, numero_serie = ? WHERE id = ?`,
-        [marca, modelo, numero_serie || null, id],
+        `UPDATE stock_maquinas SET marca = ?, modelo = ?, numero_serie = ?, fornecedor = ?, fatura_compra = ? WHERE id = ?`,
+        [marca, modelo, numero_serie || null, fornecedor || null, fatura_compra || null, id],
         function (err) {
             if (err) return handleDBError(res, err);
             res.json({ message: "Máquina em stock atualizada com sucesso" });
@@ -2242,8 +2260,8 @@ app.post('/api/stock_maquinas/:id/associar', authenticateJWT, isAdmin, (req, res
 
         // 2. Insert into maquinas
         db.run(
-            `INSERT INTO maquinas (cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [cliente_id, stockMachine.marca, stockMachine.modelo, finalNumeroSerie || null, data_instalacao || null, data_inicio_garantia || null, data_fim_garantia || null, uuid],
+            `INSERT INTO maquinas (cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid, fornecedor, fatura_compra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [cliente_id, stockMachine.marca, stockMachine.modelo, finalNumeroSerie || null, data_instalacao || null, data_inicio_garantia || null, data_fim_garantia || null, uuid, stockMachine.fornecedor || null, stockMachine.fatura_compra || null],
             function (err) {
                 if (err) return handleDBError(res, err);
 

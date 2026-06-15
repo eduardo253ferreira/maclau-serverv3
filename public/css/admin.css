@@ -1914,3 +1914,7 @@ body.fullscreen-mode .mobile-header {
 body.fullscreen-mode #btn-fullscreen-stock {
     display: none !important;
 }
+
+#modal-supplier {
+    z-index: 1100;
+}

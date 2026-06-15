@@ -498,14 +498,14 @@
                         <i class="ph ph-caret-down nav-group-caret"></i>
                     </button>
                     <div class="nav-submenu">
+                        <button class="nav-btn" data-target="administradores">
+                            <i class="ph ph-shield-check"></i> Gestão de Administradores
+                        </button>
                         <button class="nav-btn" data-target="tecnicos">
                             <i class="ph ph-wrench"></i> Gestão de Técnicos
                         </button>
                         <button class="nav-btn" data-target="checklists">
                             <i class="ph ph-list-checks"></i> Gestão de Checklists
-                        </button>
-                        <button class="nav-btn" data-target="administradores">
-                            <i class="ph ph-shield-check"></i> Gestão de Administradores
                         </button>
                     </div>
                 </div>
@@ -1615,6 +1615,21 @@
                     <label>Fim da Garantia</label>
                     <input type="date" id="maquina-data-fim-garantia">
                 </div>
+                <div class="form-group">
+                    <label>Fornecedor</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="maquina-fornecedor">
+                            <option value="">Selecione o Fornecedor</option>
+                        </select>
+                        <button type="button" class="btn-primary btn-add-supplier-on-the-fly" data-target="maquina-fornecedor" style="width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Adicionar fornecedor">
+                            <i class="ph ph-plus" style="font-size: 20px;"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Fatura de Compra</label>
+                    <input type="text" id="maquina-fatura-compra" placeholder="Ex: FT/2026/1234">
+                </div>
                 <button type="submit" class="btn-primary w-100">Guardar</button>
             </form>
         </div>
@@ -1728,6 +1743,21 @@
                 <div class="form-group">
                     <label>Fim da Garantia</label>
                     <input type="date" id="edit-maquina-data-fim-garantia">
+                </div>
+                <div class="form-group">
+                    <label>Fornecedor</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="edit-maquina-fornecedor">
+                            <option value="">Selecione o Fornecedor</option>
+                        </select>
+                        <button type="button" class="btn-primary btn-add-supplier-on-the-fly" data-target="edit-maquina-fornecedor" style="width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Adicionar fornecedor">
+                            <i class="ph ph-plus" style="font-size: 20px;"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Fatura de Compra</label>
+                    <input type="text" id="edit-maquina-fatura-compra">
                 </div>
                 <button type="submit" class="btn-primary w-100">Atualizar</button>
             </form>
@@ -1972,6 +2002,8 @@
                     id="view-maquina-iniciogarantia"></span></div>
             <div style="margin-bottom: 12px;"><strong>Fim Garantia:</strong> <span id="view-maquina-fimgarantia"></span>
             </div>
+            <div style="margin-bottom: 12px;"><strong>Fornecedor:</strong> <span id="view-maquina-fornecedor"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Fatura de Compra:</strong> <span id="view-maquina-faturacompra"></span></div>
         </div>
     </div>
 
@@ -2962,6 +2994,21 @@
                 <div class="form-group">
                     <label>Número de Série (Opcional - se já definido)</label>
                     <input type="text" id="stock-maq-numero-serie" placeholder="Ex: 12345678">
+                </div>
+                <div class="form-group">
+                    <label>Fornecedor (Opcional)</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="stock-maq-fornecedor">
+                            <option value="">Selecione o Fornecedor</option>
+                        </select>
+                        <button type="button" class="btn-primary btn-add-supplier-on-the-fly" data-target="stock-maq-fornecedor" style="width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Adicionar fornecedor">
+                            <i class="ph ph-plus" style="font-size: 20px;"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Fatura de Compra (Opcional)</label>
+                    <input type="text" id="stock-maq-fatura-compra" placeholder="Ex: FT/2026/1234">
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; border-top: 1px solid var(--border-color); padding-top: 15px;">
                     <button type="button" id="btn-cancel-stock-maquina" class="btn-secondary" style="padding: 10px 20px; border-radius: 8px;">Cancelar</button>

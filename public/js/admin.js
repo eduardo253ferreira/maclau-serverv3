@@ -11,6 +11,7 @@ let histCurrentPage = 1;
 const histItemsPerPage = 10;
 let currentFaturacaoRef = null; // Armazena { selectElement, object, oldVal }
 let cachedClientes = [];
+let activeSupplierSelectOnTheFly = null;
 
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
@@ -311,12 +312,12 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'estatisticas') loadEstatisticas();
         if (target === 'clientes') loadClientes();
         if (target === 'manutencoes-recorrentes') loadRecorrentes();
-        if (target === 'maquinas') loadMaquinas();
+        if (target === 'maquinas') { loadSuppliersForMachineForms(); loadMaquinas(); }
         if (target === 'tecnicos') loadTecnicos();
         if (target === 'administradores') loadAdministradores();
         if (target === 'frota') loadFrota();
         if (target === 'stock') loadStock();
-        if (target === 'stock-maquinas') loadStockMaquinas();
+        if (target === 'stock-maquinas') { loadSuppliersForMachineForms(); loadStockMaquinas(); }
         if (target === 'fornecedores') loadSuppliers();
         if (target === 'historico-stock') loadHistoricoStock();
         if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
@@ -1523,6 +1524,8 @@ function openViewMaquinaModal(m) {
     document.getElementById('view-maquina-instalacao').textContent = m.data_instalacao || 'N/A';
     document.getElementById('view-maquina-iniciogarantia').textContent = m.data_inicio_garantia || 'N/A';
     document.getElementById('view-maquina-fimgarantia').textContent = m.data_fim_garantia || 'N/A';
+    document.getElementById('view-maquina-fornecedor').textContent = m.fornecedor || 'N/A';
+    document.getElementById('view-maquina-faturacompra').textContent = m.fatura_compra || 'N/A';
     openModal('modal-view-maquina');
 }
 
@@ -1542,7 +1545,8 @@ function openViewClienteModal(c) {
     openModal('modal-view-cliente');
 }
 
-function openEditMaquinaModal(m) {
+async function openEditMaquinaModal(m) {
+    await loadSuppliersForMachineForms();
     document.getElementById('edit-maquina-id').value = m.id;
     document.getElementById('edit-maquina-cliente_id').value = m.cliente_id;
     document.getElementById('edit-maquina-marca').value = m.marca || '';
@@ -1551,6 +1555,8 @@ function openEditMaquinaModal(m) {
     document.getElementById('edit-maquina-data-instalacao').value = m.data_instalacao || '';
     document.getElementById('edit-maquina-data-inicio-garantia').value = m.data_inicio_garantia || '';
     document.getElementById('edit-maquina-data-fim-garantia').value = m.data_fim_garantia || '';
+    document.getElementById('edit-maquina-fornecedor').value = m.fornecedor || '';
+    document.getElementById('edit-maquina-fatura-compra').value = m.fatura_compra || '';
     openModal('modal-edit-maquina');
 }
 
@@ -1566,7 +1572,9 @@ document.getElementById('form-edit-maquina').addEventListener('submit', async (e
         numero_serie: document.getElementById('edit-maquina-numero-serie').value,
         data_instalacao: document.getElementById('edit-maquina-data-instalacao').value,
         data_inicio_garantia: document.getElementById('edit-maquina-data-inicio-garantia').value,
-        data_fim_garantia: document.getElementById('edit-maquina-data-fim-garantia').value
+        data_fim_garantia: document.getElementById('edit-maquina-data-fim-garantia').value,
+        fornecedor: document.getElementById('edit-maquina-fornecedor').value,
+        fatura_compra: document.getElementById('edit-maquina-fatura-compra').value
     };
 
     try {
@@ -1594,7 +1602,9 @@ document.getElementById('form-add-maquina').addEventListener('submit', async (e)
         numero_serie: document.getElementById('maquina-numero-serie').value,
         data_instalacao: document.getElementById('maquina-data-instalacao').value,
         data_inicio_garantia: document.getElementById('maquina-data-inicio-garantia').value,
-        data_fim_garantia: document.getElementById('maquina-data-fim-garantia').value
+        data_fim_garantia: document.getElementById('maquina-data-fim-garantia').value,
+        fornecedor: document.getElementById('maquina-fornecedor').value,
+        fatura_compra: document.getElementById('maquina-fatura-compra').value
     };
 
     try {
@@ -2815,7 +2825,7 @@ window.onload = async () => {
     if (addClientBtn) addClientBtn.addEventListener('click', () => openModal('modal-add-client'));
 
     const addMaqBtn = document.getElementById('btn-open-add-maquina');
-    if (addMaqBtn) addMaqBtn.addEventListener('click', () => openModal('modal-add-maquina'));
+    if (addMaqBtn) addMaqBtn.addEventListener('click', async () => { await loadSuppliersForMachineForms(); openModal('modal-add-maquina'); });
 
     const addTechBtn = document.getElementById('btn-open-add-tecnico');
     if (addTechBtn) addTechBtn.addEventListener('click', () => openModal('modal-add-tecnico'));
@@ -5509,6 +5519,15 @@ async function saveSupplier(e) {
         closeModal('modal-supplier');
         loadSuppliers();
         
+        if (activeSupplierSelectOnTheFly) {
+            await loadSuppliersForMachineForms();
+            const selectEl = document.getElementById(activeSupplierSelectOnTheFly);
+            if (selectEl) {
+                selectEl.value = nome;
+            }
+            activeSupplierSelectOnTheFly = null;
+        }
+
         const productModal = document.getElementById('modal-stock-product');
         if (productModal && !productModal.classList.contains('hidden')) {
             const currentSelected = document.getElementById('stock-product-fornecedor')?.value;
@@ -5686,6 +5705,8 @@ function renderStockMaquinasTable(data) {
                                 <tr style="background: #f1f5f9;">
                                     <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); width: 80px;">ID Unidade</th>
                                     <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary);">Número de Série</th>
+                                    <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary);">Fornecedor</th>
+                                    <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary);">Fatura Compra</th>
                                     <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary);">Data de Entrada</th>
                                     <th style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); text-align: right; width: 150px; padding-right: 15px;">Ações</th>
                                 </tr>
@@ -5705,6 +5726,8 @@ function renderStockMaquinasTable(data) {
                 trUnit.innerHTML = `
                     <td class="col-unit-id" style="font-weight: 600; color: var(--text-secondary);"></td>
                     <td class="col-unit-serie"></td>
+                    <td class="col-unit-fornecedor"></td>
+                    <td class="col-unit-fatura"></td>
                     <td class="col-unit-data" style="color: var(--text-secondary); font-size: 13px;"></td>
                     <td>
                         <div style="display:flex; gap:8px; justify-content:flex-end;">
@@ -5732,6 +5755,9 @@ function renderStockMaquinasTable(data) {
                     colSerie.style.fontWeight = '600';
                 }
 
+                trUnit.querySelector('.col-unit-fornecedor').textContent = unit.fornecedor || '-';
+                trUnit.querySelector('.col-unit-fatura').textContent = unit.fatura_compra || '-';
+
                 trUnit.querySelector('.col-unit-data').textContent = dataEntradaStr;
 
                 trUnit.querySelector('.btn-assoc-unit').onclick = (e) => {
@@ -5755,28 +5781,33 @@ function renderStockMaquinasTable(data) {
     });
 }
 
-function openAddStockMaquinaModal() {
+async function openAddStockMaquinaModal() {
     document.getElementById('modal-stock-maquina-title').textContent = 'Nova Máquina em Stock';
     document.getElementById('form-stock-maquina').reset();
     document.getElementById('stock-maq-id').value = '';
+    await loadSuppliersForMachineForms();
     openModal('modal-stock-maquina');
 }
 
-function openAddStockMaquinaModalWithPrefill(marca, modelo) {
+async function openAddStockMaquinaModalWithPrefill(marca, modelo) {
     document.getElementById('modal-stock-maquina-title').textContent = 'Nova Máquina em Stock';
     document.getElementById('form-stock-maquina').reset();
     document.getElementById('stock-maq-id').value = '';
     document.getElementById('stock-maq-marca').value = marca;
     document.getElementById('stock-maq-modelo').value = modelo;
+    await loadSuppliersForMachineForms();
     openModal('modal-stock-maquina');
 }
 
-function openEditStockMaquinaModal(m) {
+async function openEditStockMaquinaModal(m) {
     document.getElementById('modal-stock-maquina-title').textContent = 'Editar Máquina em Stock';
     document.getElementById('stock-maq-id').value = m.id;
     document.getElementById('stock-maq-marca').value = m.marca || '';
     document.getElementById('stock-maq-modelo').value = m.modelo || '';
     document.getElementById('stock-maq-numero-serie').value = m.numero_serie || '';
+    await loadSuppliersForMachineForms();
+    document.getElementById('stock-maq-fornecedor').value = m.fornecedor || '';
+    document.getElementById('stock-maq-fatura-compra').value = m.fatura_compra || '';
     openModal('modal-stock-maquina');
 }
 
@@ -6080,6 +6111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnOpenAddSupplier = document.getElementById('btn-open-add-supplier');
     if (btnOpenAddSupplier) {
         btnOpenAddSupplier.addEventListener('click', () => {
+            activeSupplierSelectOnTheFly = null;
             resetSupplierForm();
             openModal('modal-supplier');
         });
@@ -6244,8 +6276,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const marca = document.getElementById('stock-maq-marca').value;
             const modelo = document.getElementById('stock-maq-modelo').value;
             const numero_serie = document.getElementById('stock-maq-numero-serie').value;
+            const fornecedor = document.getElementById('stock-maq-fornecedor').value;
+            const fatura_compra = document.getElementById('stock-maq-fatura-compra').value;
 
-            const payload = { marca, modelo, numero_serie };
+            const payload = { marca, modelo, numero_serie, fornecedor, fatura_compra };
 
             try {
                 if (id) {
@@ -6401,4 +6435,51 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Set up click listeners for adding suppliers on the fly (opens modal)
+    document.querySelectorAll('.btn-add-supplier-on-the-fly').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            activeSupplierSelectOnTheFly = btn.getAttribute('data-target');
+            resetSupplierForm();
+            openModal('modal-supplier');
+        });
+    });
 });
+
+// Load suppliers for machine creation and edit forms
+async function loadSuppliersForMachineForms() {
+    const selects = [
+        document.getElementById('maquina-fornecedor'),
+        document.getElementById('edit-maquina-fornecedor'),
+        document.getElementById('stock-maq-fornecedor')
+    ];
+    
+    // Set placeholder first
+    selects.forEach(select => {
+        if (select) {
+            select.innerHTML = '<option value="">A carregar fornecedores...</option>';
+        }
+    });
+    
+    try {
+        const suppliers = await apiFetch('/fornecedores');
+        selects.forEach(select => {
+            if (select) {
+                select.innerHTML = '<option value="">Selecione o Fornecedor</option>';
+                suppliers.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.nome;
+                    opt.textContent = s.nome;
+                    select.appendChild(opt);
+                });
+            }
+        });
+    } catch (e) {
+        selects.forEach(select => {
+            if (select) {
+                select.innerHTML = '<option value="">Erro ao carregar fornecedores</option>';
+            }
+        });
+    }
+}
