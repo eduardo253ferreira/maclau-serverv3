@@ -5778,7 +5778,7 @@ function renderStockMaquinasTable(data) {
 
                 trUnit.querySelector('.btn-qr-unit').onclick = (e) => {
                     e.stopPropagation();
-                    generateQR(unit.uuid, `${unit.marca} - ${unit.modelo}`);
+                    generateQR(unit.uuid, unit.modelo || '');
                 };
                 trUnit.querySelector('.btn-assoc-unit').onclick = (e) => {
                     e.stopPropagation();
