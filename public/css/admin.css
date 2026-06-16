@@ -1205,78 +1205,145 @@ body {
 }
 
 @media print {
+    /* Esconder tudo no body exceto os modals de QR Code */
+    body > *:not(#modal-qrcode):not(#modal-product-qrcode) {
+        display: none !important;
+    }
 
-    body,
-    html {
-        height: auto;
+    /* Esconder modals inativos/fechados */
+    #modal-qrcode.hidden,
+    #modal-product-qrcode.hidden {
+        display: none !important;
+    }
+
+    html,
+    body {
+        height: auto !important;
         overflow: visible !important;
-        margin: 0;
-        padding: 0;
-    }
-
-    body * {
-        visibility: hidden;
-    }
-
-    #modal-qrcode,
-    #modal-qrcode *,
-    #modal-product-qrcode,
-    #modal-product-qrcode * {
-        visibility: visible;
-    }
-
-    #modal-qrcode,
-    #modal-product-qrcode {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        background: white;
-        padding: 0 !important;
         margin: 0 !important;
-        border: none;
+        padding: 0 !important;
+        background: white !important;
     }
 
-    #modal-qrcode .modal-content,
-    #modal-product-qrcode .modal-content {
+    /* Mostrar e formatar o modal de máquina ativo no print */
+    #modal-qrcode:not(.hidden) {
+        display: block !important;
+        position: relative !important;
+        left: auto !important;
+        top: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        border: none !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+
+    #modal-qrcode:not(.hidden) .modal-content {
         box-shadow: none !important;
         border: none !important;
         padding: 20px !important;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: 100%;
+        margin: 0 auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: transparent !important;
+        text-align: center !important;
     }
 
-    .close-btn,
+    /* Mostrar e formatar o modal de produto ativo no print */
+    #modal-product-qrcode:not(.hidden) {
+        display: block !important;
+        position: relative !important;
+        left: auto !important;
+        top: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        border: none !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+
+    #modal-product-qrcode:not(.hidden) .modal-content {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 20px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: transparent !important;
+        text-align: center !important;
+    }
+
+    /* Ocultar elementos desnecessários para a impressão das máquinas */
+    #modal-qrcode .close-btn,
     #btn-print-qr,
-    #btn-print-product-qr,
     #modal-qrcode h2,
-    #modal-qrcode p:not(#print-contact-info),
+    #modal-qrcode .modal-content > p:not(#print-contact-info),
+    #qrcode-image-container p {
+        display: none !important;
+    }
+
+    /* Ocultar elementos desnecessários para a impressão dos produtos */
+    #modal-product-qrcode .close-btn,
+    #btn-print-product-qr,
     #modal-product-qrcode p {
         display: none !important;
     }
 
+    /* Formatar elementos das máquinas no print */
     #print-maclau-logo {
         display: block !important;
-        margin-bottom: 20px !important;
+        max-width: 180px !important;
+        margin: 0 auto 15px auto !important;
     }
 
-    .print-only-text {
+    #print-machine-name.print-only-text {
         display: block !important;
+        text-align: center !important;
+        font-size: 20px !important;
+        font-weight: bold !important;
         color: black !important;
-        font-family: inherit;
+        margin: 0 auto 15px auto !important;
     }
 
-    #print-contact-info {
+    #qrcode-image-container {
         display: block !important;
-        margin-top: 12px !important;
+        margin: 0 auto 15px auto !important;
+        text-align: center !important;
+    }
+
+    #qrcode-image-container img {
+        display: inline-block !important;
+        width: 200px !important;
+        height: 200px !important;
+    }
+
+    #print-contact-info.print-only-text {
+        display: block !important;
+        text-align: center !important;
         font-size: 14px !important;
-        font-weight: 600 !important;
-        color: #333 !important;
+        font-weight: bold !important;
+        color: black !important;
+        margin: 10px auto 0 auto !important;
     }
 }
 
@@ -1917,4 +1984,20 @@ body.fullscreen-mode #btn-fullscreen-stock {
 
 #modal-supplier {
     z-index: 1100;
+}
+
+/* Spinner animado para os Modals */
+.modal-spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-left-color: var(--accent);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    animation: modal-spin 1s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes modal-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

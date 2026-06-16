@@ -1624,22 +1624,35 @@ document.getElementById('form-add-maquina').addEventListener('submit', async (e)
 
 // QR Code
 async function generateQR(uuid, maquinaNome) {
+    const container = document.getElementById('qrcode-image-container');
+    const machineNameEl = document.getElementById('print-machine-name');
+
+    if (machineNameEl) {
+        machineNameEl.textContent = maquinaNome || '';
+    }
+
+    if (container) {
+        container.innerHTML = `
+            <div class="qr-loading-spinner" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 0;">
+                <div class="modal-spinner"></div>
+                <span style="font-size: 13px; color: var(--text-secondary);">A gerar código QR...</span>
+            </div>
+        `;
+    }
+
+    // Abrir o modal imediatamente para resposta visual instantânea
+    openModal('modal-qrcode');
+
     try {
         const res = await apiFetch(`/maquinas/${uuid}/qrcode`);
-        const container = document.getElementById('qrcode-image-container');
-        const machineNameEl = document.getElementById('print-machine-name');
-
-        if (machineNameEl) {
-            machineNameEl.textContent = maquinaNome || '';
-        }
-
         if (container) {
             container.innerHTML = `<img src="${res.qrCode}" alt="QR Code" style="width:200px; height:200px;">
                                    <p style="margin-top:10px; font-size:12px; word-break: break-all;">${res.url}</p>`;
         }
-
-        openModal('modal-qrcode');
     } catch (e) {
+        if (container) {
+            container.innerHTML = `<p style="color: var(--danger); font-size: 14px; font-weight: 600; padding: 20px 0;">Erro ao gerar código QR.</p>`;
+        }
         showNotification(e.message, true);
     }
 }
@@ -5731,6 +5744,9 @@ function renderStockMaquinasTable(data) {
                     <td class="col-unit-data" style="color: var(--text-secondary); font-size: 13px;"></td>
                     <td>
                         <div style="display:flex; gap:8px; justify-content:flex-end;">
+                            <button type="button" class="btn-icon btn-qr-unit" title="Imprimir QR Code" style="color: var(--success); width:28px; height:28px; font-size:14px; padding:0;">
+                                <i class="ph ph-qr-code"></i>
+                            </button>
                             <button type="button" class="btn-icon btn-assoc-unit" title="Associar a Cliente" style="color: var(--accent); width:28px; height:28px; font-size:14px; padding:0;">
                                 <i class="ph ph-user-plus"></i>
                             </button>
@@ -5760,6 +5776,10 @@ function renderStockMaquinasTable(data) {
 
                 trUnit.querySelector('.col-unit-data').textContent = dataEntradaStr;
 
+                trUnit.querySelector('.btn-qr-unit').onclick = (e) => {
+                    e.stopPropagation();
+                    generateQR(unit.uuid, `${unit.marca} - ${unit.modelo}`);
+                };
                 trUnit.querySelector('.btn-assoc-unit').onclick = (e) => {
                     e.stopPropagation();
                     openAssociateStockMaquinaModal(unit);

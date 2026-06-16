@@ -606,7 +606,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 numero_serie TEXT,
                 data_entrada DATETIME DEFAULT CURRENT_TIMESTAMP,
                 fornecedor TEXT,
-                fatura_compra TEXT
+                fatura_compra TEXT,
+                uuid TEXT
             )`);
 
             db.run(`CREATE TABLE IF NOT EXISTS preparativos_avaria (
@@ -657,7 +658,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 { table: 'maquinas', column: 'fornecedor', type: 'TEXT' },
                 { table: 'maquinas', column: 'fatura_compra', type: 'TEXT' },
                 { table: 'stock_maquinas', column: 'fornecedor', type: 'TEXT' },
-                { table: 'stock_maquinas', column: 'fatura_compra', type: 'TEXT' }
+                { table: 'stock_maquinas', column: 'fatura_compra', type: 'TEXT' },
+                { table: 'stock_maquinas', column: 'uuid', type: 'TEXT' }
             ];
 
             migrations.forEach(m => {
@@ -685,6 +687,14 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                     if (row && row.count === 0) {
                         db.run(`INSERT INTO manutencao_tecnicos (manutencao_id, tecnico_id)
                                 SELECT id, tecnico_id FROM manutencoes WHERE tecnico_id IS NOT NULL`);
+                    }
+                });
+
+                // Gerar UUID para máquinas no stock existentes que não tenham UUID
+                db.each(`SELECT id FROM stock_maquinas WHERE uuid IS NULL`, [], (err, row) => {
+                    if (row) {
+                        const newUuid = crypto.randomUUID();
+                        db.run(`UPDATE stock_maquinas SET uuid = ? WHERE id = ?`, [newUuid, row.id]);
                     }
                 });
 
@@ -2196,9 +2206,11 @@ app.post('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
 
     if (!marca || !modelo) return res.status(400).json({ error: "Marca e Modelo são obrigatórios" });
 
+    const uuid = crypto.randomUUID();
+
     db.run(
-        `INSERT INTO stock_maquinas (marca, modelo, numero_serie, fornecedor, fatura_compra) VALUES (?, ?, ?, ?, ?)`,
-        [marca, modelo, numero_serie || null, fornecedor || null, fatura_compra || null],
+        `INSERT INTO stock_maquinas (marca, modelo, numero_serie, fornecedor, fatura_compra, uuid) VALUES (?, ?, ?, ?, ?, ?)`,
+        [marca, modelo, numero_serie || null, fornecedor || null, fatura_compra || null, uuid],
         function (err) {
             if (err) return handleDBError(res, err);
             res.status(201).json({
@@ -2207,7 +2219,8 @@ app.post('/api/stock_maquinas', authenticateJWT, isAdmin, (req, res) => {
                 modelo,
                 numero_serie: numero_serie || null,
                 fornecedor: fornecedor || null,
-                fatura_compra: fatura_compra || null
+                fatura_compra: fatura_compra || null,
+                uuid: uuid
             });
         }
     );
@@ -2256,7 +2269,7 @@ app.post('/api/stock_maquinas/:id/associar', authenticateJWT, isAdmin, (req, res
         if (!stockMachine) return res.status(404).json({ error: "Máquina em stock não encontrada" });
 
         const finalNumeroSerie = numero_serie || stockMachine.numero_serie;
-        const uuid = crypto.randomUUID();
+        const uuid = stockMachine.uuid || crypto.randomUUID();
 
         // 2. Insert into maquinas
         db.run(
