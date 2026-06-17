@@ -471,6 +471,30 @@
                     </div>
                 </div>
 
+                <!-- Máquinas Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-washing-machine"></i> Máquinas
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn" data-target="maquinas">
+                            <i class="ph ph-gear-six"></i> Gestão de Máquinas
+                        </button>
+                        <button class="nav-btn" data-target="stock-maquinas">
+                            <i class="ph ph-washing-machine"></i> Stock Máquinas
+                        </button>
+                        <button class="nav-btn" data-target="componentes-maquinas">
+                            <i class="ph ph-wrench"></i> Consulta por Máquina
+                        </button>
+                        <button class="nav-btn" data-target="checklists">
+                            <i class="ph ph-list-checks"></i> Guias de Resolução
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Clientes Group -->
                 <div class="nav-group">
                     <button class="nav-group-title" type="button">
@@ -482,9 +506,6 @@
                     <div class="nav-submenu">
                         <button class="nav-btn" data-target="clientes">
                             <i class="ph ph-users"></i> Gestão de Clientes
-                        </button>
-                        <button class="nav-btn" data-target="maquinas">
-                            <i class="ph ph-washing-machine"></i> Gestão de Máquinas
                         </button>
                     </div>
                 </div>
@@ -504,9 +525,6 @@
                         <button class="nav-btn" data-target="tecnicos">
                             <i class="ph ph-wrench"></i> Gestão de Técnicos
                         </button>
-                        <button class="nav-btn" data-target="checklists">
-                            <i class="ph ph-list-checks"></i> Gestão de Checklists
-                        </button>
                     </div>
                 </div>
 
@@ -521,9 +539,6 @@
                     <div class="nav-submenu">
                         <button class="nav-btn" data-target="stock">
                             <i class="ph ph-package"></i> Stock
-                        </button>
-                        <button class="nav-btn" data-target="stock-maquinas">
-                            <i class="ph ph-washing-machine"></i> Stock de Máquinas
                         </button>
                         <button class="nav-btn" data-target="fornecedores">
                             <i class="ph ph-buildings"></i> Fornecedores
@@ -1427,7 +1442,7 @@
             <section id="view-checklists" class="view hidden">
                 <header class="view-header flex-header">
                     <div>
-                        <h1>Gestão de Checklists</h1>
+                        <h1>Guias de Resolução</h1>
                         <p>Crie guiões de resolução passo a passo para as avarias mais comuns.</p>
                     </div>
                     <button id="btn-open-add-checklist" class="btn-primary">+ Nova Checklist</button>
@@ -1454,6 +1469,43 @@
                         </tbody>
                     </table>
                 </div>
+            </section>
+
+            <!-- Componentes Máquinas View -->
+            <section id="view-componentes-maquinas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Consulta por Máquina</h1>
+                        <p>Gestão centralizada de componentes, checklists e manuais por modelo.</p>
+                    </div>
+                </header>
+
+                <!-- Search Filter Bar -->
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; padding: 0 10px;">
+                    <div style="position: relative; flex: 1; max-width: 400px;">
+                        <input type="text" id="search-modelos-maquinas" placeholder="Pesquisar por ID, marca ou modelo..." style="width: 100%; padding: 10px 12px 10px 35px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; box-sizing: border-box; background: var(--surface-color); color: var(--text-color);">
+                        <i class="ph ph-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-secondary); font-size: 16px;"></i>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">ID</th>
+                                <th>Marca</th>
+                                <th>Modelo</th>
+                                <th style="text-align: right; width: 200px; padding-right: 20px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-modelos-maquinas-body">
+                            <!-- Populado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Hidden file input for uploading manuals from the hub table -->
+                <input type="file" id="input-file-manual-hub" accept="application/pdf" style="display: none;">
             </section>
         </main>
     </div> <!-- .app-container -->
@@ -1593,11 +1645,18 @@
                 </div>
                 <div class="form-group">
                     <label>Marca *</label>
-                    <input type="text" id="maquina-marca" required placeholder="Ex: Fagor">
+                    <input type="text" id="maquina-marca" required placeholder="Ex: Fagor" list="datalist-marcas-maquinas">
                 </div>
                 <div class="form-group">
                     <label>Modelo *</label>
-                    <input type="text" id="maquina-modelo" required placeholder="Ex: LN-11">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="maquina-modelo" required placeholder="Ex: LN-11" style="flex: 1;" list="datalist-modelos-maquinas-add">
+                        <button type="button" id="btn-manual-maquina-add" class="btn-secondary" style="width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Manual de instruções" disabled>
+                            <i class="ph ph-file-pdf" style="font-size: 24px;"></i>
+                        </button>
+                    </div>
+                    <input type="file" id="input-file-manual-add" accept="application/pdf" style="display: none;">
+                    <div id="manual-status-add" style="font-size: 11px; margin-top: 4px; display: none; align-items: center; gap: 5px;"></div>
                 </div>
                 <div class="form-group">
                     <label>Número de Série</label>
@@ -1722,11 +1781,18 @@
                 </div>
                 <div class="form-group">
                     <label>Marca *</label>
-                    <input type="text" id="edit-maquina-marca" required>
+                    <input type="text" id="edit-maquina-marca" required list="datalist-marcas-maquinas">
                 </div>
                 <div class="form-group">
                     <label>Modelo *</label>
-                    <input type="text" id="edit-maquina-modelo" required>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="edit-maquina-modelo" required style="flex: 1;" list="datalist-modelos-maquinas-edit">
+                        <button type="button" id="btn-manual-maquina-edit" class="btn-secondary" style="width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Manual de instruções" disabled>
+                            <i class="ph ph-file-pdf" style="font-size: 24px;"></i>
+                        </button>
+                    </div>
+                    <input type="file" id="input-file-manual-edit" accept="application/pdf" style="display: none;">
+                    <div id="manual-status-edit" style="font-size: 11px; margin-top: 4px; display: none; align-items: center; gap: 5px;"></div>
                 </div>
                 <div class="form-group">
                     <label>Número de Série</label>
@@ -2004,6 +2070,12 @@
             </div>
             <div style="margin-bottom: 12px;"><strong>Fornecedor:</strong> <span id="view-maquina-fornecedor"></span></div>
             <div style="margin-bottom: 12px;"><strong>Fatura de Compra:</strong> <span id="view-maquina-faturacompra"></span></div>
+            <div id="view-maquina-manual-container" style="margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border-color); display: none; align-items: center; gap: 8px;">
+                <strong>Manual de Instruções:</strong>
+                <a id="view-maquina-manual-link" href="#" target="_blank" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 13px; text-decoration: none; border-radius: 8px;">
+                    <i class="ph ph-file-pdf"></i> Abrir Manual PDF
+                </a>
+            </div>
         </div>
     </div>
 
@@ -2985,11 +3057,18 @@
                 <input type="hidden" id="stock-maq-id">
                 <div class="form-group">
                     <label>Marca *</label>
-                    <input type="text" id="stock-maq-marca" required placeholder="Ex: Girbau">
+                    <input type="text" id="stock-maq-marca" required placeholder="Ex: Girbau" list="datalist-marcas-maquinas">
                 </div>
                 <div class="form-group">
                     <label>Modelo *</label>
-                    <input type="text" id="stock-maq-modelo" required placeholder="Ex: HS-6008">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="stock-maq-modelo" required placeholder="Ex: HS-6008" style="flex: 1;" list="datalist-modelos-maquinas-stock">
+                        <button type="button" id="btn-manual-maquina-stock" class="btn-secondary" style="width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Manual de instruções" disabled>
+                            <i class="ph ph-file-pdf" style="font-size: 24px;"></i>
+                        </button>
+                    </div>
+                    <input type="file" id="input-file-manual-stock" accept="application/pdf" style="display: none;">
+                    <div id="manual-status-stock" style="font-size: 11px; margin-top: 4px; display: none; align-items: center; gap: 5px;"></div>
                 </div>
                 <div class="form-group">
                     <label>Número de Série (Opcional - se já definido)</label>
@@ -3084,6 +3163,11 @@
             </div>
         </div>
     </div>
+
+    <datalist id="datalist-marcas-maquinas"></datalist>
+    <datalist id="datalist-modelos-maquinas-add"></datalist>
+    <datalist id="datalist-modelos-maquinas-edit"></datalist>
+    <datalist id="datalist-modelos-maquinas-stock"></datalist>
 
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script src="/js/admin.js?v=3.3"></script>

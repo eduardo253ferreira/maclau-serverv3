@@ -12,6 +12,8 @@ const histItemsPerPage = 10;
 let currentFaturacaoRef = null; // Armazena { selectElement, object, oldVal }
 let cachedClientes = [];
 let activeSupplierSelectOnTheFly = null;
+let preselectedChecklistModel = null;
+let currentUploadModelHub = null;
 
 // Funções Utilitárias
 function showNotification(msg, isError = false) {
@@ -320,7 +322,15 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'stock-maquinas') { loadSuppliersForMachineForms(); loadStockMaquinas(); }
         if (target === 'fornecedores') loadSuppliers();
         if (target === 'historico-stock') loadHistoricoStock();
-        if (target === 'checklists') { loadChecklistModelos(); loadChecklists(); }
+        if (target === 'checklists') {
+            (async () => {
+                await loadChecklistModelos();
+                await loadChecklists();
+            })();
+        }
+        if (target === 'componentes-maquinas') {
+            loadModelosMaquinasHub();
+        }
         if (target === 'agendamentos') initCalendar();
         if (target === 'anotacoes') {
             loadAnotacoes();
@@ -1516,7 +1526,7 @@ async function loadMaquinas() {
     }
 }
 
-function openViewMaquinaModal(m) {
+async function openViewMaquinaModal(m) {
     document.getElementById('view-maquina-cliente').textContent = m.cliente_nome || 'N/A';
     document.getElementById('view-maquina-marca').textContent = m.marca || 'N/A';
     document.getElementById('view-maquina-modelo').textContent = m.modelo || 'N/A';
@@ -1526,6 +1536,25 @@ function openViewMaquinaModal(m) {
     document.getElementById('view-maquina-fimgarantia').textContent = m.data_fim_garantia || 'N/A';
     document.getElementById('view-maquina-fornecedor').textContent = m.fornecedor || 'N/A';
     document.getElementById('view-maquina-faturacompra').textContent = m.fatura_compra || 'N/A';
+
+    // Verificar existência de manual para visualização
+    const manualContainer = document.getElementById('view-maquina-manual-container');
+    const manualLink = document.getElementById('view-maquina-manual-link');
+    if (manualContainer && manualLink) {
+        manualContainer.style.display = 'none';
+        if (m.modelo) {
+            try {
+                const res = await apiFetch(`/manuais/modelo/${encodeURIComponent(m.modelo)}`);
+                if (res.exists) {
+                    manualLink.href = res.pdf_path;
+                    manualContainer.style.display = 'flex';
+                }
+            } catch (e) {
+                console.error("Erro ao verificar manual no detalhe:", e);
+            }
+        }
+    }
+
     openModal('modal-view-maquina');
 }
 
@@ -1550,6 +1579,8 @@ async function openEditMaquinaModal(m) {
     document.getElementById('edit-maquina-id').value = m.id;
     document.getElementById('edit-maquina-cliente_id').value = m.cliente_id;
     document.getElementById('edit-maquina-marca').value = m.marca || '';
+    const dlEdit = document.getElementById('datalist-modelos-maquinas-edit');
+    if (dlEdit) updateModelDatalist(m.marca || '', dlEdit);
     document.getElementById('edit-maquina-modelo').value = m.modelo || '';
     document.getElementById('edit-maquina-numero-serie').value = m.numero_serie || '';
     document.getElementById('edit-maquina-data-instalacao').value = m.data_instalacao || '';
@@ -1557,6 +1588,10 @@ async function openEditMaquinaModal(m) {
     document.getElementById('edit-maquina-data-fim-garantia').value = m.data_fim_garantia || '';
     document.getElementById('edit-maquina-fornecedor').value = m.fornecedor || '';
     document.getElementById('edit-maquina-fatura-compra').value = m.fatura_compra || '';
+    
+    // Verificar estado do manual no modal de edição
+    await checkManualStatusForInput('edit-maquina-modelo', 'btn-manual-maquina-edit', 'manual-status-edit', 'input-file-manual-edit');
+
     openModal('modal-edit-maquina');
 }
 
@@ -1586,6 +1621,7 @@ document.getElementById('form-edit-maquina').addEventListener('submit', async (e
         showNotification('Máquina atualizada com sucesso!');
         closeModal('modal-edit-maquina');
         loadMaquinas();
+        loadDatalistSuggestions();
     } catch (e) {
         showNotification(e.message, true);
     }
@@ -1617,6 +1653,7 @@ document.getElementById('form-add-maquina').addEventListener('submit', async (e)
         closeModal('modal-add-maquina');
         document.getElementById('form-add-maquina').reset();
         loadMaquinas();
+        loadDatalistSuggestions();
     } catch (e) {
         showNotification(e.message, true);
     }
@@ -2621,6 +2658,7 @@ window.onload = async () => {
 
     loadClientes();
     loadTecnicos();
+    loadDatalistSuggestions();
 
     const states = JSON.parse(localStorage.getItem('maclau_dashboard_cols') || '{}');
     Object.keys(states).forEach(colId => {
@@ -2838,7 +2876,16 @@ window.onload = async () => {
     if (addClientBtn) addClientBtn.addEventListener('click', () => openModal('modal-add-client'));
 
     const addMaqBtn = document.getElementById('btn-open-add-maquina');
-    if (addMaqBtn) addMaqBtn.addEventListener('click', async () => { await loadSuppliersForMachineForms(); openModal('modal-add-maquina'); });
+    if (addMaqBtn) {
+        addMaqBtn.addEventListener('click', async () => {
+            await loadSuppliersForMachineForms();
+            document.getElementById('form-add-maquina').reset();
+            const dlAdd = document.getElementById('datalist-modelos-maquinas-add');
+            if (dlAdd) updateModelDatalist('', dlAdd);
+            await checkManualStatusForInput('maquina-modelo', 'btn-manual-maquina-add', 'manual-status-add', 'input-file-manual-add');
+            openModal('modal-add-maquina');
+        });
+    }
 
     const addTechBtn = document.getElementById('btn-open-add-tecnico');
     if (addTechBtn) addTechBtn.addEventListener('click', () => openModal('modal-add-tecnico'));
@@ -3711,6 +3758,15 @@ async function loadChecklistModelos() {
                 editOptionsContainerForEdit.appendChild(div);
             });
             initCustomSelect('edit-checklist-modelo');
+        }
+
+        // Aplicar pré-seleção a partir do hub de modelos se disponível
+        if (preselectedChecklistModel) {
+            const optVal = JSON.stringify(preselectedChecklistModel);
+            if (filterSelect) {
+                filterSelect.value = optVal;
+            }
+            preselectedChecklistModel = null;
         }
 
     } catch (e) {
@@ -5804,8 +5860,11 @@ function renderStockMaquinasTable(data) {
 async function openAddStockMaquinaModal() {
     document.getElementById('modal-stock-maquina-title').textContent = 'Nova Máquina em Stock';
     document.getElementById('form-stock-maquina').reset();
+    const dlStock = document.getElementById('datalist-modelos-maquinas-stock');
+    if (dlStock) updateModelDatalist('', dlStock);
     document.getElementById('stock-maq-id').value = '';
     await loadSuppliersForMachineForms();
+    await checkManualStatusForInput('stock-maq-modelo', 'btn-manual-maquina-stock', 'manual-status-stock', 'input-file-manual-stock');
     openModal('modal-stock-maquina');
 }
 
@@ -5814,8 +5873,11 @@ async function openAddStockMaquinaModalWithPrefill(marca, modelo) {
     document.getElementById('form-stock-maquina').reset();
     document.getElementById('stock-maq-id').value = '';
     document.getElementById('stock-maq-marca').value = marca;
+    const dlStock = document.getElementById('datalist-modelos-maquinas-stock');
+    if (dlStock) updateModelDatalist(marca || '', dlStock);
     document.getElementById('stock-maq-modelo').value = modelo;
     await loadSuppliersForMachineForms();
+    await checkManualStatusForInput('stock-maq-modelo', 'btn-manual-maquina-stock', 'manual-status-stock', 'input-file-manual-stock');
     openModal('modal-stock-maquina');
 }
 
@@ -5823,11 +5885,14 @@ async function openEditStockMaquinaModal(m) {
     document.getElementById('modal-stock-maquina-title').textContent = 'Editar Máquina em Stock';
     document.getElementById('stock-maq-id').value = m.id;
     document.getElementById('stock-maq-marca').value = m.marca || '';
+    const dlStock = document.getElementById('datalist-modelos-maquinas-stock');
+    if (dlStock) updateModelDatalist(m.marca || '', dlStock);
     document.getElementById('stock-maq-modelo').value = m.modelo || '';
     document.getElementById('stock-maq-numero-serie').value = m.numero_serie || '';
     await loadSuppliersForMachineForms();
     document.getElementById('stock-maq-fornecedor').value = m.fornecedor || '';
     document.getElementById('stock-maq-fatura-compra').value = m.fatura_compra || '';
+    await checkManualStatusForInput('stock-maq-modelo', 'btn-manual-maquina-stock', 'manual-status-stock', 'input-file-manual-stock');
     openModal('modal-stock-maquina');
 }
 
@@ -6319,6 +6384,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 closeModal('modal-stock-maquina');
                 loadStockMaquinas();
+                loadDatalistSuggestions();
             } catch (err) {
                 showNotification(err.message, true);
             }
@@ -6465,6 +6531,89 @@ document.addEventListener('DOMContentLoaded', () => {
             openModal('modal-supplier');
         });
     });
+
+    // --- Componentes Máquinas (Vista Principal) Eventos ---
+    const inputFileManualHub = document.getElementById('input-file-manual-hub');
+    if (inputFileManualHub) {
+        inputFileManualHub.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (file.type !== 'application/pdf') {
+                showNotification('Apenas ficheiros PDF são permitidos para o manual.', true);
+                inputFileManualHub.value = '';
+                return;
+            }
+            
+            if (!currentUploadModelHub) {
+                showNotification('Erro: Nenhum modelo selecionado para upload.', true);
+                inputFileManualHub.value = '';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('manual', file);
+            formData.append('modelo', currentUploadModelHub);
+            
+            showNotification('A carregar manual (PDF)...');
+            
+            try {
+                const headers = {};
+                if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+                
+                const response = await fetch(`${API_BASE}/manuais/upload`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData
+                });
+                
+                const resJson = await response.json();
+                if (!response.ok) throw new Error(resJson.error || "Erro ao carregar manual");
+                
+                showNotification('Manual de instruções carregado com sucesso!');
+                loadModelosMaquinasHub();
+            } catch (err) {
+                showNotification(err.message, true);
+            } finally {
+                inputFileManualHub.value = '';
+                currentUploadModelHub = null;
+            }
+        });
+    }
+
+    // --- Manuais de Resolução Eventos ---
+    const modelInputAdd = document.getElementById('maquina-modelo');
+    if (modelInputAdd) {
+        modelInputAdd.addEventListener('input', () => {
+            debounceManualCheck('maquina-modelo', 'btn-manual-maquina-add', 'manual-status-add', 'input-file-manual-add');
+        });
+        modelInputAdd.addEventListener('change', () => {
+            checkManualStatusForInput('maquina-modelo', 'btn-manual-maquina-add', 'manual-status-add', 'input-file-manual-add');
+        });
+    }
+    setupManualUploadForInput('input-file-manual-add', 'maquina-modelo', 'btn-manual-maquina-add', 'manual-status-add');
+
+    const modelInputEdit = document.getElementById('edit-maquina-modelo');
+    if (modelInputEdit) {
+        modelInputEdit.addEventListener('input', () => {
+            debounceManualCheck('edit-maquina-modelo', 'btn-manual-maquina-edit', 'manual-status-edit', 'input-file-manual-edit');
+        });
+        modelInputEdit.addEventListener('change', () => {
+            checkManualStatusForInput('edit-maquina-modelo', 'btn-manual-maquina-edit', 'manual-status-edit', 'input-file-manual-edit');
+        });
+    }
+    setupManualUploadForInput('input-file-manual-edit', 'edit-maquina-modelo', 'btn-manual-maquina-edit', 'manual-status-edit');
+
+    const modelInputStock = document.getElementById('stock-maq-modelo');
+    if (modelInputStock) {
+        modelInputStock.addEventListener('input', () => {
+            debounceManualCheck('stock-maq-modelo', 'btn-manual-maquina-stock', 'manual-status-stock', 'input-file-manual-stock');
+        });
+        modelInputStock.addEventListener('change', () => {
+            checkManualStatusForInput('stock-maq-modelo', 'btn-manual-maquina-stock', 'manual-status-stock', 'input-file-manual-stock');
+        });
+    }
+    setupManualUploadForInput('input-file-manual-stock', 'stock-maq-modelo', 'btn-manual-maquina-stock', 'manual-status-stock');
 });
 
 // Load suppliers for machine creation and edit forms
@@ -6501,5 +6650,355 @@ async function loadSuppliersForMachineForms() {
                 select.innerHTML = '<option value="">Erro ao carregar fornecedores</option>';
             }
         });
+    }
+}
+
+// --- HUB DE MODELOS DE MÁQUINAS ---
+let loadedModelosHub = [];
+let loadedManualsMapHub = {};
+
+async function loadModelosMaquinasHub() {
+    const tbody = document.getElementById('table-modelos-maquinas-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">A carregar modelos e manuais...</td></tr>';
+    
+    try {
+        // Obter modelos e manuais em paralelo para eficiência
+        const [models, manualsList] = await Promise.all([
+            apiFetch('/modelos'),
+            apiFetch('/manuais')
+        ]);
+        
+        // Mapear manuais por modelo para pesquisa O(1)
+        loadedManualsMapHub = {};
+        manualsList.forEach(m => {
+            loadedManualsMapHub[m.modelo] = m;
+        });
+        
+        // Guardar e garantir ordenação por ID
+        loadedModelosHub = models.sort((a, b) => (a.id || 0) - (b.id || 0));
+        
+        // Configurar o input de pesquisa se ainda não tiver listener
+        const searchInput = document.getElementById('search-modelos-maquinas');
+        if (searchInput && !searchInput.dataset.listenerAdded) {
+            searchInput.value = ''; // Reset do input ao recarregar a vista
+            searchInput.addEventListener('input', () => {
+                renderModelosMaquinasHubTable(searchInput.value.trim());
+            });
+            searchInput.dataset.listenerAdded = 'true';
+        } else if (searchInput) {
+            searchInput.value = ''; // Reset do input se o listener já existe
+        }
+        
+        renderModelosMaquinasHubTable();
+    } catch (e) {
+        console.error("Erro ao carregar hub de modelos:", e);
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--danger); padding: 15px;">Erro ao carregar hub de modelos de máquinas.</td></tr>';
+    }
+}
+
+function renderModelosMaquinasHubTable(searchQuery = '') {
+    const tbody = document.getElementById('table-modelos-maquinas-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    const query = searchQuery.toLowerCase();
+    const filteredModels = loadedModelosHub.filter(m => {
+        if (!query) return true;
+        const idStr = String(m.id || '');
+        const marcaStr = (m.marca || '').toLowerCase();
+        const modeloStr = (m.modelo || '').toLowerCase();
+        return idStr.includes(query) || marcaStr.includes(query) || modeloStr.includes(query);
+    });
+    
+    if (filteredModels.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary); padding: 15px;">Nenhum modelo de máquina encontrado.</td></tr>';
+        return;
+    }
+    
+    filteredModels.forEach(m => {
+        const tr = document.createElement('tr');
+        const manual = loadedManualsMapHub[m.modelo];
+        const hasManual = !!manual;
+        
+        const pdfButtonHtml = hasManual 
+            ? `<button type="button" class="btn-icon btn-view-pdf" title="Ver Manual (${manual.filename})" style="width:32px; height:32px; border-radius:8px; border:1px solid #bbf7d0; background:#f0fdf4; color:#10b981; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                   <i class="ph-duotone ph-file-pdf" style="font-size:16px;"></i>
+               </button>`
+            : `<button type="button" class="btn-icon btn-view-pdf" title="Sem manual associado" style="width:32px; height:32px; border-radius:8px; border:1px solid #fecaca; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; cursor:not-allowed; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);" disabled>
+                   <i class="ph-duotone ph-file-pdf" style="font-size:16px;"></i>
+               </button>`;
+
+        tr.innerHTML = `
+            <td class="col-id" style="font-weight: 600; color: var(--text-secondary);"></td>
+            <td class="col-marca"></td>
+            <td class="col-modelo"></td>
+            <td>
+                <div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+                    <button type="button" class="btn-icon btn-components" title="Componentes do Modelo" style="width:32px; height:32px; border-radius:8px; border:1px solid #e2e8f0; background:#ffffff; color:#0f766e; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                        <i class="ph-duotone ph-wrench" style="font-size:16px;"></i>
+                    </button>
+                    <button type="button" class="btn-icon btn-checklists" title="Checklists do Modelo" style="width:32px; height:32px; border-radius:8px; border:1px solid #e2e8f0; background:#ffffff; color:#1d4ed8; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                        <i class="ph-duotone ph-list-checks" style="font-size:16px;"></i>
+                    </button>
+                    ${pdfButtonHtml}
+                    <button type="button" class="btn-icon btn-edit-pdf" title="Alterar/Carregar Manual" style="width:32px; height:32px; border-radius:8px; border:1px solid #e2e8f0; background:#ffffff; color:#b45309; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                        <i class="ph-duotone ph-pencil-simple" style="font-size:16px;"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        tr.querySelector('.col-id').textContent = m.id ? `#${m.id}` : '-';
+        tr.querySelector('.col-marca').textContent = m.marca || '-';
+        tr.querySelector('.col-modelo').textContent = m.modelo || '-';
+        
+        // Ouvinte de componentes: Abre o modal existente de componentes
+        tr.querySelector('.btn-components').onclick = () => {
+            openComponentsModal({ modelo: m.modelo });
+        };
+        
+        // Ouvinte de checklists: Redireciona com pre-fill
+        tr.querySelector('.btn-checklists').onclick = () => {
+            preselectedChecklistModel = { marca: m.marca, modelo: m.modelo };
+            const checklistsBtn = document.querySelector('.nav-btn[data-target="checklists"]');
+            if (checklistsBtn) checklistsBtn.click();
+        };
+        
+        // Ouvinte para ver PDF
+        if (hasManual) {
+            tr.querySelector('.btn-view-pdf').onclick = () => {
+                window.open(manual.pdf_path, '_blank');
+            };
+        }
+        
+        // Ouvinte para editar/carregar PDF
+        tr.querySelector('.btn-edit-pdf').onclick = () => {
+            currentUploadModelHub = m.modelo;
+            const fileInput = document.getElementById('input-file-manual-hub');
+            if (fileInput) fileInput.click();
+        };
+        
+        tbody.appendChild(tr);
+    });
+}
+
+// --- GESTÃO DE MANUAIS DE RESOLUÇÃO POR MODELO ---
+async function checkManualStatusForInput(modelInputId, btnId, statusId, fileInputId) {
+    const modelInput = document.getElementById(modelInputId);
+    const btn = document.getElementById(btnId);
+    const statusDiv = document.getElementById(statusId);
+    const fileInput = document.getElementById(fileInputId);
+    
+    if (!modelInput || !btn || !statusDiv) return;
+    
+    const model = modelInput.value.trim();
+    if (!model) {
+        btn.disabled = true;
+        btn.style.backgroundColor = '';
+        btn.style.color = '';
+        btn.title = "Introduza um modelo de máquina para verificar o manual";
+        statusDiv.style.display = 'none';
+        statusDiv.innerHTML = '';
+        btn.onclick = null;
+        return;
+    }
+    
+    try {
+        const res = await apiFetch(`/manuais/modelo/${encodeURIComponent(model)}`);
+        btn.disabled = false;
+        
+        if (res.exists) {
+            btn.style.backgroundColor = '#10b981'; // Green
+            btn.style.color = '#ffffff';
+            btn.title = "Manual existente (Clique para ver/descarregar PDF)";
+            
+            statusDiv.style.display = 'flex';
+            statusDiv.style.color = '#10b981';
+            statusDiv.innerHTML = `<i class="ph ph-check-circle"></i> Manual já associado: <strong>${res.filename}</strong>`;
+            
+            btn.onclick = (e) => {
+                e.preventDefault();
+                window.open(res.pdf_path, '_blank');
+            };
+        } else {
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            btn.title = "Sem manual (Clique para carregar PDF)";
+            
+            statusDiv.style.display = 'flex';
+            statusDiv.style.color = '#f59e0b'; // Orange/warning
+            statusDiv.innerHTML = `<i class="ph ph-warning"></i> Sem manual para este modelo. Clique no PDF para carregar.`;
+            
+            btn.onclick = (e) => {
+                e.preventDefault();
+                fileInput.click();
+            };
+        }
+    } catch (e) {
+        console.error("Erro ao verificar manual:", e);
+    }
+}
+
+function setupManualUploadForInput(fileInputId, modelInputId, btnId, statusId) {
+    const fileInput = document.getElementById(fileInputId);
+    if (!fileInput) return;
+    
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (file.type !== 'application/pdf') {
+            showNotification('Apenas ficheiros PDF são permitidos para o manual.', true);
+            fileInput.value = '';
+            return;
+        }
+        
+        const model = document.getElementById(modelInputId).value.trim();
+        if (!model) {
+            showNotification('Erro: Por favor, introduza o modelo antes de carregar o manual.', true);
+            fileInput.value = '';
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('manual', file);
+        formData.append('modelo', model);
+        
+        const statusDiv = document.getElementById(statusId);
+        if (statusDiv) {
+            statusDiv.style.display = 'flex';
+            statusDiv.style.color = 'var(--text-secondary)';
+            statusDiv.innerHTML = `<i class="ph ph-clock"></i> A carregar manual (PDF)...`;
+        }
+        
+        try {
+            const headers = {};
+            if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+            
+            const response = await fetch(`${API_BASE}/manuais/upload`, {
+                method: 'POST',
+                headers: headers,
+                body: formData
+            });
+            
+            const resJson = await response.json();
+            if (!response.ok) throw new Error(resJson.error || "Erro ao carregar manual");
+            
+            showNotification('Manual de instruções carregado com sucesso!');
+            await checkManualStatusForInput(modelInputId, btnId, statusId, fileInputId);
+        } catch (err) {
+            showNotification(err.message, true);
+            await checkManualStatusForInput(modelInputId, btnId, statusId, fileInputId);
+        } finally {
+            fileInput.value = '';
+        }
+    });
+}
+
+function debounceManualCheck(modelInputId, btnId, statusId, fileInputId) {
+    const input = document.getElementById(modelInputId);
+    if (!input) return;
+    if (input.dataset.timeoutId) {
+        clearTimeout(parseInt(input.dataset.timeoutId));
+    }
+    const timeoutId = setTimeout(() => {
+        checkManualStatusForInput(modelInputId, btnId, statusId, fileInputId);
+    }, 500);
+    input.dataset.timeoutId = timeoutId.toString();
+}
+
+// --- AUTOCOMPLETE SUGGESTIONS DATALISTS ---
+let loadedModelosDatalist = [];
+
+function updateModelDatalist(selectedBrand, datalistEl) {
+    if (!datalistEl) return;
+    
+    datalistEl.innerHTML = '';
+    
+    const filteredModelos = new Set();
+    const brandLower = selectedBrand.trim().toLowerCase();
+    
+    loadedModelosDatalist.forEach(m => {
+        if (!m.modelo) return;
+        
+        // If brand is empty, include all models.
+        // If brand is specified, only include models belonging to that brand.
+        if (!selectedBrand || (m.marca && m.marca.trim().toLowerCase() === brandLower)) {
+            filteredModelos.add(m.modelo.trim());
+        }
+    });
+    
+    Array.from(filteredModelos).sort().forEach(modelo => {
+        const option = document.createElement('option');
+        option.value = modelo;
+        datalistEl.appendChild(option);
+    });
+}
+
+async function loadDatalistSuggestions() {
+    try {
+        const res = await apiFetch('/modelos');
+        loadedModelosDatalist = res;
+        
+        const datalistMarcas = document.getElementById('datalist-marcas-maquinas');
+        const dlAdd = document.getElementById('datalist-modelos-maquinas-add');
+        const dlEdit = document.getElementById('datalist-modelos-maquinas-edit');
+        const dlStock = document.getElementById('datalist-modelos-maquinas-stock');
+        
+        if (!datalistMarcas) return;
+        
+        // Extrair marcas únicas
+        const marcasSet = new Set();
+        res.forEach(m => {
+            if (m.marca) marcasSet.add(m.marca.trim());
+        });
+        
+        // Preencher datalist de marcas
+        datalistMarcas.innerHTML = '';
+        Array.from(marcasSet).sort().forEach(marca => {
+            const option = document.createElement('option');
+            option.value = marca;
+            datalistMarcas.appendChild(option);
+        });
+        
+        // Inicializar os datalists de modelos de cada form com base no valor atual do input de marca
+        const inputAddBrand = document.getElementById('maquina-marca');
+        if (inputAddBrand && dlAdd) {
+            updateModelDatalist(inputAddBrand.value, dlAdd);
+            if (!inputAddBrand.dataset.listenerAutocompleteAdded) {
+                inputAddBrand.addEventListener('input', () => {
+                    updateModelDatalist(inputAddBrand.value, dlAdd);
+                });
+                inputAddBrand.dataset.listenerAutocompleteAdded = 'true';
+            }
+        }
+        
+        const inputEditBrand = document.getElementById('edit-maquina-marca');
+        if (inputEditBrand && dlEdit) {
+            updateModelDatalist(inputEditBrand.value, dlEdit);
+            if (!inputEditBrand.dataset.listenerAutocompleteAdded) {
+                inputEditBrand.addEventListener('input', () => {
+                    updateModelDatalist(inputEditBrand.value, dlEdit);
+                });
+                inputEditBrand.dataset.listenerAutocompleteAdded = 'true';
+            }
+        }
+        
+        const inputStockBrand = document.getElementById('stock-maq-marca');
+        if (inputStockBrand && dlStock) {
+            updateModelDatalist(inputStockBrand.value, dlStock);
+            if (!inputStockBrand.dataset.listenerAutocompleteAdded) {
+                inputStockBrand.addEventListener('input', () => {
+                    updateModelDatalist(inputStockBrand.value, dlStock);
+                });
+                inputStockBrand.dataset.listenerAutocompleteAdded = 'true';
+            }
+        }
+        
+    } catch (e) {
+        console.error("Erro ao carregar sugestões dos datalists:", e);
     }
 }

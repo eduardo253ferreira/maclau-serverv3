@@ -188,13 +188,56 @@
                 </button>
             </div>
             <nav class="sidebar-nav">
-                <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
-                <button class="nav-btn" data-target="agendamentos">Agendamentos</button>
-                <button class="nav-btn" data-target="anotacoes">Anotações Técnico</button>
-                <button class="nav-btn" data-target="historico">Histórico de Intervenções</button>
-                <button class="nav-btn" data-target="checklists">Guias de Resolução</button>
-                <button class="nav-btn" data-target="consulta">Consulta por Máquina</button>
-                <button class="nav-btn" data-target="perfil">Perfil</button>
+                <!-- Avarias Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-warning"></i> Avarias
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn active" data-target="dashboard">
+                            <i class="ph ph-gauge"></i> Tarefas Pendentes
+                        </button>
+                        <button class="nav-btn" data-target="agendamentos">
+                            <i class="ph ph-calendar-blank"></i> Agendamentos
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Anotações Técnico -->
+                <button class="nav-btn" data-target="anotacoes">
+                    <i class="ph ph-note"></i> Criar Anotações
+                </button>
+
+                <!-- Histórico de Intervenções -->
+                <button class="nav-btn" data-target="historico">
+                    <i class="ph ph-clock-counter-clockwise"></i> Histórico de Intervenções
+                </button>
+
+                <!-- Assistente de Resolução Group -->
+                <div class="nav-group">
+                    <button class="nav-group-title" type="button">
+                        <span class="nav-group-title-content">
+                            <i class="ph ph-lifebuoy"></i> Assistente de Resolução
+                        </span>
+                        <i class="ph ph-caret-down nav-group-caret"></i>
+                    </button>
+                    <div class="nav-submenu">
+                        <button class="nav-btn" data-target="componentes-maquinas">
+                            <i class="ph ph-wrench"></i> Consulta máquina
+                        </button>
+                        <button class="nav-btn" data-target="consulta">
+                            <i class="ph ph-clock-counter-clockwise"></i> Histórico por máquina
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Perfil -->
+                <button class="nav-btn" data-target="perfil">
+                    <i class="ph ph-user"></i> Perfil
+                </button>
             </nav>
             <div style="padding: 24px; margin-top: auto;">
                 <button id="btn-logout" class="btn-primary w-100"
@@ -296,7 +339,7 @@
             <section id="view-consulta" class="view hidden">
                 <header class="view-header" style="display: block;">
                     <div style="margin-bottom: 20px;">
-                        <h1>Consulta por Máquina</h1>
+                        <h1>Histórico por máquina</h1>
                         <p>Selecione um cliente e uma máquina para ver todo o histórico de intervenções da mesma.</p>
                     </div>
                     <div style="display:flex; align-items:flex-start; gap: 20px; flex-wrap: wrap;">
@@ -374,6 +417,40 @@
                     <!-- JS popula aqui as checklists carregadas -->
                 </div>
             </section>
+ 
+            <!-- Componentes Máquinas View -->
+            <section id="view-componentes-maquinas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Consulta máquina</h1>
+                        <p>Consulte componentes, checklists e manuais por modelo.</p>
+                    </div>
+                </header>
+
+                <!-- Search Filter Bar -->
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; padding: 0 10px;">
+                    <div style="position: relative; flex: 1; max-width: 400px;">
+                        <input type="text" id="search-modelos-maquinas" placeholder="Pesquisar por ID, marca ou modelo..." style="width: 100%; padding: 10px 12px 10px 35px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; box-sizing: border-box; background: var(--surface-color); color: var(--text-color);">
+                        <i class="ph ph-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-secondary); font-size: 16px;"></i>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">ID</th>
+                                <th>Marca</th>
+                                <th>Modelo</th>
+                                <th style="text-align: right; width: 150px; padding-right: 20px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-modelos-maquinas-body">
+                            <!-- Populado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
             <!-- Anotacoes View -->
             <section id="view-anotacoes" class="view hidden">
@@ -438,6 +515,31 @@
                             <button type="button" id="btn-cancelar-anotacao" class="btn-secondary" style="flex: 1;">Cancelar</button>
                         </div>
                     </form>
+                </div>
+            </div>
+
+            <!-- Modal Componentes da Máquina -->
+            <div id="modal-componentes-maquina" class="modal hidden">
+                <div class="modal-content" style="max-width: 800px; width: 90%;">
+                    <span class="close-btn" data-modal="modal-componentes-maquina">&times;</span>
+                    <h2 style="margin-bottom: 5px;">Componentes Máquina</h2>
+                    <h3 style="margin-bottom: 20px; color: var(--accent); font-weight: 600;" id="comp-maquina-modelo-titulo"></h3>
+
+                    <!-- List of Components -->
+                    <div class="table-container" style="max-height: 350px; overflow-y: auto;">
+                        <table class="data-table" style="margin-bottom: 0;">
+                            <thead>
+                                <tr>
+                                    <th>Referência</th>
+                                    <th>Nome da Peça</th>
+                                    <th>Fornecedor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-componentes-body">
+                                <!-- JS popula aqui -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

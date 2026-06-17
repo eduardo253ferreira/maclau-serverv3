@@ -30,6 +30,7 @@ let currentDashboardFilter = 'all';
 let allPendingTasks = [];
 let timerInterval = null;
 let refreshIntervalId = null;
+let preselectedChecklistModel = null;
 
 function updateRefreshStatus() {
     const statusEl = document.getElementById('refresh-status');
@@ -1199,15 +1200,35 @@ window.renderHistorico = function () {
     });
 };
 
+// --- Helper para sincronizar os grupos de submenus ---
+function updateSidebarGroups() {
+    document.querySelectorAll('.nav-group').forEach(group => {
+        const hasActive = group.querySelector('.nav-btn.active') !== null;
+        if (hasActive) {
+            group.classList.add('open', 'has-active');
+        } else {
+            group.classList.remove('has-active');
+        }
+    });
+}
+
+// Registrar evento de toggle nos cabeçalhos de grupos
+document.querySelectorAll('.nav-group-title').forEach(title => {
+    title.addEventListener('click', (e) => {
+        const group = e.currentTarget.parentElement;
+        group.classList.toggle('open');
+    });
+});
+
 // Nav Switch
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
+        e.currentTarget.classList.add('active');
 
         document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
 
-        const target = e.target.getAttribute('data-target');
+        const target = e.currentTarget.getAttribute('data-target');
         const view = document.getElementById(`view-${target}`);
         if (view) view.classList.remove('hidden');
 
@@ -1216,12 +1237,18 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (target === 'historico') loadHistorico();
         if (target === 'consulta') loadConsultaClientes();
         if (target === 'checklists') loadChecklistModelos();
+        if (target === 'componentes-maquinas') loadModelosMaquinasHub();
         if (target === 'anotacoes') {
             loadAnotacoesClientes();
             loadAnotacoesHist();
         }
+
+        updateSidebarGroups();
     });
 });
+
+// Inicializar estado dos grupos no arranque
+updateSidebarGroups();
 
 // --- Consulta por Máquina ---
 let consultaClientes = [];
@@ -2421,6 +2448,14 @@ async function loadChecklistModelos() {
 
         initCustomSelect('tech-checklist-modelo');
 
+        if (preselectedChecklistModel) {
+            const optVal = JSON.stringify(preselectedChecklistModel);
+            hiddenInput.value = optVal;
+            const label = `${preselectedChecklistModel.marca} ${preselectedChecklistModel.modelo}`;
+            trigger.querySelector('.custom-select-text').textContent = label;
+            preselectedChecklistModel = null;
+        }
+
         // Initial load
         loadTechChecklists();
     } catch (e) {
@@ -2566,4 +2601,175 @@ function initCustomSelect(id) {
             dropdown.classList.add('hidden');
         }
     });
+}
+
+// --- HUB DE MODELOS DE MÁQUINAS (CONSULTA MÁQUINA) ---
+let loadedModelosHub = [];
+let loadedManualsMapHub = {};
+
+async function loadModelosMaquinasHub() {
+    const tbody = document.getElementById('table-modelos-maquinas-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">A carregar modelos e manuais...</td></tr>';
+    
+    try {
+        const [resModels, resManualsList] = await Promise.all([
+            authFetch(`${API_BASE}/modelos`),
+            authFetch(`${API_BASE}/manuais`)
+        ]);
+        
+        const models = await resModels.json();
+        const manualsList = await resManualsList.json();
+        
+        loadedManualsMapHub = {};
+        manualsList.forEach(m => {
+            loadedManualsMapHub[m.modelo] = m;
+        });
+        
+        loadedModelosHub = models.sort((a, b) => (a.id || 0) - (b.id || 0));
+        
+        const searchInput = document.getElementById('search-modelos-maquinas');
+        if (searchInput && !searchInput.dataset.listenerAdded) {
+            searchInput.value = '';
+            searchInput.addEventListener('input', () => {
+                renderModelosMaquinasHubTable(searchInput.value.trim());
+            });
+            searchInput.dataset.listenerAdded = 'true';
+        } else if (searchInput) {
+            searchInput.value = '';
+        }
+        
+        renderModelosMaquinasHubTable();
+    } catch (e) {
+        console.error("Erro ao carregar hub de modelos:", e);
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--danger); padding: 15px;">Erro ao carregar hub de modelos de máquinas.</td></tr>';
+    }
+}
+
+function renderModelosMaquinasHubTable(searchQuery = '') {
+    const tbody = document.getElementById('table-modelos-maquinas-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    const query = searchQuery.toLowerCase();
+    const filteredModels = loadedModelosHub.filter(m => {
+        if (!query) return true;
+        const idStr = String(m.id || '');
+        const marcaStr = (m.marca || '').toLowerCase();
+        const modeloStr = (m.modelo || '').toLowerCase();
+        return idStr.includes(query) || marcaStr.includes(query) || modeloStr.includes(query);
+    });
+    
+    if (filteredModels.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary); padding: 15px;">Nenhum modelo de máquina encontrado.</td></tr>';
+        return;
+    }
+    
+    filteredModels.forEach(m => {
+        const tr = document.createElement('tr');
+        const manual = loadedManualsMapHub[m.modelo];
+        const hasManual = !!manual;
+        
+        const pdfButtonHtml = hasManual 
+            ? `<button type="button" class="btn-icon btn-view-pdf" title="Ver Manual (${manual.filename})" style="width:32px; height:32px; border-radius:8px; border:1px solid #bbf7d0; background:#f0fdf4; color:#10b981; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                   <i class="ph-duotone ph-file-pdf" style="font-size:16px;"></i>
+               </button>`
+            : `<button type="button" class="btn-icon btn-view-pdf" title="Sem manual associado" style="width:32px; height:32px; border-radius:8px; border:1px solid #fecaca; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; cursor:not-allowed; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);" disabled>
+                   <i class="ph-duotone ph-file-pdf" style="font-size:16px;"></i>
+               </button>`;
+
+        tr.innerHTML = `
+            <td class="col-id" style="font-weight: 600; color: var(--text-secondary);"></td>
+            <td class="col-marca"></td>
+            <td class="col-modelo"></td>
+            <td>
+                <div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+                    <button type="button" class="btn-icon btn-components" title="Componentes do Modelo" style="width:32px; height:32px; border-radius:8px; border:1px solid #e2e8f0; background:#ffffff; color:#0f766e; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                        <i class="ph-duotone ph-wrench" style="font-size:16px;"></i>
+                    </button>
+                    <button type="button" class="btn-icon btn-checklists" title="Checklists do Modelo" style="width:32px; height:32px; border-radius:8px; border:1px solid #e2e8f0; background:#ffffff; color:#1d4ed8; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                        <i class="ph-duotone ph-list-checks" style="font-size:16px;"></i>
+                    </button>
+                    ${pdfButtonHtml}
+                </div>
+            </td>
+        `;
+        
+        tr.querySelector('.col-id').textContent = m.id ? `#${m.id}` : '-';
+        tr.querySelector('.col-marca').textContent = m.marca || '-';
+        tr.querySelector('.col-modelo').textContent = m.modelo || '-';
+        
+        tr.querySelector('.btn-components').onclick = () => {
+            openComponentsModal({ modelo: m.modelo });
+        };
+        
+        tr.querySelector('.btn-checklists').onclick = () => {
+            preselectedChecklistModel = { marca: m.marca, modelo: m.modelo };
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            const checklistsView = document.getElementById('view-checklists');
+            if (checklistsView) checklistsView.classList.remove('hidden');
+            loadChecklistModelos();
+        };
+        
+        if (hasManual) {
+            tr.querySelector('.btn-view-pdf').onclick = () => {
+                window.open(manual.pdf_path, '_blank');
+            };
+        }
+        
+        tbody.appendChild(tr);
+    });
+}
+
+// --- GESTÃO DE COMPONENTES DE MÁQUINAS ---
+let currentComponentsModel = null;
+
+async function openComponentsModal(m) {
+    if (!m.modelo) {
+        showNotification('Esta máquina não tem modelo definido.', true);
+        return;
+    }
+    
+    currentComponentsModel = m.modelo;
+    document.getElementById('comp-maquina-modelo-titulo').textContent = m.modelo;
+    
+    await loadComponentsForModel(m.modelo);
+    
+    window.openModal('modal-componentes-maquina');
+}
+
+async function loadComponentsForModel(model) {
+    const tbody = document.getElementById('table-componentes-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">A carregar peças...</td></tr>';
+    try {
+        const rawRes = await authFetch(`${API_BASE}/componentes_maquina/modelo/${encodeURIComponent(model)}`);
+        const res = await rawRes.json();
+        
+        tbody.innerHTML = '';
+        if (res.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--text-secondary); padding: 15px;">Nenhuma peça registada para este modelo.</td></tr>';
+            return;
+        }
+        res.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="col-comp-ref"></td>
+                <td class="col-comp-nome"></td>
+                <td class="col-comp-forn"></td>
+            `;
+            tr.querySelector('.col-comp-ref').textContent = c.referencia;
+            tr.querySelector('.col-comp-nome').textContent = c.nome;
+            tr.querySelector('.col-comp-forn').textContent = c.fornecedor;
+            
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error("Erro ao carregar componentes:", e);
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--danger); padding: 15px;">Erro ao carregar peças.</td></tr>';
+    }
 }

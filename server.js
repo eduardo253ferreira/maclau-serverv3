@@ -38,6 +38,33 @@ const upload = multer({
 });
 const fs = require('fs');
 
+// --- Configuração Multer (Upload de Manuais PDF) ---
+const manualStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = 'uploads/manuais';
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, 'manual-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const uploadManual = multer({
+    storage: manualStorage,
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Apenas manuais em formato PDF são permitidos!'), false);
+        }
+    }
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -608,6 +635,12 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 fornecedor TEXT,
                 fatura_compra TEXT,
                 uuid TEXT
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS manuais_modelo (
+                modelo TEXT PRIMARY KEY,
+                pdf_path TEXT NOT NULL,
+                filename TEXT NOT NULL
             )`);
 
             db.run(`CREATE TABLE IF NOT EXISTS preparativos_avaria (
@@ -2107,7 +2140,7 @@ app.delete('/api/maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
 
 // --- GESTÃO DE COMPONENTES DA MÁQUINA ---
 
-app.get('/api/componentes_maquina/modelo/:modelo', authenticateJWT, isAdmin, (req, res) => {
+app.get('/api/componentes_maquina/modelo/:modelo', authenticateJWT, isAdminOrTecnico, (req, res) => {
     const { modelo } = req.params;
     db.all(`SELECT * FROM componentes_maquina WHERE modelo_maquina = ? ORDER BY id ASC`, [modelo], (err, rows) => {
         if (err) return handleDBError(res, err);
@@ -5440,18 +5473,102 @@ app.delete('/api/frota/:id', authenticateJWT, isAdmin, (req, res) => {
 
 // --- API: CHECKLISTS BASE DE CONHECIMENTO ---
 
-// Listar todos os modelos únicos (marca e modelo)
+// Listar todos os modelos únicos (marca e modelo) com ID representativo ordenados por ID
 app.get('/api/modelos', authenticateJWT, (req, res) => {
     const query = `
-        SELECT DISTINCT marca, modelo 
-        FROM maquinas 
-        WHERE marca IS NOT NULL AND marca != '' AND modelo IS NOT NULL AND modelo != ''
-        ORDER BY marca ASC, modelo ASC
+        SELECT MIN(id) as id, marca, modelo FROM (
+            SELECT id, marca, modelo 
+            FROM maquinas 
+            WHERE marca IS NOT NULL AND marca != '' AND modelo IS NOT NULL AND modelo != ''
+            UNION
+            SELECT id, marca, modelo 
+            FROM stock_maquinas 
+            WHERE marca IS NOT NULL AND marca != '' AND modelo IS NOT NULL AND modelo != ''
+        )
+        GROUP BY marca, modelo
+        ORDER BY id ASC
     `;
     db.all(query, [], (err, rows) => {
         if (err) return handleDBError(res, err);
         res.json(rows);
     });
+});
+
+// Listar todos os manuais
+app.get('/api/manuais', authenticateJWT, (req, res) => {
+    db.all(`SELECT * FROM manuais_modelo`, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+// Obter manual por modelo de máquina
+app.get('/api/manuais/modelo/:modelo', authenticateJWT, (req, res) => {
+    const { modelo } = req.params;
+    if (!modelo) return res.status(400).json({ error: "Modelo é obrigatório" });
+    
+    db.get(`SELECT * FROM manuais_modelo WHERE modelo = ?`, [modelo], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) {
+            return res.json({ exists: false });
+        }
+        res.json({
+            exists: true,
+            pdf_path: row.pdf_path,
+            filename: row.filename
+        });
+    });
+});
+
+// Carregar manual PDF para um modelo
+app.post('/api/manuais/upload', authenticateJWT, (req, res) => {
+    uploadManual.single('manual')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: "Ficheiro PDF do manual é obrigatório" });
+        }
+        
+        let { modelo } = req.body;
+        modelo = sanitizeString(modelo);
+        
+        if (!modelo) {
+            // Eliminar ficheiro se modelo não for especificado
+            fs.unlink(req.file.path, () => {});
+            return res.status(400).json({ error: "Modelo é obrigatório" });
+        }
+        
+        const pdf_path = `/uploads/manuais/${req.file.filename}`;
+        const filename = req.file.originalname;
+        
+        db.run(
+            `INSERT OR REPLACE INTO manuais_modelo (modelo, pdf_path, filename) VALUES (?, ?, ?)`,
+            [modelo, pdf_path, filename],
+            function (err) {
+                if (err) {
+                    fs.unlink(req.file.path, () => {});
+                    return handleDBError(res, err);
+                }
+                res.status(201).json({
+                    message: "Manual carregado com sucesso",
+                    modelo,
+                    pdf_path,
+                    filename
+                });
+            }
+        );
+    });
+});
+
+// Rota estática segura para servir os ficheiros de manuais
+app.get('/uploads/manuais/:filename', authenticateJWT, (req, res) => {
+    const filePath = path.join(__dirname, 'uploads', 'manuais', req.params.filename);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({ error: "Ficheiro não encontrado" });
+    }
 });
 
 // Listar checklists filtrando por marca e modelo
